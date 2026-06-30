@@ -1,0 +1,21 @@
+4895-                                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl -mr-12 -mt-12" />
+4896-                                <div className="relative z-10">
+4897-                                   <div className="flex items-center gap-2 mb-3">
+4898-                                      <ShieldCheck className="w-4 h-4 text-blue-400" />
+4899-                                      <div className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Courier Verification</div>
+4900-                                   </div>
+4901-                                   <div className="text-[11px] text-slate-300 font-medium mb-4 leading-relaxed font-mono">
+4902-                                      ALL COURIERS SUBJECT TO LEVEL-7 BIOMETRIC AUTH. VERIFY HASH BEFORE HANDOVER AT ARTARMON HQ.
+4903-                                   </div>
+4904-                                   <div className="flex items-center gap-2 text-[10px] font-mono text-emerald-400 font-bold bg-slate-800/50 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+4905:                                      <Lock className="w-3 h-3" /> SHA-256_LINK_LOCKED
+4906-                                   </div>
+4907-                                </div>
+4908-                             </div>
+4909-                         </div>
+4910-                      </div>
+4911-                   </div>
+4912-                </div>
+4913-
+4914-                      <div className="space-y-6">
+4915-                        <div className="flex flex-col sm:flex-row items-end justify-between gap-4">

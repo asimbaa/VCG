@@ -1,0 +1,11 @@
+6887-                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200">
+6888-                      <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 mb-4">
+6889-                         <Users className="w-6 h-6" />
+6890-                      </div>
+6891-                      <h5 className="font-black text-slate-900 text-sm uppercase mb-2">Branch Priority</h5>
+6892:                      <p className="text-xs text-slate-500 leading-relaxed">Walking into any major Sydney branch? Flash your Valourian Profile for instant concierge assistance..</p>
+6893-                   </div>
+6894-              </>
+6895-            ) : null}
+6896-            <p className="text-xs text-slate-400 text-center mt-4">
+6897-              Valourian Capital Internal System • Secured by Biometric

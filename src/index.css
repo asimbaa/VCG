@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+/* Global Keyboard Accessibility Focus Ring */
+*:focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px !important;
+}
+
+@layer utilities {
+  @keyframes progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+  .animate-progress {
+    animation: progress 2s ease-in-out infinite;
+  }
+}
+
+.markdown-body {
+  @apply text-inherit;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply font-bold mt-4 mb-2 uppercase tracking-tight text-white;
+}
+
+.markdown-body ul {
+  @apply list-disc ml-4 space-y-1;
+}
+
+.markdown-body ol {
+  @apply list-decimal ml-4 space-y-1;
+}
+
+.markdown-body code {
+  @apply bg-white/10 px-1 rounded font-mono text-blue-300;
+}
+
+.markdown-body p {
+  @apply mb-2;
+}
+
+.markdown-body table {
+  @apply w-full border-collapse my-4;
+}
+
+.markdown-body th, .markdown-body td {
+  @apply border border-white/10 p-2 text-xs;
+}
+
+.markdown-body th {
+  @apply bg-white/5 font-bold;
+}
