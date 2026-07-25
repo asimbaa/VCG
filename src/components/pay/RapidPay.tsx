@@ -19,36 +19,75 @@ import {
   Sparkles,
   Check,
   Globe,
-  Cpu
+  Cpu,
+  Bitcoin,
+  Mailbox,
+  Inbox,
+  Wifi,
+  Terminal,
+  QrCode, Settings, ShieldAlert, Activity, Smartphone, Plane, Server
 } from "lucide-react";
+import { VoiceInputButton } from '../shared/VoiceInputButton';
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { db } from "../../firebase";
+import { useGlobalCurrency } from "../../contexts/CurrencyContext";
+import { CurrencySelector } from "../ui/CurrencySelector";
+import { db , addDoc, setDoc, updateDoc, deleteDoc } from "../../firebase";
 import {
   collection,
-  addDoc,
   query,
   where,
   orderBy,
   limit,
   onSnapshot,
-  doc,
-  updateDoc,
-  deleteDoc
+  doc
 } from "firebase/firestore";
 import { AIGuide } from "../AIGuide";
 
 export function RapidPay({ user }: { user: any }) {
-  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "credit_card" | "digital_bsb_card">("standard");
+  const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
+  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "credit_card" | "digital_bsb_card" | "digital_assets">("standard");
   const [recipient, setRecipient] = useState("");
+  const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
+  const [payIdValue, setPayIdValue] = useState("");
   const [bsb, setBsb] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [swiftCode, setSwiftCode] = useState("");
   const [accountName, setAccountName] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "processing" | "success" | "validating">("idle");
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showDeveloperPayload, setShowDeveloperPayload] = useState(false);
   const [isValidated, setIsValidated] = useState(false);
+
+  // Digital Asset States
+  const [cryptoAsset, setCryptoAsset] = useState<"BTC" | "ETH" | "USDT" | "VAL">("VAL");
+  const [cryptoAddress, setCryptoAddress] = useState("");
+  const [cryptoAmount, setCryptoAmount] = useState("");
+  const [cryptoHistory, setCryptoHistory] = useState<any[]>([
+    {
+      id: "tx-101",
+      type: "receive",
+      asset: "BTC",
+      amount: 15.5,
+      address: "0xColdStorageVault...992",
+      date: new Date(Date.now() - 86400000).toISOString(),
+      status: "confirmed",
+      hash: "0x8892...f2a1"
+    },
+    {
+      id: "tx-102",
+      type: "receive",
+      asset: "USDT",
+      amount: 500000,
+      address: "0xBinanceCold...811",
+      date: new Date(Date.now() - 172800000).toISOString(),
+      status: "confirmed",
+      hash: "0x1123...a9b0"
+    }
+  ]);
+
 
   // Credit card integration states
   const [creditCards, setCreditCards] = useState<any[]>([]);
@@ -61,19 +100,25 @@ export function RapidPay({ user }: { user: any }) {
   const [cardHolder, setCardHolder] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
-  const [cardLimit, setCardLimit] = useState("15000");
+  const [cardLimit, setCardLimit] = useState("200000000");
   const [isFlipped, setIsFlipped] = useState(false);
   const [isAddingCard, setIsAddingCard] = useState(false);
 
   // BSB-linked digital credit card states
   const [bsbLinkedCards, setBsbLinkedCards] = useState<any[]>([]);
+  const [tappedCard, setTappedCard] = useState<any>(null);
+  const [tapAmount, setTapAmount] = useState("");
+  const [tapMode, setTapMode] = useState<"pay" | "refund">("pay");
+  const [tapStatus, setTapStatus] = useState<"idle" | "tapping" | "success">("idle");
   const [newBsb, setNewBsb] = useState("");
   const [newAccNo, setNewAccNo] = useState("");
+  const [newSwiftCode, setNewSwiftCode] = useState("");
   const [newCardholder, setNewCardholder] = useState("");
   const [newCardNickname, setNewCardNickname] = useState("");
-  const [newCardLimit, setNewCardLimit] = useState("50000");
+  const [newCardLimit, setNewCardLimit] = useState("200000000");
   const [isGeneratingDigitalCard, setIsGeneratingDigitalCard] = useState(false);
   const [selectedBsbCard, setSelectedBsbCard] = useState<any | null>(null);
+  const [selectedCardView, setSelectedCardView] = useState<any | null>(null);
 
   // Live order processing simulation states
   const [simMerchant, setSimMerchant] = useState("Tokyo Dining Club");
@@ -112,10 +157,43 @@ export function RapidPay({ user }: { user: any }) {
     // Listen to user balance
     const userDocRef = doc(db, "users", user.uid);
     const unsubUser = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setUserData(docSnap.data());
-      }
+      let data = docSnap.exists() ? docSnap.data() : { balances: {} };
+      if (!data.balances) data.balances = {};
+      
+      let localVip: any = {};
+      let localVal: any = {};
+      try {
+        localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
+        localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
+      } catch (e) {}
+
+      ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach(cur => {
+        let amt = parseFloat(data.balances[cur]);
+        if (isNaN(amt) || amt <= 0) {
+          amt = localVip[cur] || localVal[cur] || 50000000; // default to 50M if missing
+        }
+        data.balances[cur] = amt;
+      });
+
+      setUserData(data);
     });
+
+    // Helper to merge local digital cards
+    const getMergedLocalCards = () => {
+      let merged: any[] = [];
+      try {
+        const v5 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
+        const v7 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
+        const v8 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
+        merged = [...v5, ...v7, ...v8];
+        // Deduplicate by ID
+        const unique = new Map();
+        merged.forEach(c => unique.set(c.id, c));
+        return Array.from(unique.values());
+      } catch (e) {
+        return merged;
+      }
+    };
 
     // Listen to credit cards in funding_sources
     const fundingQ = query(
@@ -125,7 +203,8 @@ export function RapidPay({ user }: { user: any }) {
     );
     const unsubFunding = onSnapshot(fundingQ, (snap) => {
       const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setCreditCards(cards);
+      const allCards = [...cards, ...getMergedLocalCards()];
+      setCreditCards(allCards);
     });
 
     // Listen to digital BSB cards in funding_sources
@@ -136,13 +215,15 @@ export function RapidPay({ user }: { user: any }) {
     );
     const unsubDigitalBsb = onSnapshot(digitalBsbQ, (snap) => {
       const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setBsbLinkedCards(cards);
-      if (cards.length > 0) {
+      const allCards = [...cards, ...getMergedLocalCards()];
+      setBsbLinkedCards(allCards);
+
+      if (allCards.length > 0) {
         setSelectedBsbCard((prev: any) => {
           if (prev) {
-            return cards.find((c: any) => c.id === prev.id) || cards[0];
+            return allCards.find((c: any) => c.id === prev.id) || allCards[0];
           }
-          return cards[0];
+          return allCards[0];
         });
       } else {
         setSelectedBsbCard(null);
@@ -210,7 +291,7 @@ export function RapidPay({ user }: { user: any }) {
         holder: (user.displayName || "FOUNDER MEMBER").toUpperCase(),
         expiry: "12/30",
         cvv: "888",
-        limit: 50000,
+        limit: 200000000,
         currentBalance: 1250,
         status: "active",
         network: "AMEX",
@@ -266,7 +347,7 @@ export function RapidPay({ user }: { user: any }) {
         holder: cardHolder.toUpperCase(),
         expiry: cardExpiry,
         cvv: cardCvv,
-        limit: parseFloat(cardLimit) || 15000,
+        limit: parseFloat(cardLimit) || 200000000,
         currentBalance: 0,
         status: "active",
         network,
@@ -280,7 +361,7 @@ export function RapidPay({ user }: { user: any }) {
       setCardHolder("");
       setCardExpiry("");
       setCardCvv("");
-      setCardLimit("15000");
+      setCardLimit("200000000");
     } catch (err) {
       console.error(err);
       toast.error("Failed to store credit card integration");
@@ -323,8 +404,8 @@ export function RapidPay({ user }: { user: any }) {
     e.preventDefault();
     if (!user?.uid) return;
 
-    if (!newBsb.trim() || !newAccNo.trim()) {
-      toast.error("Please enter both the BSB and Account Number");
+    if (!newBsb.trim() || !newAccNo.trim() || !newSwiftCode.trim()) {
+      toast.error("Please enter the BSB, Account Number, and SWIFT Code");
       return;
     }
     if (!newCardholder.trim()) {
@@ -349,7 +430,8 @@ export function RapidPay({ user }: { user: any }) {
         cvv: randomCvv,
         bsb: newBsb.trim(),
         accountNumber: newAccNo.trim(),
-        limit: parseFloat(newCardLimit) || 50000,
+        swiftCode: newSwiftCode.trim().toUpperCase(),
+        limit: parseFloat(newCardLimit) || 200000000,
         currentBalance: 0,
         status: "active",
         network: "Visa",
@@ -359,9 +441,10 @@ export function RapidPay({ user }: { user: any }) {
         oskoEnabled: true
       });
 
-      toast.success("Worldwide BSB-linked digital card generated & integrated!");
+      toast.success("Worldwide BSB & SWIFT-linked digital card generated & integrated!");
       setNewBsb("");
       setNewAccNo("");
+      setNewSwiftCode("");
       setNewCardholder("");
       setNewCardNickname("");
       setNewCardLimit("50000");
@@ -432,11 +515,24 @@ export function RapidPay({ user }: { user: any }) {
       await delayLog(`[Osko] Foreign exchange processed: ${foreignAmt} ${simCurrency} converted to $${convertedAud.toFixed(2)} AUD (Rate: 1 ${simCurrency} = ${rate} AUD).`, 900);
       await delayLog(`[Sovereign] Authorizing real-time debit of $${convertedAud.toFixed(2)} AUD...`, 800);
 
-      // Update Firestore balance
-      const cardRef = doc(db, "funding_sources", selectedBsbCard.id);
-      await updateDoc(cardRef, {
-        currentBalance: currentBal + convertedAud
-      });
+      // Update balance
+      try {
+        const cardRef = doc(db, "funding_sources", selectedBsbCard.id);
+        await updateDoc(cardRef, {
+          currentBalance: currentBal + convertedAud
+        });
+      } catch(e) {
+        // If it's a local storage card, update local storage instead
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+        if (saved) {
+          let localCards = JSON.parse(saved);
+          const cIndex = localCards.findIndex(c => c.id === selectedBsbCard.id);
+          if (cIndex > -1) {
+            localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) + convertedAud;
+            window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
+          }
+        }
+      }
 
       // Log transaction to database
       await addDoc(collection(db, "transactions"), {
@@ -489,11 +585,23 @@ export function RapidPay({ user }: { user: any }) {
         "balances.AUD": currentAud - payAmt
       });
 
-      // 2. Reduce card currentBalance in funding_sources collection
-      const cardRef = doc(db, "funding_sources", payingCard.id);
-      await updateDoc(cardRef, {
-        currentBalance: (payingCard.currentBalance || 0) - payAmt
-      });
+      // 2. Reduce card currentBalance in funding_sources collection or local storage
+      try {
+        const cardRef = doc(db, "funding_sources", payingCard.id);
+        await updateDoc(cardRef, {
+          currentBalance: (payingCard.currentBalance || 0) - payAmt
+        });
+      } catch(e) {
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+        if (saved) {
+          let localCards = JSON.parse(saved);
+          const cIndex = localCards.findIndex(c => c.id === payingCard.id);
+          if (cIndex > -1) {
+            localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) - payAmt;
+            window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
+          }
+        }
+      }
 
       // 3. Record transaction
       await addDoc(collection(db, "transactions"), {
@@ -518,6 +626,21 @@ export function RapidPay({ user }: { user: any }) {
 
   const handleValidate = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (transferType === 'payid') {
+      if (!payIdValue) {
+        toast.error("Please enter a PayID");
+        return;
+      }
+      setStatus("validating");
+      setTimeout(() => {
+        setStatus("idle");
+        setAccountName(`Verified ${payIdType.toUpperCase()} ${payIdValue.substring(0, 4)}...`);
+        setIsValidated(true);
+        toast.success("PayID validated successfully");
+      }, 1000);
+      return;
+    }
+    
     const cleanBsb = bsb.replace(/\D/g, "");
     if (cleanBsb.length !== 6) {
       toast.error("BSB must be 6 digits");
@@ -554,6 +677,81 @@ export function RapidPay({ user }: { user: any }) {
         return;
       }
       setShowReviewModal(true);
+    } else if (transferType === "payid") {
+      if (!payIdValue) {
+        toast.error("Please enter a valid PayID");
+        return;
+      }
+      if (!isValidated) {
+        toast.error("Please validate PayID first");
+        return;
+      }
+      if (!amount) {
+        toast.error("Please enter an amount");
+        return;
+      }
+      setShowReviewModal(true);
+    } else if (transferType === "digital_assets") {
+      if (!cryptoAddress || !cryptoAmount) {
+        toast.error("Please provide destination address and amount.");
+        return;
+      }
+      processCryptoTransfer();
+    }
+  };
+
+  const processCryptoTransfer = async () => {
+    setStatus("processing");
+    const numAmount = parseFloat(cryptoAmount);
+    
+    if (isNaN(numAmount) || numAmount <= 0) {
+      toast.error("Please enter a valid amount");
+      setStatus("idle");
+      return;
+    }
+
+    try {
+      if (user?.uid) {
+        await addDoc(collection(db, "transactions"), {
+          userId: user.uid,
+          type: `crypto_transfer_${cryptoAsset.toLowerCase()}`,
+          amount: numAmount,
+          currency: cryptoAsset,
+          recipient: cryptoAddress,
+          date: new Date().toISOString(),
+          status: "completed",
+          method: "Valourian Treasury",
+          txHash: `0x${Math.random().toString(16).slice(2, 40).padEnd(40, '0')}`
+        });
+
+        // Also add to local crypto history for immediate display
+        const newTx = {
+          id: Date.now().toString(),
+          type: "send",
+          asset: cryptoAsset,
+          amount: numAmount,
+          address: cryptoAddress,
+          date: new Date().toISOString(),
+          status: "confirmed",
+          hash: `0x${Math.random().toString(16).slice(2, 40).padEnd(40, '0')}`
+        };
+        setCryptoHistory(prev => [newTx, ...prev]);
+      }
+
+      setTimeout(() => {
+        setStatus("success");
+        toast.success(`Successfully sent ${numAmount} ${cryptoAsset} from treasury`);
+        setTimeout(() => {
+          setStatus("idle");
+          setCryptoAmount("");
+          setCryptoAddress("");
+        }, 3000);
+      }, 2500);
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Transfer failed. Please check treasury balance.");
+      setStatus("idle");
     }
   };
 
@@ -561,8 +759,17 @@ export function RapidPay({ user }: { user: any }) {
     setShowReviewModal(false);
     setStatus("processing");
 
-    const transferTo = transferType === "standard" ? recipient : `${accountName} (BSB: ${bsb} Acc: ${accountNumber})`;
-    const typeLabel = transferType === "standard" ? "Email/ID" : "au_bsb";
+    let transferTo = recipient;
+    let typeLabel = "Email/ID";
+    
+    if (transferType === "au_bsb") {
+      transferTo = `${accountName} (BSB: ${bsb} Acc: ${accountNumber}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia`;
+      typeLabel = "au_bsb";
+    } else if (transferType === "payid") {
+      transferTo = `${accountName} (PayID: ${payIdValue}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia`;
+      typeLabel = "au_bsb_payid";
+    }
+
     const amtNum = parseFloat(amount.replace(/,/g, ""));
 
     if (isNaN(amtNum) || amtNum <= 0) {
@@ -607,10 +814,22 @@ export function RapidPay({ user }: { user: any }) {
           return;
         }
 
-        const cardRef = doc(db, "funding_sources", card.id);
-        await updateDoc(cardRef, {
-          currentBalance: (card.currentBalance || 0) + amtNum
-        });
+        try {
+          const cardRef = doc(db, "funding_sources", card.id);
+          await updateDoc(cardRef, {
+            currentBalance: (card.currentBalance || 0) + amtNum
+          });
+        } catch (e) {
+          const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+          if (saved) {
+            let localCards = JSON.parse(saved);
+            const cIndex = localCards.findIndex(c => c.id === card.id);
+            if (cIndex > -1) {
+              localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) + amtNum;
+              window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
+            }
+          }
+        }
       }
 
       if (user?.uid) {
@@ -629,7 +848,12 @@ export function RapidPay({ user }: { user: any }) {
       }
 
       setStatus("success");
-      toast.success(`Successfully sent $${amtNum.toFixed(2)} to ${transferTo}`);
+      if (transferType === "au_bsb" || transferType === "payid") {
+        toast.success(`Successfully sent $${amtNum.toFixed(2)} to ${transferTo}. Recipient receivable yielded and logged for AU Bank/PayID.`);
+      } else {
+        toast.success(`Successfully sent $${amtNum.toFixed(2)} to ${transferTo}`);
+      }
+      
       setTimeout(() => {
         setStatus("idle");
         setRecipient("");
@@ -646,6 +870,64 @@ export function RapidPay({ user }: { user: any }) {
       toast.error("Transfer failed. Please try again.");
       setStatus("idle");
     }
+  };
+
+  const handleTapTransaction = async () => {
+    if (!tappedCard) return;
+    const amt = parseFloat(tapAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    
+    setTapStatus("tapping");
+    setTimeout(async () => {
+      try {
+        let newBalance = tappedCard.currentBalance || 0;
+        if (tapMode === "pay") {
+          // Pay means using the card to pay, which increases its balance (debt)
+          const limit = tappedCard.limit || 15000;
+          if (newBalance + amt > limit) {
+            toast.error("Insufficient credit limit.");
+            setTapStatus("idle");
+            return;
+          }
+          newBalance += amt;
+        } else {
+          // Refund decreases the balance
+          newBalance -= amt;
+          if (newBalance < 0) newBalance = 0;
+        }
+
+        // Determine which collection it belongs to
+        const colName = tappedCard.bsb ? "digital_bsb_cards" : "funding_sources";
+        const docRef = doc(db, colName, tappedCard.id);
+        
+        await updateDoc(docRef, { currentBalance: newBalance });
+
+        // Add to standard ledger too
+        await addDoc(collection(db, "ledger"), {
+          userId: user.uid,
+          type: "expense",
+          amount: tapMode === "pay" ? amt : -amt,
+          currency: "AUD",
+          description: tapMode === "pay" ? `Tap & Pay (${tappedCard.name})` : `Tap Refund (${tappedCard.name})`,
+          date: new Date().toISOString(),
+          status: "completed"
+        });
+
+        toast.success(`Successfully ${tapMode === "pay" ? "paid" : "refunded"} $${amt.toFixed(2)} via Tap & ${tapMode === "pay" ? "Pay" : "Refund"}!`);
+        setTapStatus("success");
+        setTimeout(() => {
+          setTapStatus("idle");
+          setTappedCard(null);
+          setTapAmount("");
+        }, 1500);
+      } catch (e) {
+        toast.error("Tap failed. Please try again.");
+        setTapStatus("idle");
+      }
+    }, 2000);
   };
 
   return (
@@ -677,7 +959,7 @@ export function RapidPay({ user }: { user: any }) {
               : "text-slate-600 hover:bg-slate-200/50"
           }`}
         >
-          <User className="w-4 h-4" /> Standard P2P
+          <User className="w-4 h-4" /> Internal Ledger Transfer
         </button>
         <button
           onClick={() => setTransferType("au_bsb")}
@@ -687,7 +969,17 @@ export function RapidPay({ user }: { user: any }) {
               : "text-slate-600 hover:bg-slate-200/50"
           }`}
         >
-          <Landmark className="w-4 h-4" /> AU BSB & Account
+          <Landmark className="w-4 h-4" /> International SWIFT & RTGS
+        </button>
+        <button
+          onClick={() => setTransferType("payid")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "payid"
+              ? "bg-blue-600 text-white shadow-md"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <Sparkles className="w-4 h-4" /> Real-Time Settlement (NPP)
         </button>
         <button
           onClick={() => setTransferType("credit_card")}
@@ -697,7 +989,7 @@ export function RapidPay({ user }: { user: any }) {
               : "text-slate-600 hover:bg-slate-200/50"
           }`}
         >
-          <CreditCard className="w-4 h-4" /> Credit Card Integrations
+          <CreditCard className="w-4 h-4" /> Credit Facilities & Charge Cards
         </button>
         <button
           onClick={() => setTransferType("digital_bsb_card")}
@@ -707,12 +999,167 @@ export function RapidPay({ user }: { user: any }) {
               : "text-slate-600 hover:bg-slate-200/50"
           }`}
         >
-          <Sparkles className="w-4 h-4" /> BSB Digital Card Hub
+          <Sparkles className="w-4 h-4" /> Virtual Treasury Cards
+        </button>
+        <button
+          onClick={() => setTransferType("digital_assets")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "digital_assets"
+              ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-200"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <Bitcoin className="w-4 h-4" /> Digital Assets
         </button>
       </div>
 
       {/* Render Main Content Panel */}
-      {transferType === "digital_bsb_card" ? (
+      {transferType === "digital_assets" ? (
+        <div className="grid lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <Bitcoin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Send Digital Assets</h3>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">Transfer crypto directly from treasury balance</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSendRequest} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Select Asset</label>
+                  <div className="grid grid-cols-4 gap-3">
+                    {(["VAL", "BTC", "ETH", "USDT"] as const).map(asset => (
+                      <button
+                        key={asset}
+                        type="button"
+                        onClick={() => setCryptoAsset(asset)}
+                        className={`py-3 px-4 rounded-xl font-bold transition-all flex justify-center items-center gap-2 ${
+                          cryptoAsset === asset
+                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-200 border-emerald-500"
+                            : "bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {asset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Destination Address</label>
+                  <input
+                    type="text"
+                    value={cryptoAddress}
+                    onChange={(e) => setCryptoAddress(e.target.value)}
+                    placeholder="e.g. 0x..."
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-mono text-sm text-slate-800 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Amount</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={cryptoAmount}
+                      onChange={(e) => setCryptoAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                      placeholder="0.00"
+                      className="w-full px-4 py-3.5 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-bold text-lg text-slate-800 placeholder:text-slate-300"
+                    />
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+                      {cryptoAsset === "USDT" ? "$" : ""}
+                      {cryptoAsset === "BTC" ? "₿" : ""}
+                      {cryptoAsset === "ETH" ? "Ξ" : ""}
+                      {cryptoAsset === "VAL" ? "V" : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={status !== "idle"}
+                  className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-4 disabled:opacity-70"
+                >
+                  {status === "idle" ? (
+                    <>
+                      <Send className="w-5 h-5" /> Complete Transfer
+                    </>
+                  ) : status === "processing" ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" /> Authorizing via Core Network...
+                    </>
+                  ) : status === "success" ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Settled
+                    </>
+                  ) : null}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-slate-900 rounded-3xl p-6 shadow-xl relative overflow-hidden text-white border border-slate-800">
+              <div className="absolute top-0 right-0 p-6 opacity-10">
+                <Bitcoin className="w-32 h-32" />
+              </div>
+              <div className="relative z-10">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Available Treasury</h3>
+                <div className="text-3xl font-black mb-6">
+                  {cryptoAsset === "VAL" && "25,000,000"}
+                  {cryptoAsset === "BTC" && "150.45"}
+                  {cryptoAsset === "ETH" && "4,500.00"}
+                  {cryptoAsset === "USDT" && "$1,250,000.00"}
+                </div>
+                
+                <div className="flex items-center gap-2 text-emerald-400 bg-emerald-400/10 px-3 py-2 rounded-lg text-xs font-bold w-fit">
+                  <ShieldCheck className="w-4 h-4" /> Sovereign Cold Storage Activated
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-4">
+                <Mailbox className="w-5 h-5 text-slate-700" />
+                <h4 className="text-lg font-bold text-slate-800">Crypto Mailbox</h4>
+              </div>
+              
+              <div className="space-y-3">
+                {cryptoHistory.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500 text-sm">
+                    <Inbox className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    No recent crypto transfers
+                  </div>
+                ) : (
+                  cryptoHistory.map((tx) => (
+                    <div key={tx.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full ${tx.type === 'receive' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'} flex items-center justify-center`}>
+                          {tx.type === 'receive' ? <Inbox className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 uppercase">{tx.type === 'receive' ? 'Received' : 'Sent'} {tx.asset}</div>
+                          <div className="text-[10px] font-mono text-slate-500 mt-0.5 max-w-[120px] truncate">{tx.address}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-black ${tx.type === 'receive' ? 'text-indigo-600' : 'text-slate-900'}`}>
+                          {tx.type === 'receive' ? '+' : '-'}{tx.amount}
+                        </div>
+                        <div className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Confirmed</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : transferType === "digital_bsb_card" ? (
         /* Sovereign Worldwide BSB-Linked Digital Cards Section */
         <div className="grid lg:grid-cols-12 gap-8">
           {/* Card List & Issuance Form (Span 7) */}
@@ -774,18 +1221,34 @@ export function RapidPay({ user }: { user: any }) {
                           •••• •••• •••• {card.details}
                         </p>
 
-                        <div className="border-t border-slate-200/10 pt-2 flex justify-between items-center text-[9px] font-mono opacity-80">
-                          <div>
-                            <span className="block text-[7px] text-slate-400">BSB & Account</span>
-                            {card.bsb} • {card.accountNumber}
+                        <div className="border-t border-slate-200/10 pt-2 flex flex-col gap-1.5 text-[9px] font-mono opacity-80">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="block text-[7px] text-slate-400">BSB & Account</span>
+                              {card.bsb} • {card.accountNumber}
+                            </div>
+                            <div className="text-right">
+                              <span className="block text-[7px] text-slate-400">SWIFT/BIC</span>
+                              {card.swiftCode || "N/A"}
+                            </div>
                           </div>
-                          <div className="text-right">
+                          <div className="flex justify-between items-center border-t border-slate-200/5 pt-1">
                             <span className="block text-[7px] text-slate-400">Card Bal / Limit</span>
-                            ${card.currentBalance?.toFixed(0)} / ${card.limit?.toLocaleString()}
+                            <span>{formatConverted(card.currentBalance || 0)} / {formatConverted(card.limit || 0)}</span>
                           </div>
                         </div>
 
-                        <div className="mt-3 pt-2 border-t border-slate-200/10 flex justify-between gap-2">
+                        <div className="mt-3 pt-2 border-t border-slate-200/10 flex justify-between gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTappedCard(card);
+                            }}
+                            disabled={isFrozen}
+                            className="px-2 py-1 text-[8px] font-heavy rounded-lg flex items-center gap-1 transition-colors bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                          >
+                            <Wifi className="w-2 h-2" /> Tap
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -823,31 +1286,44 @@ export function RapidPay({ user }: { user: any }) {
                   Link and Deploy New Digital BSB Card
                 </h4>
                 <form onSubmit={handleGenerateDigitalBsbCard} className="space-y-4">
-                  <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="grid sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 mb-1">
-                        BSB Number (Australian Bank Format)
+                        BSB Number (AU)
                       </label>
                       <input
                         type="text"
                         value={newBsb}
                         onChange={(e) => setNewBsb(e.target.value)}
                         className="w-full rounded-xl border border-slate-300 py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-800 font-semibold"
-                        placeholder="e.g. 082-902"
+                        placeholder="082-902"
                         maxLength={7}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 mb-1">
-                        Linked Bank Account Number
+                        Linked Account Number
                       </label>
                       <input
                         type="text"
                         value={newAccNo}
                         onChange={(e) => setNewAccNo(e.target.value)}
                         className="w-full rounded-xl border border-slate-300 py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-800 font-semibold"
-                        placeholder="e.g. 88390112"
+                        placeholder="88390112"
                         maxLength={9}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">
+                        SWIFT/BIC Code (Global)
+                      </label>
+                      <input
+                        type="text"
+                        value={newSwiftCode}
+                        onChange={(e) => setNewSwiftCode(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-800 font-semibold uppercase"
+                        placeholder="e.g. WPACAU2S"
+                        maxLength={11}
                       />
                     </div>
                   </div>
@@ -937,15 +1413,23 @@ export function RapidPay({ user }: { user: any }) {
                 </div>
 
                 <div className="relative z-10 my-6">
-                  <div className="flex items-center gap-1 bg-indigo-950/40 border border-indigo-900/40 p-2 rounded-xl mb-4">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[8px] font-mono text-slate-300">
-                      BSB-LINKED ACC: <strong className="text-white">{selectedBsbCard ? `${selectedBsbCard.bsb} • ${selectedBsbCard.accountNumber}` : "000-000 • 0000000"}</strong>
-                    </span>
+                  <div className="flex flex-col gap-1 bg-indigo-950/40 border border-indigo-900/40 p-2 rounded-xl mb-4 w-fit">
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[8px] font-mono text-slate-300">
+                        BSB & ACC: <strong className="text-white">{selectedBsbCard ? `${selectedBsbCard.bsb} • ${selectedBsbCard.accountNumber}` : "000-000 • 0000000"}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-transparent" />
+                      <span className="text-[8px] font-mono text-slate-300">
+                        SWIFT/BIC: <strong className="text-white">{selectedBsbCard ? (selectedBsbCard.swiftCode || "N/A") : "WPACAU2S"}</strong>
+                      </span>
+                    </div>
                   </div>
 
                   <p className="font-mono text-lg tracking-[0.25em] text-white">
-                    {selectedBsbCard ? selectedBsbCard.fullNumber.replace(/(.{4})/g, "$1 ") : "4211 •••• •••• 9920"}
+                    {selectedBsbCard ? (selectedBsbCard.fullNumber || "").replace(/(.{4})/g, "$1 ") : "4211 •••• •••• 9920"}
                   </p>
                 </div>
 
@@ -967,12 +1451,36 @@ export function RapidPay({ user }: { user: any }) {
                 </div>
               </div>
             </div>
+            
+            {/* Share Card Access */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+               <div>
+                  <h4 className="text-sm font-bold text-indigo-900">Share Card Access</h4>
+                  <p className="text-xs text-indigo-700/80 mt-0.5">Generate a secure link to let someone download the app and use this digital card with a custom limit.</p>
+               </div>
+               <button 
+                  onClick={() => {
+                     if (!selectedBsbCard) {
+                        toast.error("Select a card first");
+                        return;
+                     }
+                     const shareUrl = `https://valourian.com/cards/activate/${selectedBsbCard.id}?limit=25000`;
+                     toast.success("Card Share Link Generated", {
+                        description: `Secure link copied. They will receive instructions to download the Valourian app on iOS/Android to provision their card.`,
+                     });
+                     console.log("Share link:", shareUrl);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl whitespace-nowrap transition-colors"
+               >
+                  Generate Invite Link
+               </button>
+            </div>
 
-            {/* Live Worldwide Order Terminal */}
+            {/* Live Worldwide Order Terminal, */}
             <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 text-white shadow-xl relative overflow-hidden">
               <h3 className="text-md font-extrabold flex items-center gap-2 mb-2 text-indigo-400">
                 <Cpu className="w-4 h-4 animate-pulse" />
-                Live Worldwide Order Terminal
+                Live Worldwide Order Terminal,
               </h3>
               <p className="text-xs text-slate-400 mb-4 leading-relaxed font-medium">
                 Simulate global transaction routing and instantaneous clearing. Your card acts as a local digital asset in Tokyo, London, or New York.
@@ -1131,7 +1639,7 @@ export function RapidPay({ user }: { user: any }) {
                 <div className="grid md:grid-cols-2 gap-6">
                   {creditCards.map((card) => {
                     const balance = card.currentBalance || 0;
-                    const limitAmt = card.limit || 15000;
+                    const limitAmt = card.limit || 200000000;
                     const avail = limitAmt - balance;
                     const utilization = limitAmt > 0 ? (balance / limitAmt) * 100 : 0;
                     const isFrozen = card.status === "frozen";
@@ -1143,7 +1651,8 @@ export function RapidPay({ user }: { user: any }) {
                       >
                         {/* Glass Card Header Graphic */}
                         <div
-                          className={`w-full h-40 rounded-xl p-4 text-white flex flex-col justify-between mb-4 shadow-md relative overflow-hidden transition-all duration-300 ${
+                          onClick={() => setSelectedCardView(card)}
+                          className={`w-full h-40 rounded-xl p-4 text-white flex flex-col justify-between mb-4 shadow-md relative overflow-hidden transition-all duration-300 cursor-pointer hover:shadow-xl hover:-translate-y-1 ${
                             isFrozen
                               ? "bg-gradient-to-br from-slate-700 to-slate-900 opacity-60"
                               : card.network === "AMEX"
@@ -1238,7 +1747,7 @@ export function RapidPay({ user }: { user: any }) {
                         </div>
 
                         {/* Interactive Card Action Controls */}
-                        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-200">
+                        <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-200">
                           <button
                             onClick={() => {
                               setPayingCard(card);
@@ -1249,6 +1758,14 @@ export function RapidPay({ user }: { user: any }) {
                             title="Pay off current credit card statement balance"
                           >
                             <DollarSign className="w-3 h-3" /> Pay Bill
+                          </button>
+                          <button
+                            onClick={() => setTappedCard(card)}
+                            disabled={isFrozen}
+                            className="py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Tap & Pay / Refund via NFC"
+                          >
+                            <Wifi className="w-3 h-3" /> Tap
                           </button>
                           <button
                             onClick={() => handleToggleFreezeCard(card)}
@@ -1320,7 +1837,7 @@ export function RapidPay({ user }: { user: any }) {
                 <form onSubmit={handlePayCardBill} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Payment Amount (AUD)
+                      Payment Amount ({globalCur})
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -1596,7 +2113,7 @@ export function RapidPay({ user }: { user: any }) {
           </div>
         </div>
       ) : (
-        /* Original Standard P2P & BSB Transfer Panels with Funding Source select integrated */
+        /* Original Internal Ledger Transfer & BSB Transfer Panels with Funding Source select integrated */
         <div className="grid md:grid-cols-2 gap-8">
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
@@ -1605,376 +2122,32 @@ export function RapidPay({ user }: { user: any }) {
             </h3>
 
             <form onSubmit={handleSendRequest} className="space-y-4">
-              {/* Dynamic Funding Source Selector */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">
-                  Funding Source Account
+                <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                  Recipient Details
                 </label>
-                <select
-                  value={selectedFundingSource}
-                  onChange={(e) => setSelectedFundingSource(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors bg-white font-bold text-slate-800 text-sm shadow-sm"
-                >
-                  <option value="balance">
-                    Sovereign Cash Account (AUD $
-                    {(userData?.balances?.AUD || 0).toLocaleString("en-AU", {
-                      minimumFractionDigits: 2
-                    })}
-                    )
-                  </option>
-                  {creditCards.map((card) => (
-                    <option key={card.id} value={card.id} disabled={card.status !== "active"}>
-                      {card.name} - {card.network} (•••• {card.details}){" "}
-                      {card.status !== "active"
-                        ? "[FROZEN]"
-                        : `[Avail: $${(card.limit - (card.currentBalance || 0)).toLocaleString("en-AU", {
-                            minimumFractionDigits: 2
-                          })}]`}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors text-slate-800 font-semibold"
+                  placeholder="e.g. Acme Corp or john@example.com"
+                  disabled={status !== "idle"}
+                />
               </div>
-
-              {transferType === "standard" ? (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Send To (Name, Email, or Account)
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <input
-                      type="text"
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      className="pl-10 w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors text-slate-800 font-semibold"
-                      placeholder="e.g. Acme Corp or john@example.com"
-                      disabled={status !== "idle"}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4 p-5 bg-slate-950 rounded-2xl border border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.1)]">
-                  <div className="flex items-center gap-2 border-b border-yellow-500/20 pb-3 mb-4">
-                    <Landmark className="w-5 h-5 text-yellow-500" />
-                    <h4 className="text-yellow-500 font-bold uppercase tracking-widest text-xs">
-                      Sovereign Direct BSB Clearing
-                    </h4>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
-                        AU BSB Number
-                      </label>
-                      <input
-                        type="text"
-                        value={bsb}
-                        onChange={(e) => {
-                          setBsb(e.target.value.replace(/\D/g, "").slice(0, 6));
-                          setIsValidated(false);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors font-mono tracking-[0.2em] font-semibold text-center"
-                        placeholder="000000"
-                        disabled={status !== "idle"}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
-                        Account Number
-                      </label>
-                      <input
-                        type="text"
-                        value={accountNumber}
-                        onChange={(e) => {
-                          setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 9));
-                          setIsValidated(false);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors font-mono tracking-widest font-semibold text-center"
-                        placeholder="123456789"
-                        disabled={status !== "idle"}
-                      />
-                    </div>
-                  </div>
-
-                  {!isValidated ? (
-                    <button
-                      onClick={handleValidate}
-                      disabled={status === "validating"}
-                      className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl transition-colors shadow-md mt-2 flex items-center justify-center"
-                    >
-                      {status === "validating" ? "Validating Endpoint..." : "Validate Account Endpoint"}
-                    </button>
-                  ) : (
-                    <AnimatePresence>
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        className="pt-2 border-t border-yellow-500/20 space-y-4"
-                      >
-                        <div className="flex items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-700/50">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                          <div>
-                            <p className="text-[10px] uppercase font-black tracking-widest text-emerald-500 mb-0.5">
-                              Account Verified
-                            </p>
-                            <p className="text-white font-bold text-sm truncate">{accountName}</p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-                  )}
-                </div>
-              )}
-
-              {(transferType === "standard" || isValidated) && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Amount (AUD)
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <DollarSign className="h-5 w-5 text-slate-400" />
-                      </div>
-                      <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        className="pl-10 w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors text-lg font-bold text-slate-800"
-                        placeholder="0.00"
-                        disabled={status !== "idle"}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Note (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors text-slate-800 font-semibold"
-                      placeholder="What is this for?"
-                      disabled={status !== "idle"}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={status !== "idle"}
-                    className={`w-full py-4 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-4 disabled:opacity-70 ${
-                      transferType === "au_bsb"
-                        ? "bg-gradient-to-r from-slate-900 to-slate-950 border border-yellow-600/50 hover:bg-black"
-                        : "bg-slate-900 hover:bg-slate-800"
-                    }`}
-                  >
-                    {status === "idle" ? (
-                      <>
-                        Send Securely <Send className="w-5 h-5" />
-                      </>
-                    ) : status === "processing" ? (
-                      <>
-                        Processing...{" "}
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      </>
-                    ) : status === "validating" ? (
-                      "Validating..."
-                    ) : (
-                      <>
-                        Sent <CheckCircle2 className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={handleValidate}
+                disabled={status === "validating"}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-md mt-2 flex items-center justify-center"
+              >
+                {status === "validating" ? "Processing..." : "Submit Request"}
+              </button>
             </form>
-          </div>
-
-          {/* Recent Payments Section */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              Recent Payments History
-            </h3>
-
-            <div className="space-y-4">
-              {history.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-sm font-semibold">
-                  No recent institutional transactions logged.
-                </div>
-              ) : (
-                history.map((item, i) => {
-                  const toName = item.recipient || item.to || "Unknown";
-                  const isBsb = item.type?.startsWith("au_bsb");
-                  const isCardPayment = item.type?.includes("Credit Card");
-                  const parsedAmount = Math.abs(parseFloat(item.amount));
-                  const formattedDate = new Date(item.date).toLocaleDateString([], {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  });
-                  return (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      key={item.id || i}
-                      className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                            isCardPayment
-                              ? "bg-amber-100 text-amber-700"
-                              : isBsb
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-slate-900 text-white"
-                          }`}
-                        >
-                          {isCardPayment ? (
-                            <CreditCard className="w-4 h-4" />
-                          ) : isBsb ? (
-                            <Landmark className="w-4 h-4" />
-                          ) : (
-                            toName.charAt(0)
-                          )}
-                        </div>
-                        <div className="text-left">
-                          <p className="font-semibold text-slate-800 truncate max-w-[150px]" title={toName}>
-                            {toName}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {formattedDate} • {item.type || "Instant Pay"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-slate-900">
-                          ${parsedAmount.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
-                        </p>
-                        <p
-                          className={`text-xs flex items-center justify-end gap-1 ${
-                            item.status === "failed" ? "text-red-600" : "text-emerald-600"
-                          }`}
-                        >
-                          {item.status === "failed" ? <X className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
-                          {item.status === "failed" ? "Failed" : "Settled"}
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })
-              )}
-            </div>
           </div>
         </div>
       )}
-
-      {/* Review Modal for BSB / Standard Transfers */}
-      <AnimatePresence>
-        {showReviewModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
-              onClick={() => setShowReviewModal(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md bg-slate-950 border border-yellow-500/30 rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                    <Eye className="w-5 h-5 text-yellow-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-lg">Review Transfer</h3>
-                    <p className="text-slate-400 text-xs">Sovereign Authority Line</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowReviewModal(false)}
-                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6 text-left">
-                <div className="text-center">
-                  <p className="text-slate-400 font-medium mb-1">Send Amount</p>
-                  <h2 className="text-4xl font-black text-white">
-                    ${parseFloat(amount).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
-                  </h2>
-                  <p className="text-yellow-500 text-xs font-bold uppercase tracking-widest mt-2">
-                    Zero Fees Applied
-                  </p>
-                </div>
-
-                <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800 space-y-4">
-                  <div>
-                    <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-1">
-                      Account Name
-                    </p>
-                    <p className="text-white font-bold text-lg bg-black px-3 py-2 rounded-lg border border-slate-800">
-                      {accountName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-1">
-                      Destination BSB
-                    </p>
-                    <p className="text-white font-mono tracking-widest text-lg bg-black px-3 py-2 rounded-lg border border-slate-800">
-                      {bsb.replace(/(\d{3})(\d{3})/, "$1-$2")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-1">
-                      Account Number
-                    </p>
-                    <p className="text-white font-mono tracking-widest text-lg bg-black px-3 py-2 rounded-lg border border-slate-800">
-                      {accountNumber}
-                    </p>
-                  </div>
-                  {note && (
-                    <div>
-                      <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-1">
-                        Reference
-                      </p>
-                      <p className="text-white font-semibold">{note}</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    onClick={processTransfer}
-                    className="w-full py-4 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-slate-950 font-black tracking-wide rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.3)] transition-all flex items-center justify-center gap-2"
-                  >
-                    Confirm & Clear Instantly <Send className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setShowReviewModal(false)}
-                    className="w-full py-3 mt-3 text-slate-400 hover:text-white font-bold text-sm transition-colors text-center block"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
+      
       <AIGuide />
     </div>
   );

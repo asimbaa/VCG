@@ -9,6 +9,7 @@ export function Deployments({ user }: { user: any }) {
   const [siteName, setSiteName] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [showPromoSite, setShowPromoSite] = useState(false);
+  const [showCorpSite, setShowCorpSite] = useState(false);
   
   const [activeSites, setActiveSites] = useState([
     { id: 1, name: "Valourian Capital Public Terminal", url: "https://valourian.com", status: "Live", uptime: "99.99%", lastDeployed: "Just now" },
@@ -98,6 +99,95 @@ export function Deployments({ user }: { user: any }) {
                       <div className="bg-white/5 border border-white/10 p-8 rounded-2xl backdrop-blur-md">
                           <p className="text-sm font-bold text-blue-400 uppercase tracking-[0.2em] mb-2">Office of the Founder / CEO</p>
                           <h2 className="text-3xl font-bold text-white tracking-tight">Asim Aryal</h2>
+                      </div>
+                   </div>
+               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Corp Site Preview Modal */}
+      <AnimatePresence>
+        {showCorpSite && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+               initial={{ scale: 0.95, y: 20 }}
+               animate={{ scale: 1, y: 0 }}
+               exit={{ scale: 0.95, y: 20 }}
+               className="bg-zinc-950 w-full max-w-5xl h-[85vh] rounded-3xl border border-zinc-800 shadow-2xl overflow-hidden flex flex-col relative"
+            >
+               <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                     <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50" />
+                     <div className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500/50" />
+                     <div className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500/50" />
+                  </div>
+                  <div className="bg-zinc-950 px-4 py-1.5 rounded-md text-zinc-500 text-xs font-mono border border-zinc-800 flex items-center gap-2">
+                     <Lock className="w-3 h-3 text-zinc-600" />
+                     https://corp.valourian.app
+                  </div>
+                  <button onClick={() => setShowCorpSite(false)} className="text-zinc-500 hover:text-white transition-colors">
+                     <X className="w-5 h-5" />
+                  </button>
+               </div>
+               <div className="flex-1 overflow-y-auto w-full bg-slate-900 flex flex-col p-8 relative">
+                   <div className="absolute inset-0 bg-slate-950" />
+                   
+                   <div className="relative z-10 flex flex-col max-w-4xl mx-auto w-full pt-8">
+                      <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
+                        <div className="flex items-center gap-4">
+                          <ValourianLogo className="w-12 h-12" />
+                          <h1 className="text-3xl font-bold text-white tracking-tighter">CorpNet Portal</h1>
+                        </div>
+                        <div className="flex items-center gap-6 text-slate-400 text-sm font-medium">
+                          <button className="hover:text-white transition-colors">Directory</button>
+                          <button className="hover:text-white transition-colors">Policies</button>
+                          <button className="hover:text-white transition-colors">Helpdesk</button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-6 mb-8">
+                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors">
+                           <Shield className="w-8 h-8 text-indigo-400 mb-4" />
+                           <h3 className="text-lg font-bold text-white mb-2">Security Clearance</h3>
+                           <p className="text-slate-400 text-sm">Review active clearance levels and update biometric credentials.</p>
+                         </div>
+                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors">
+                           <Layout className="w-8 h-8 text-blue-400 mb-4" />
+                           <h3 className="text-lg font-bold text-white mb-2">Resource Allocation</h3>
+                           <p className="text-slate-400 text-sm">Request additional compute resources or physical assets.</p>
+                         </div>
+                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors">
+                           <Calendar className="w-8 h-8 text-emerald-400 mb-4" />
+                           <h3 className="text-lg font-bold text-white mb-2">Corporate Events</h3>
+                           <p className="text-slate-400 text-sm">Upcoming board meetings and all-hands schedules.</p>
+                         </div>
+                      </div>
+                      
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-colors">
+                        <h3 className="text-lg font-bold text-white mb-6">Internal Announcements</h3>
+                        <div className="space-y-6">
+                          <div className="flex gap-4 items-start border-b border-slate-800/50 pb-6">
+                            <div className="bg-blue-500/10 text-blue-400 p-3 rounded-xl"><ExternalLink className="w-5 h-5" /></div>
+                            <div>
+                              <h4 className="text-white font-medium text-lg">Q3 Global Expansion Strategy Finalized</h4>
+                              <p className="text-slate-400 text-sm mt-1.5 leading-relaxed">The executive board has approved the Q3 roadmap for sovereign edge nodes. Full deployment expected across APAC.</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-4 items-start border-b border-slate-800/50 pb-6">
+                            <div className="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl"><Globe className="w-5 h-5" /></div>
+                            <div>
+                              <h4 className="text-white font-medium text-lg">New Edge Locations Live</h4>
+                              <p className="text-slate-400 text-sm mt-1.5 leading-relaxed">Valourian Capital successfully deployed new autonomous points of presence in Singapore and Tokyo.</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                    </div>
                </div>
@@ -212,9 +302,20 @@ export function Deployments({ user }: { user: any }) {
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors">{site.name}</h4>
-                      <a href="#" className="text-sm text-slate-500 hover:underline flex items-center gap-1">
+                      <button 
+                        onClick={() => {
+                           if(site.id === 1) setShowPromoSite(true);
+                           else if(site.id === 3) setShowCorpSite(true);
+                           else if(site.id === 2) {
+                             const event = new CustomEvent('nav-bank');
+                             window.dispatchEvent(event);
+                           }
+                           else window.open(site.url, '_blank');
+                        }} 
+                        className="text-sm text-slate-500 hover:underline flex items-center gap-1"
+                      >
                         {site.url} <ExternalLink className="w-3 h-3" />
-                      </a>
+                      </button>
                     </div>
                   </div>
                   
@@ -233,6 +334,7 @@ export function Deployments({ user }: { user: any }) {
                     <button 
                       onClick={() => {
                          if (site.id === 1) setShowPromoSite(true);
+                         if (site.id === 3) setShowCorpSite(true);
                       }}
                       className="w-10 h-10 rounded-full bg-slate-50 hover:bg-blue-50 border border-slate-200 flex items-center justify-center transition-colors text-slate-400 hover:text-blue-600"
                     >

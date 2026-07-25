@@ -16,10 +16,28 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      chunkSizeWarningLimit: 2500,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('@react-google-maps') || id.includes('@vis.gl/react-google-maps')) return 'google-maps';
+              if (id.includes('framer-motion') || id.includes('motion')) return 'framer-motion';
+              if (id.includes('recharts') || id.includes('d3')) return 'recharts';
+              if (id.includes('lucide-react')) return 'lucide-react';
+              if (id.includes('firebase')) return 'firebase';
+              if (id.includes('three') || id.includes('@react-three')) return 'three';
+              if (id.includes('leaflet') || id.includes('react-leaflet')) return 'leaflet';
+              if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-core';
+              return 'vendor';
+            }
+          }
+        }
+      }
+    },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: false,
     },
   };
 });

@@ -11,7 +11,7 @@ export interface EmailData {
   subject: string;
   preview: string;
   body: string;
-  attachments?: { name: string; size: string }[];
+  attachments?: { name: string; size: string; content?: string }[];
   isVoucher?: boolean;
   voucherAmount?: number;
   voucherCode?: string;
@@ -42,6 +42,7 @@ export const sendEmailViaService = async (user: any, data: EmailData, onPreviewR
 };
 
 export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; onClose: () => void }) {
+  const [activeAttachment, setActiveAttachment] = React.useState<any>(null);
   if (!data) return null;
   
   return (
@@ -148,7 +149,7 @@ export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; o
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Attachments</h4>
                 <div className="flex gap-3 flex-wrap">
                   {data.attachments.map((att, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 cursor-pointer transition-colors">
+                    <div key={i} onClick={() => setActiveAttachment(att)} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 cursor-pointer transition-colors">
                       <div className="bg-red-100 text-red-600 p-2 rounded-lg">
                         <FileText className="w-5 h-5" />
                       </div>
@@ -160,6 +161,17 @@ export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; o
                     </div>
                   ))}
                 </div>
+                {activeAttachment && (
+                  <div className="mt-4 p-4 border border-slate-200 rounded-2xl bg-slate-50 shadow-inner">
+                    <div className="flex justify-between items-center mb-4">
+                      <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" /> {activeAttachment.name}</h5>
+                      <button onClick={() => setActiveAttachment(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 text-xs font-mono whitespace-pre-wrap text-slate-700 leading-relaxed max-h-96 overflow-y-auto">
+                      {activeAttachment.content || "File content is securely encrypted and cannot be rendered."}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

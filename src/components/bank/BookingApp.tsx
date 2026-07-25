@@ -31,12 +31,14 @@ import { toast } from 'sonner';
 import { db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { sendEmailViaService, EmailPreviewModal, EmailData } from './EmailService';
+import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 
 export function BookingApp({ user, balances, setBalances }: {
   user: any;
   balances: Record<string, number>;
   setBalances: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }) {
+  const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   // Booking Search Criteria States
   const [destination, setDestination] = useState('Melbourne, Australia');
   const [checkInDate, setCheckInDate] = useState('2026-10-15');
@@ -66,13 +68,91 @@ export function BookingApp({ user, balances, setBalances }: {
   const [includeAllInclusive, setIncludeAllInclusive] = useState(false);
 
   // Live cards list loaded from storage
-  const [bookingCards, setBookingCards] = useState<any[]>([]);
+  const [bookingCards, setBookingCards] = useState<any[]>(() => {
+    try {
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: "visa_primary",
+        last4: "4242",
+        fullNumber: "4242 4242 4242 4242",
+        cvv: "123",
+        pin: "0000",
+        holder: "ASIM ARYAL",
+        expiry: "12/28",
+        type: "primary",
+        limit: "$10,000.00 USD",
+        region: "Global",
+        network: "Visa",
+        bsb: "062-951",
+        accountNumber: "1099 4335",
+        netbankId: "43359948",
+        balance: 15000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Standard Checking",
+          benefits: "Cashback on all purchases",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "mastercard_sec",
+        last4: "5100",
+        fullNumber: "5105 1051 0510 5100",
+        cvv: "456",
+        pin: "1234",
+        holder: "ASIM ARYAL",
+        expiry: "05/29",
+        type: "primary",
+        limit: "$20,000.00 USD",
+        region: "Global",
+        network: "Mastercard",
+        bsb: "062-951",
+        accountNumber: "1099 8801",
+        netbankId: "88019948",
+        balance: 12500,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Premium Savings",
+          benefits: "Travel rewards and lounge access",
+          chips: "Contactless enabled",
+        },
+      },
+      {
+        id: "amex_corp",
+        last4: "0005",
+        fullNumber: "3782 822463 10005",
+        cvv: "7890",
+        pin: "4321",
+        holder: "ASIM ARYAL",
+        expiry: "04/30",
+        type: "primary",
+        limit: "No Preset Spending Limit",
+        region: "Global",
+        network: "American Express",
+        bsb: "834-472",
+        accountNumber: "242719180",
+        netbankId: "8207647128",
+        balance: 55000,
+        isFlipped: false,
+        details: {
+          access: "Corporate Account",
+          benefits: "Centurion Lounge Access",
+          atm: "Cash advance available",
+        },
+      }
+    ];
+  });
   const [selectedBookingCardIndex, setSelectedBookingCardIndex] = useState<number>(0);
 
   useEffect(() => {
     const syncCards = () => {
       try {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.length > 0) {
@@ -94,73 +174,108 @@ export function BookingApp({ user, balances, setBalances }: {
     }
   }, [showHistory]);
 
-  const handleDownloadVoucher = (b: any) => {
-    const hotelName = b.recipient?.replace("Booking.com - ", "") || b.hotelName || "Sovereign Hotel";
-    const guest = b.guestName || "Mr. Asim Aryal";
-    const phone = b.phone || "+61 491 570 156";
-    const checkIn = b.checkInDate || "2026-06-16";
-    const checkOut = b.checkOutDate || "2026-09-02";
-    const stayNights = b.nights || 78;
-    const roomCount = b.rooms || 1;
-    const bAmt = b.amount ? Math.abs(b.amount).toLocaleString() : "273,000";
-    const bCurrency = b.currency || "AUD";
-    const detailsText = b.description || "VIP Luxury Stay Lodge";
-
-    const receiptContent = `========================================================================
-                 VALOURIAN SOVEREIGN TRAVEL LEDGER
-               OFFICIAL COMPLIANCE CHECK-IN CLEARANCE
-========================================================================
-STATUS: LEGITIMATE, VERIFIED & GUARANTEED BY THE TREASURY
-CLEARANCE CODE: VC-ETA-9942 / LEVEL-55 CLEARANCE
-
-PROPRIETARY REGISTRY DETAILS:
-------------------------------------------------------------------------
-Hotel Property     : ${hotelName}
-Address            : Barangaroo Avenue, Barangaroo NSW 2000, Australia
-Guest Name         : ${guest}
-Contact Phone      : ${phone} (VERIFIED AT SIGN-IN)
-Total Nights       : ${stayNights} Nights
-Total Rooms        : ${roomCount} Premium Suite/s
-Check-In Date      : ${checkIn} (From 14:00 AEDT)
-Check-Out Date     : ${checkOut} (Until 11:00 AEDT)
-Status Level       : PLATINUM ROYALTY VVIP
-Catering Package   : VIP All-Inclusive Butler Dining Board & Degustation
-
-TREASURY BILLING & PAYMENT STATUS:
-------------------------------------------------------------------------
-Settle Status      : ACCOMMODATION FULLY FUNDED IN ADVANCE
-Billing Gateway    : Sovereign Wealth Capital Global Clearing
-Grand Total Settle : ${bCurrency} ${bAmt}
-Payment Type       : MASTERCARD VIP CORPORATE SIGNATURE
-Verification Ref   : SEC-LEDGER-CRN-STAY-2026
-
-SPECIAL DISPATCH & COURTESY TRANSFERS:
-------------------------------------------------------------------------
-The Crown Towers Sydney VIP Concierge and Front Office Director have been
-fully briefed on this guest's 78-day luxury residency.
-
-COMPLIMENTARY AIRPORT TRANSFERS SCHEDULED:
-1. Rolls-Royce Phantom VIII Chauffeur Pick-up from Sydney International
-2. Direct helicopter lift to the hotel helipad / Barangaroo deck
-3. Private suite-side check-in (bypassing the public lobby check-in)
-
-IF YOU NEED ASSISTANCE IN CONFLICT RESOLUTION AT FRONT CODES:
-Please alert direct executive concierge hotline on verification line.
-All staff members of Crown Sydney VIP Operations are aware of this stay.
-------------------------------------------------------------------------
-       THANK YOU FOR RESIDING WITH SOVEREIGN RESORT SYSTEM
-========================================================================`;
-
-    const blob = new Blob([receiptContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${hotelName.replace(/\s+/g, "_")}_VVIP_Checkin_Voucher.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("Legitimate VVIP Check-In Voucher Saved to Downloads Folder");
+  const handleDownloadVoucher = async (b: any) => {
+    toast.info("Generating encrypted PDF ledger voucher...");
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      
+      const doc = new jsPDF();
+      const hotelName = b.recipient?.replace("Booking.com - ", "") || b.hotelName || "Sovereign Hotel";
+      const guest = b.guestName || "Mr. Asim Aryal";
+      const phone = b.phone || "+61 491 570 156";
+      const checkIn = b.checkInDate || "2026-06-16";
+      const checkOut = b.checkOutDate || "2026-09-02";
+      const stayNights = b.nights || 78;
+      const roomCount = b.rooms || 1;
+      const bAmt = b.amount ? Math.abs(b.amount).toLocaleString() : "273,000";
+      const bCurrency = b.currency || "AUD";
+      
+      // Header
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 40, "F");
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text("VALOURIAN CAPITAL", 14, 25);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("SOVEREIGN TRAVEL LEDGER", 14, 32);
+      
+      // Title
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("OFFICIAL COMPLIANCE CHECK-IN CLEARANCE", 14, 55);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(71, 85, 105);
+      doc.text("STATUS: LEGITIMATE, VERIFIED & GUARANTEED BY THE TREASURY", 14, 63);
+      doc.text("CLEARANCE CODE: VC-ETA-9942 / LEVEL-55 CLEARANCE", 14, 69);
+      
+      // Details Table
+      autoTable(doc, {
+        startY: 80,
+        head: [['PROPRIETARY REGISTRY DETAILS', '']],
+        body: [
+          ['Hotel Property', hotelName],
+          ['Address', 'Barangaroo Avenue, Barangaroo NSW 2000, Australia'],
+          ['Guest Name', guest],
+          ['Contact Phone', `${phone} (VERIFIED AT SIGN-IN)`],
+          ['Total Nights', `${stayNights} Nights`],
+          ['Total Rooms', `${roomCount} Premium Suite/s`],
+          ['Check-In Date', `${checkIn} (From 14:00 AEDT)`],
+          ['Check-Out Date', `${checkOut} (Until 11:00 AEDT)`],
+          ['Status Level', 'PLATINUM ROYALTY VVIP'],
+          ['Catering Package', 'VIP All-Inclusive Butler Dining Board & Degustation']
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 5 }
+      });
+      
+      // Billing Table
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 15,
+        head: [['TREASURY BILLING & PAYMENT STATUS', '']],
+        body: [
+          ['Settle Status', 'ACCOMMODATION FULLY FUNDED IN ADVANCE'],
+          ['Billing Gateway', 'Sovereign Wealth Capital Global Clearing'],
+          ['Grand Total Settle', `${bCurrency} ${bAmt}`],
+          ['Payment Type', 'MASTERCARD VIP CORPORATE SIGNATURE'],
+          ['Verification Ref', 'SEC-LEDGER-CRN-STAY-2026']
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 5 }
+      });
+      
+      // Footer/Notes
+      let finalY = (doc as any).lastAutoTable.finalY + 15;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text("SPECIAL DISPATCH & COURTESY TRANSFERS", 14, finalY);
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("The Crown Towers Sydney VIP Concierge and Front Office Director have been fully briefed on this guest's residency.", 14, finalY + 8);
+      doc.text("1. Rolls-Royce Phantom VIII Chauffeur Pick-up from Sydney International", 14, finalY + 14);
+      doc.text("2. Direct helicopter lift to the hotel helipad / Barangaroo deck", 14, finalY + 19);
+      doc.text("3. Private suite-side check-in (bypassing the public lobby check-in)", 14, finalY + 24);
+      
+      doc.setFont("helvetica", "bold");
+      doc.text("THANK YOU FOR RESIDING WITH SOVEREIGN RESORT SYSTEM", 14, finalY + 40);
+      
+      doc.save(`${hotelName.replace(/\s+/g, "_")}_VVIP_Checkin_Voucher.pdf`);
+      toast.success("Legitimate VVIP Check-In Voucher Saved as PDF!");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate PDF voucher.");
+    }
   };
 
   const loadHistory = async () => {
@@ -1332,7 +1447,7 @@ All staff members of Crown Sydney VIP Operations are aware of this stay.
                         <div className="space-y-2.5 text-xs">
                           <div className="flex justify-between text-slate-600 font-medium">
                             <span>Base Stay Total ({roomsCount} Room x {calculatedNights} Night x AUD ${selectedHotel.price}):</span>
-                            <span className="font-mono font-bold text-slate-800">AUD ${(selectedHotel.price * calculatedNights * roomsCount).toLocaleString()}</span>
+                            <span className="font-mono font-bold text-slate-800">${formatConverted(selectedHotel.price * calculatedNights * roomsCount)}</span>
                           </div>
 
                           {foodPackagesSubtotal > 0 && (
@@ -1340,18 +1455,18 @@ All staff members of Crown Sydney VIP Operations are aware of this stay.
                               <span className="flex items-center gap-1 text-emerald-700">
                                 🍕 Added Catering ({totalGuests} guests x {calculatedNights} nights @ AUD ${getPackagesPricePerGuestPerNight()}):
                               </span>
-                              <span className="font-mono font-bold text-slate-800">AUD ${foodPackagesSubtotal.toLocaleString()}</span>
+                              <span className="font-mono font-bold text-slate-800">${formatConverted(foodPackagesSubtotal)}</span>
                             </div>
                           )}
 
                           <div className="flex justify-between text-slate-600 font-medium font-sans">
                             <span>Service Surcharge & Tourism Luxury Levy (10%):</span>
-                            <span className="font-mono font-bold text-slate-800">AUD ${taxAddition.toLocaleString()}</span>
+                            <span className="font-mono font-bold text-slate-800">${formatConverted(taxAddition)}</span>
                           </div>
 
                           <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
                             <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Sovereign Grand Settled Total:</span>
-                            <span className="text-lg font-black text-[#003580] font-mono">AUD ${bookingGrandTotal.toLocaleString()}</span>
+                            <span className="text-lg font-black text-[#003580] font-mono">${formatConverted(bookingGrandTotal)}</span>
                           </div>
                         </div>
 
@@ -1419,7 +1534,7 @@ All staff members of Crown Sydney VIP Operations are aware of this stay.
                           ) : (
                             <>
                               <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                              <span>Confirm Stay (Deduct AUD ${bookingGrandTotal.toLocaleString()})</span>
+                              <span>Confirm Stay (Deduct ${formatConverted(bookingGrandTotal)})</span>
                             </>
                           )}
                         </button>

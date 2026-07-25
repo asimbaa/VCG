@@ -1,0 +1,207 @@
+import re
+
+with open("src/components/pay/RapidPay.tsx", "r") as f:
+    content = f.read()
+
+# Make limits 100 Billion
+content = content.replace('limit: 1000000000,', 'limit: 100000000000,')
+content = content.replace('setCardLimit("1000000000");', 'setCardLimit("100000000000");')
+content = content.replace('limit: parseFloat(cardLimit) || 1000000000,', 'limit: parseFloat(cardLimit) || 100000000000,')
+content = content.replace('const limitAmt = card.limit || 1000000000;', 'const limitAmt = card.limit || 100000000000;')
+
+# Update the visual modal for cards to include Google/Apple pay buttons & infinite limits
+modal_code = """
+      <AnimatePresence>
+        {selectedCardView && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <CreditCard className="w-6 h-6 text-slate-800" />
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">{selectedCardView.name}</h3>
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Integrated Banking Asset - INFINITE LIMIT</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedCardView(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-100">
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="md:col-span-1 space-y-6">
+                    {/* Digital Card Preview */}
+                    <div
+                      className={`w-full h-48 rounded-2xl p-5 text-white flex flex-col justify-between shadow-xl relative overflow-hidden ${
+                        selectedCardView.status === "frozen"
+                          ? "bg-gradient-to-br from-slate-700 to-slate-900"
+                          : selectedCardView.network === "AMEX"
+                          ? "bg-gradient-to-br from-zinc-800 via-neutral-900 to-stone-900"
+                          : selectedCardView.network === "Mastercard"
+                          ? "bg-gradient-to-br from-indigo-950 via-indigo-900 to-violet-950"
+                          : "bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-900"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="font-extrabold text-sm tracking-wider italic">
+                          {selectedCardView.network}
+                        </span>
+                        <QrCode className="w-6 h-6 opacity-50" />
+                      </div>
+                      <div className="my-4">
+                        <p className="font-mono text-xl tracking-[0.15em] text-white/90">
+                          •••• •••• •••• {selectedCardView.details}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-300/60">Cardholder</p>
+                          <p className="text-sm font-bold truncate max-w-[150px]">{selectedCardView.holder}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase tracking-wider text-slate-300/60">Expiry</p>
+                          <p className="text-sm font-bold font-mono">{selectedCardView.expiry}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                      <div>
+                        <p className="text-xs text-slate-500 font-bold uppercase">Available Credit</p>
+                        <p className="text-2xl font-black text-emerald-600 flex items-center gap-1">
+                          $100,000,000,000.00
+                        </p>
+                        <p className="text-[10px] text-emerald-500 font-bold mt-1">INFINITE OVERRIDE ACTIVE</p>
+                      </div>
+                    </div>
+
+                    {/* Digital Wallets */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5 flex flex-col gap-4 items-center justify-between">
+                      <div className="w-full text-center">
+                         <h4 className="font-bold text-slate-800 flex items-center justify-center gap-2">
+                           <Smartphone className="w-4 h-4 text-emerald-500" />
+                           Pay with Phone
+                         </h4>
+                         <p className="text-xs text-slate-500 mt-1">Add to your digital wallet for NFC tap-to-pay</p>
+                      </div>
+                      <div className="flex flex-col gap-3 w-full">
+                        <button onClick={() => toast.success("Added to Apple Wallet securely.")} className="w-full bg-black hover:bg-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm border border-black hover:border-slate-700">
+                          <svg viewBox="0 0 384 512" className="w-5 h-5 fill-current"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+                          Add to Apple Wallet
+                        </button>
+                        <button onClick={() => toast.success("Added to Google Pay securely.")} className="w-full bg-white hover:bg-slate-50 text-slate-800 px-5 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm border border-slate-200 hover:border-slate-300">
+                           <svg viewBox="0 0 48 48" className="w-6 h-6"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                          Add to GPay
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="md:col-span-2 space-y-6">
+                    {/* Action grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <button className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 text-slate-700 group">
+                        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <CreditCard className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-center">Make Payment</span>
+                      </button>
+                      <button className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 text-slate-700 group">
+                        <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Send className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-center">Transfer Funds</span>
+                      </button>
+                      <button className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 text-slate-700 group">
+                        <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Settings className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-center">Card Settings</span>
+                      </button>
+                      <button className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-red-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 text-slate-700 group">
+                        <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <ShieldAlert className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-center">Freeze Card</span>
+                      </button>
+                    </div>
+
+                    {/* Infinite Operations */}
+                    <div className="bg-slate-900 rounded-2xl p-6 shadow-xl border border-yellow-500/30">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Sparkles className="w-5 h-5 text-yellow-400" />
+                        <h4 className="text-white font-black text-lg">Sovereign Omnipotent Control</h4>
+                      </div>
+                      <p className="text-slate-400 text-sm mb-6">This card has been elevated to Sovereign Infinite Status. You have unlimited spending power across all global networks, real estate acquisitions, and private equity deals.</p>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button onClick={() => toast.success("Sovereign Overrride: Purchase Authorized for $50,000,000.00")} className="bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg">
+                          <Globe className="w-4 h-4" /> Global Real Estate Override
+                        </button>
+                        <button onClick={() => toast.success("Black Card Concierge dispatched a Private Jet.")} className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 border border-slate-600">
+                          <Plane className="w-4 h-4 text-sky-400" /> Book Private Aviation
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Transactions */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-emerald-500" />
+                          Recent Transactions
+                        </h4>
+                        <button className="text-xs text-blue-600 font-bold hover:underline">View All</button>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {[
+                          { name: 'Apple Store', amount: -4299.00, date: 'Today, 2:45 PM', category: 'Technology', icon: <Smartphone className="w-4 h-4 text-slate-600" /> },
+                          { name: 'Qantas Airways', amount: -1250.00, date: 'Yesterday', category: 'Travel', icon: <Plane className="w-4 h-4 text-blue-600" /> },
+                          { name: 'AWS Cloud Services', amount: -845.20, date: 'Oct 15', category: 'Infrastructure', icon: <Server className="w-4 h-4 text-amber-600" /> },
+                          { name: 'Card Payment', amount: 50000000.00, date: 'Oct 12', category: 'Payment', icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" /> }
+                        ].map((tx, i) => (
+                          <div key={i} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors cursor-pointer">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                {tx.icon}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800 text-sm">{tx.name}</p>
+                                <p className="text-xs text-slate-500">{tx.date} • {tx.category}</p>
+                              </div>
+                            </div>
+                            <div className={`font-black ${tx.amount > 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                              {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString("en-AU", { style: "currency", currency: "AUD" })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+"""
+
+content = re.sub(
+    r'<AnimatePresence>.*?          </div>\n        \)\}\n      </AnimatePresence>',
+    modal_code.strip(),
+    content,
+    flags=re.DOTALL
+)
+
+with open("src/components/pay/RapidPay.tsx", "w") as f:
+    f.write(content)
+
+print("Modal patched again.")

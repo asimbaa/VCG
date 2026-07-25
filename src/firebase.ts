@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { toast } from 'sonner';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -23,8 +24,19 @@ export const signInWithGoogle = async () => {
         window.localStorage.setItem('workspace_google_access_token', credential.accessToken);
       }
     }
-  } catch (error) {
-    console.error("Error signing in with Google", error);
+    return true;
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-closed-by-user') {
+      console.warn('Sign-in popup was closed by the user.');
+      toast.error('Sign in cancelled. Please try again.');
+    } else if (error?.code === 'auth/popup-blocked') {
+      console.warn('Sign-in popup was blocked by the browser.');
+      toast.error('Popup blocked. Please allow popups for this site to sign in.');
+    } else {
+      console.error("Error signing in with Google", error);
+      toast.error('An error occurred during sign in.');
+    }
+    return false;
   }
 };
 
@@ -141,3 +153,43 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   // Return the error instead of throwing to prevent unhandled rejection floods in async listeners
   return new Error(JSON.stringify(errInfo));
 }
+
+export const withRetry = async <T>(operation: () => Promise<T>, maxRetries = 3, delayMs = 1000): Promise<T> => {
+  let retries = maxRetries;
+  while (retries > 0) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      retries--;
+      if (retries === 0) {
+        throw err;
+      }
+      // Wait before retrying, maybe with exponential backoff
+      const backoff = delayMs * Math.pow(2, maxRetries - retries - 1);
+      await new Promise(r => setTimeout(r, backoff));
+    }
+  }
+  throw new Error("Retry failed");
+};
+
+import { addDoc as firestoreAddDoc, setDoc as firestoreSetDoc, updateDoc as firestoreUpdateDoc, deleteDoc as firestoreDeleteDoc } from "firebase/firestore";
+
+
+
+
+
+export const addDoc = async (...args: any[]): Promise<any> => {
+  return withRetry(() => (firestoreAddDoc as any)(...args));
+};
+
+export const setDoc = async (...args: any[]): Promise<any> => {
+  return withRetry(() => (firestoreSetDoc as any)(...args));
+};
+
+export const updateDoc = async (...args: any[]): Promise<any> => {
+  return withRetry(() => (firestoreUpdateDoc as any)(...args));
+};
+
+export const deleteDoc = async (...args: any[]): Promise<any> => {
+  return withRetry(() => (firestoreDeleteDoc as any)(...args));
+};

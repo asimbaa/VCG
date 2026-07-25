@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+const DeliveryMap = React.lazy(() => import("./DeliveryMap").then(m => ({ default: m.DeliveryMap })));
 import * as d3 from 'd3';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useGlobalCurrency } from "../../contexts/CurrencyContext";
+import { CurrencySelector } from "../ui/CurrencySelector";
 import { Car, MapPin, Search, Navigation, CreditCard, Clock, Star, Shield, ArrowRight, Loader2, Check, CheckCircle2, ChevronRight, MessageSquare, Phone, Locate, Calendar, Trash2, Users, TrendingUp, Info, History, Share2, AlertTriangle } from 'lucide-react';
 import { db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
@@ -59,6 +62,30 @@ const VEHICLE_OPTIONS = [
     driver: 'John'
   },
   {
+    id: 'uberxl',
+    name: 'UberXL',
+    description: 'Comfortable rides for groups up to 6',
+    multiplier: 1.4,
+    eta: '4 mins',
+    carModel: 'Kia EV9 GT-Line',
+    rating: '4.90',
+    priceEstimate: 53.90,
+    icon: Users,
+    driver: 'Michael'
+  },
+  {
+    id: 'ubercomfort',
+    name: 'Uber Comfort',
+    description: 'Newer cars with extra legroom',
+    multiplier: 1.3,
+    eta: '6 mins',
+    carModel: 'Tesla Model S Plaid',
+    rating: '4.98',
+    priceEstimate: 50.05,
+    icon: Star,
+    driver: 'David'
+  },
+  {
     id: 'uberexec',
     name: 'Uber Black',
     description: 'High-end premium rides',
@@ -81,29 +108,41 @@ const VEHICLE_OPTIONS = [
     priceEstimate: 173.25,
     icon: CrownIcon,
     driver: 'Garrison (VIP Concierge)'
+  },
+  {
+    id: 'uberchopper',
+    name: 'Uber Copter',
+    description: 'Aerial transport to airport and select helipads',
+    multiplier: 15.0,
+    eta: '15 mins',
+    carModel: 'Airbus ACH130',
+    rating: '5.0',
+    priceEstimate: 577.50,
+    icon: Navigation,
+    driver: 'Capt. Richards'
   }
 ];
 
 const PRESETS = [
   {
-    name: "Clontarf Sovereign Estate",
-    address: "13 Beatrice St, Clontarf NSW 2093",
-    coords: { lat: -33.8058, lng: 151.2519 }
+    name: "Valourian Command / Home",
+    address: "Unit 712, 15 Barton Rd, Artarmon NSW 2064",
+    coords: { lat: -33.8118, lng: 151.1833 }
   },
   {
-    name: "Artarmon Tech Sector Campus",
-    address: "98 South St, Artarmon NSW 2064",
-    coords: { lat: -33.8123, lng: 151.1856 }
+    name: "Westfield Chatswood Storefront",
+    address: "1 Anderson St, Chatswood NSW 2067",
+    coords: { lat: -33.7963, lng: 151.1837 }
+  },
+  {
+    name: "Sovereign Dispatch Warehouse",
+    address: "1/163 Prospect Hwy, Seven Hills NSW 2147",
+    coords: { lat: -33.7667, lng: 150.9333 }
   },
   {
     name: "Sydney CBD (Martin Place)",
     address: "Martin Pl, Sydney NSW 2000",
     coords: { lat: -33.8675, lng: 151.2100 }
-  },
-  {
-    name: "Sydney International Airport (YSSY)",
-    address: "Airport Dr, Mascot NSW 2020",
-    coords: { lat: -33.9461, lng: 151.1772 }
   }
 ];
 
@@ -240,6 +279,7 @@ export const ACTIVE_FLEET = [
 ];
 
 export function UberApp({ user, balances, setBalances }: UberAppProps) {
+  const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [pickup, setPickup] = useState(PRESETS[0].address);
   const [destination, setDestination] = useState(PRESETS[3].address);
   const [selectedVehicle, setSelectedVehicle] = useState(VEHICLE_OPTIONS[0]);
@@ -314,13 +354,91 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
   const [completedTrips, setCompletedTrips] = useState<any[]>([]);
 
   // Live cards list loaded from storage
-  const [uberCards, setUberCards] = useState<any[]>([]);
+  const [uberCards, setUberCards] = useState<any[]>(() => {
+    try {
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: "visa_primary",
+        last4: "4242",
+        fullNumber: "4242 4242 4242 4242",
+        cvv: "123",
+        pin: "0000",
+        holder: "ASIM ARYAL",
+        expiry: "12/28",
+        type: "primary",
+        limit: "$10,000.00 USD",
+        region: "Global",
+        network: "Visa",
+        bsb: "062-951",
+        accountNumber: "1099 4335",
+        netbankId: "43359948",
+        balance: 15000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Standard Checking",
+          benefits: "Cashback on all purchases",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "mastercard_sec",
+        last4: "5100",
+        fullNumber: "5105 1051 0510 5100",
+        cvv: "456",
+        pin: "1234",
+        holder: "ASIM ARYAL",
+        expiry: "05/29",
+        type: "primary",
+        limit: "$20,000.00 USD",
+        region: "Global",
+        network: "Mastercard",
+        bsb: "062-951",
+        accountNumber: "1099 8801",
+        netbankId: "88019948",
+        balance: 12500,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Premium Savings",
+          benefits: "Travel rewards and lounge access",
+          chips: "Contactless enabled",
+        },
+      },
+      {
+        id: "amex_corp",
+        last4: "0005",
+        fullNumber: "3782 822463 10005",
+        cvv: "7890",
+        pin: "4321",
+        holder: "ASIM ARYAL",
+        expiry: "04/30",
+        type: "primary",
+        limit: "No Preset Spending Limit",
+        region: "Global",
+        network: "American Express",
+        bsb: "834-472",
+        accountNumber: "242719180",
+        netbankId: "8207647128",
+        balance: 55000,
+        isFlipped: false,
+        details: {
+          access: "Corporate Account",
+          benefits: "Centurion Lounge Access",
+          atm: "Cash advance available",
+        },
+      }
+    ];
+  });
   const [selectedUberCardIndex, setSelectedUberCardIndex] = useState<number>(0);
 
   useEffect(() => {
     const syncCards = () => {
       try {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.length > 0) {
@@ -1658,7 +1776,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         const txDocRef = doc(db, "transactions", currentTransactionId);
         await updateDoc(txDocRef, {
           amount: -finalTotal,
-          description: `Premium Chauffeured transport: ${pickup} to ${destination} (${selectedVehicle.name}) [Incl. Tip: AUD $${tipAmount.toFixed(2)}]`
+          description: `Premium Chauffeured transport: ${pickup} to ${destination} (${selectedVehicle.name}) [Incl. Tip: {formatConverted(tipAmount)}]`
         });
 
         // Deduct tip from user balances
@@ -1673,7 +1791,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
           setBalances(updatedBalances);
         }
 
-        toast.success(`Tip of AUD ${tipAmount.toFixed(2)} added to your ride billing!`);
+        toast.success(`Tip of {formatConverted(tipAmount)} added to your ride billing!`);
       }
 
       setRatingSubmitted(true);
@@ -2386,16 +2504,24 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         await sendEmailViaService(user, {
           sender: "Uber Receipts",
           email: "receipts.australia@uber.com",
-          subject: `Your trip with Uber - AUD ${fare.toFixed(2)}`,
-          preview: `Total: AUD ${fare.toFixed(2)}. Charged dynamically to Sovereign Card ${cardRefLabel}.`,
-          body: `Dear Mr. Asim Aryal,\n\nThank you for riding with Uber. Here is your receipt for your recent premium executive trip.\n\nTRIP DETAILS:\n- Service: ${selectedVehicle.name} (${selectedVehicle.carModel})\n- Driver: ${selectedVehicle.driver}\n- Pickup: ${pickup}\n- Destination: ${destination}\n- Distance: ${route.distance}\n- Duration: ${route.duration}\n\nFARE DETAILS (AUD):\n- Base Fare: $${(fare * 0.7).toFixed(2)}\n- Distance charge: $${(fare * 0.2).toFixed(2)}\n- Priority Hub Surcharge: $${(fare * 0.1).toFixed(2)}\n- Total Fare: AUD $${fare.toFixed(2)}\n\nTREASURY CARD METHOD:\n- Card Settler: Valourian Capital Sovereign Clearing Node\n- Cardholder: ${cardHolderLabel}\n- Card Reference: ${cardRefLabel}\n- Payment Code: UBER-VAL-SYD-${Date.now().toString().substring(0,6)}\n- Status: PAID IN FULL\n\nA full detailed log of this transaction is recorded in your Valourian Treasury dashboard.\n\nTravel safely,\nUber Australia Operations Team`,
+          subject: `Your trip with Uber - {formatConverted(fare)}`,
+          preview: `Total: {formatConverted(fare)}. Charged dynamically to Sovereign Card ${cardRefLabel}.`,
+          body: `Dear Mr. Asim Aryal,\n\nThank you for riding with Uber. Here is your receipt for your recent premium executive trip.\n\nTRIP DETAILS:\n- Service: ${selectedVehicle.name} (${selectedVehicle.carModel})\n- Driver: ${selectedVehicle.driver}\n- Pickup: ${pickup}\n- Destination: ${destination}\n- Distance: ${route.distance}\n- Duration: ${route.duration}\n\nFARE DETAILS:\n- Base Fare: {formatConverted(fare * 0.7)}\n- Distance charge: {formatConverted(fare * 0.2)}\n- Priority Hub Surcharge: {formatConverted(fare * 0.1)}\n- Total Fare: {formatConverted(fare)}\n\nTREASURY CARD METHOD:\n- Card Settler: Valourian Capital Sovereign Clearing Node\n- Cardholder: ${cardHolderLabel}\n- Card Reference: ${cardRefLabel}\n- Payment Code: UBER-VAL-SYD-${Date.now().toString().substring(0,6)}\n- Status: PAID IN FULL\n\nA full detailed log of this transaction is recorded in your Valourian Treasury dashboard.\n\nTravel safely,\nUber Australia Operations Team`,
           attachments: [
             { name: `Uber_Receipt_SYD_Trip_${Date.now().toString().substring(0,6)}.pdf`, size: "1.2 MB" }
           ]
         }, setPreviewEmail);
       }
 
-      toast.success(`Ride completed safely! AUD ${fare.toFixed(2)} charged to Corporate Treasury. Receipt dispatched to Workspace Comms.`);
+      toast.success(`Ride completed safely! ${formatConverted(fare)} charged to Corporate Treasury. Receipt dispatched to Workspace Comms.`);
+      
+      import('../../utils/email').then(module => {
+             const htmlBody = module.generateProfessionalReceipt({
+                 merchant: "Uber Executive / Private Aviation",
+                 amount: formatConverted(fare),
+             });
+             module.sendWorkspaceEmail("asim.nsw@gmail.com", `Executive Transport Receipt`, htmlBody);
+      }).catch(e => console.error(e));
     } catch (err) {
       console.error(err);
       toast.error("Failed to post transaction and deduct ledger balances.");
@@ -2805,7 +2931,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="font-bold text-xs text-emerald-400">AUD ${optPrice.toFixed(2)}</div>
+                            <div className="font-bold text-xs text-emerald-400">{formatConverted(optPrice)}</div>
                             <span className="text-[9px] text-slate-450 font-mono">{opt.eta} away</span>
                           </div>
                         </div>
@@ -3028,7 +3154,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                     {ride.vehicleTierName || "Uber"}
                                   </span>
                                   <span className="text-[9px] font-bold text-emerald-400 font-mono">
-                                    Est: AUD ${(ride.estimatedPrice || 35.0).toFixed(2)}
+                                    Est: {formatConverted((ride.estimatedPrice || 35.0))}
                                   </span>
                                 </div>
                                 
@@ -3491,6 +3617,16 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                }
              `}</style>
              {/* Map container with improved keyboard focus management */}
+             {(rideState === 'trip' || rideState === 'enroute') ? (
+               <React.Suspense fallback={<div className="w-full h-full min-h-[350px] bg-slate-900 flex items-center justify-center">Loading Live Satellite Tracking...</div>}>
+                 <DeliveryMap 
+                   originName={pickup}
+                   destinationName={destination}
+                   type="ride"
+                   progress={progress}
+                 />
+               </React.Suspense>
+             ) : (
              <div 
                ref={mapContainerRef} 
                className="w-full h-full min-h-[350px] relative z-10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all rounded-[1rem]" 
@@ -3498,6 +3634,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                tabIndex={0}
                aria-label="Interactive Map. Press Arrow keys to pan, +/- to zoom, P to select pickup center node, T for dest, H to toggle surge heatmap."
              />
+             )}
              
              {/* Interactive Legend and Route Filter Overlay */}
              <div className={`absolute bottom-4 left-4 z-20 bg-slate-950/95 border border-slate-800 p-2.5 rounded-xl flex flex-col gap-1.5 shadow-2xl shadow-black select-none text-[10px] transition-all duration-300 ${isLegendCollapsed ? 'max-w-[40px] max-h-[40px] w-10 h-10 overflow-hidden items-center justify-center p-0 cursor-pointer hover:bg-slate-900 border-indigo-500/55' : 'max-w-[190px] w-full'}`}
@@ -3660,7 +3797,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
             <div className="bg-black/50 p-4 rounded-xl border border-slate-800 text-left text-sm space-y-2 mb-4">
               <div className="flex justify-between border-b border-slate-800/80 pb-2">
                 <span className="text-slate-500 text-xs">TRIP TOTAL FARE</span>
-                <span className="font-extrabold text-emerald-400">AUD ${calculatedPrice(selectedVehicle.priceEstimate).toFixed(2)}</span>
+                <span className="font-extrabold text-emerald-400">{formatConverted(calculatedPrice(selectedVehicle.priceEstimate))}</span>
               </div>
               <div className="text-xs text-slate-400">
                 <div>Pickup: <span className="font-semibold text-slate-300">{pickup}</span></div>
@@ -3739,7 +3876,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             }`}
                           >
                             <span className="text-xs font-bold">{pct}%</span>
-                            <span className="text-[9px] font-mono opacity-80">${amt.toFixed(2)}</span>
+                            <span className="text-[9px] font-mono opacity-80">{formatConverted(amt)}</span>
                           </button>
                         );
                       })}
@@ -3791,7 +3928,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           <div className="bg-slate-900/40 p-2 rounded-xl border border-dashed border-indigo-950 flex justify-between items-center text-[10px] font-mono leading-none">
                             <span className="text-slate-500">Selected total balance impact:</span>
                             <span className="font-bold text-emerald-400">
-                              ${baseFare.toFixed(2)} + ${calculatedTip.toFixed(2)} = ${(baseFare + calculatedTip).toFixed(2)} AUD
+                              {formatConverted(baseFare)} + {formatConverted(calculatedTip)} = {formatConverted((baseFare + calculatedTip))} AUD
                             </span>
                           </div>
                         );
@@ -4007,7 +4144,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                           {/* Direct request dispatch trigger */}
                           <div className="text-right shrink-0 flex flex-col gap-1 items-end">
-                            <div className="text-xs font-bold text-emerald-400 font-mono">Est: ${calculatedPrice(fleetCar.priceEstimate).toFixed(2)}</div>
+                            <div className="text-xs font-bold text-emerald-400 font-mono">Est: {formatConverted(calculatedPrice(fleetCar.priceEstimate))}</div>
                             
                             <button
                               disabled={isRequestButtonDisabled}
@@ -4135,7 +4272,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             </div>
                             <div className="text-right">
                               <span className="text-sm font-black text-emerald-400 font-mono leading-none">
-                                AUD ${(trip.cost || 0).toFixed(2)}
+                                {formatConverted((trip.cost || 0))}
                               </span>
                               <span className="text-[9px] text-slate-500 font-mono block mt-1">
                                 {trip.distance || "12.0 km"} • {durationMins > 0 ? `${durationMins} mins` : "15 mins"}
@@ -4153,6 +4290,33 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               <span className="truncate"><strong>To:</strong> {trip.destination}</span>
                             </div>
                           </div>
+                          
+                          {/* Rating Functionality */}
+                          <div className="pt-2 border-t border-slate-850 flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Rate Driver:</span>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await updateDoc(doc(db, "completed_trips", trip.id), { rating: star });
+                                      setCompletedTrips(prev => prev.map(t => t.id === trip.id ? { ...t, rating: star } : t));
+                                      toast.success(`You rated this trip ${star} stars!`);
+                                    } catch (error) {
+                                      toast.error("Failed to submit rating.");
+                                    }
+                                  }}
+                                  className={`transition-colors ${(trip.rating || 0) >= star ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`}
+                                >
+                                  <Star className="w-4 h-4 fill-current" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          
                         </div>
                       );
                     })}

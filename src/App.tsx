@@ -1,27 +1,97 @@
 import React, { useEffect, useState } from "react";
-import { Landmark, ShieldCheck, LogOut, Loader2, FileText, Globe, Send, Mail, Bot } from "lucide-react";
+import { Landmark, ShieldCheck, LogOut, Loader2, FileText, Globe, Send, Mail, Bot, Sparkles, X } from "lucide-react";
 import { Logo3D } from "./components/ui/Logo3D";
-import { BankDashboard } from "./components/bank/BankDashboard";
-import { ValourianDashboard } from "./components/bank/ValourianDashboard";
-import { DocuCraft } from "./components/docucraft/DocuCraft";
+const BankDashboard = React.lazy(() => import("./components/bank/BankDashboard").then(m => ({ default: m.BankDashboard })));
+const ValourianDashboard = React.lazy(() => import("./components/bank/ValourianDashboard").then(m => ({ default: m.ValourianDashboard })));
+const DocuCraft = React.lazy(() => import("./components/docucraft/DocuCraft").then(m => ({ default: m.DocuCraft })));
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { auth, signInWithGoogle, logOut, db, sendLoginEmail, completeEmailLogin } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDocFromServer } from "firebase/firestore";
-import { Deployments } from "./components/deployments/Deployments";
-import { RapidPay } from "./components/pay/RapidPay";
+import { startPeriodicBackup } from "./services/BackupService";
+const Deployments = React.lazy(() => import("./components/deployments/Deployments").then(m => ({ default: m.Deployments })));
+const RapidPay = React.lazy(() => import("./components/pay/RapidPay").then(m => ({ default: m.RapidPay })));
 import { ValourianLogo } from "./components/bank/ValourianLogo";
+import { VoiceInputButton } from './components/shared/VoiceInputButton';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+
 import { AIGuide } from "./components/AIGuide";
+import { MessageCenter } from "./components/messagecenter/MessageCenter";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"bank" | "commbank" | "docucraft" | "websites" | "payments">("websites");
+  const [activeTab, setActiveTab] = useState<"bank" | "commbank" | "docucraft" | "websites" | "payments" | "messagecenter">("websites");
   const [isFirestoreAvailable, setIsFirestoreAvailable] = useState<boolean | null>(null);
   const [asyncErrors, setAsyncErrors] = useState<any[]>([]);
 
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiModalTarget, setAiModalTarget] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isNavVoiceListening, setIsNavVoiceListening] = useState(false);
+  
+  const handleVoiceNav = (text: string) => {
+    const command = text.toLowerCase();
+    if (command.includes("message") || command.includes("mail")) {
+      setActiveTab("messagecenter");
+      toast.success("Voice Command: Opened Message Center");
+    } else if (command.includes("pay") || command.includes("rapid") || command.includes("send money")) {
+      setActiveTab("payments");
+      toast.success("Voice Command: Opened RapidPay");
+    } else if (command.includes("core") || command.includes("bank")) {
+      setActiveTab("bank");
+      toast.success("Voice Command: Opened ValourianCapital.io Core");
+    } else if (command.includes("capital") || command.includes("management") || command.includes("dashboard")) {
+      setActiveTab("commbank");
+      toast.success("Voice Command: Opened ValourianCapital.io Management");
+    } else if (command.includes("doc") || command.includes("craft")) {
+      setActiveTab("docucraft");
+      toast.success("Voice Command: Opened DocuCraft");
+    } else if (command.includes("web") || command.includes("site") || command.includes("deployment")) {
+      setActiveTab("websites");
+      toast.success("Voice Command: Opened Websites");
+    } else {
+      toast.info(`Voice Command not recognized: "${text}"`);
+    }
+  };
+
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      if (!sessionStorage.getItem('pwa_banner_dismissed')) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    setInstallPrompt(null);
+    setShowInstallBanner(false);
+  };
+
+  const handleDismissBanner = () => {
+    setShowInstallBanner(false);
+    sessionStorage.setItem('pwa_banner_dismissed', 'true');
+  };
+
   
   useEffect(() => {
     let clickCount = 0;
@@ -51,7 +121,7 @@ export default function App() {
   useEffect(() => {
     const handleFirestoreErrorEvent = (e: Event) => {
       const customEvent = e as CustomEvent;
-      console.debug("[Valourian Capital OS] Captured async error:", customEvent.detail);
+      console.debug("[ValourianCapital.io - Tier 1 Global Treasury OS] Captured async error:", customEvent.detail);
       setAsyncErrors(prev => {
         // Keep last 5 errors for debugging
         const newErrors = [customEvent.detail, ...prev];
@@ -62,7 +132,7 @@ export default function App() {
     return () => window.removeEventListener('firestore-error', handleFirestoreErrorEvent);
   }, []);
   useEffect(() => {
-    const handleNavBank = () => setActiveTab("bank");
+    const handleNavBank = () => setActiveTab("commbank");
     window.addEventListener('nav-bank', handleNavBank);
     return () => window.removeEventListener('nav-bank', handleNavBank);
   }, []);
@@ -86,6 +156,13 @@ export default function App() {
 
   const [emailValue, setEmailValue] = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  useEffect(() => {
+    if (user) {
+      const stopBackup = startPeriodicBackup(300000); // 5 mins
+      return stopBackup;
+    }
+  }, [user]);
+
 
   useEffect(() => {
     completeEmailLogin();
@@ -102,7 +179,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
@@ -115,7 +192,7 @@ export default function App() {
           <div className="mx-auto mb-6 flex justify-center items-center relative overflow-hidden">
              <ValourianLogo className="w-24 h-24" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2 font-sans tracking-tight">Valourian Capital</h1>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2 font-sans tracking-tight">ValourianCapital.io - Tier 1 Global Treasury</h1>
           <p className="text-slate-500 mb-8 font-medium">Exclusive Treasury Access</p>
           
           {emailSent ? (
@@ -158,6 +235,9 @@ export default function App() {
 
           <button
             onClick={() => {
+              const maxBalances = { USD: 999999999999, EUR: 999999999999, GBP: 999999999999, AUD: 999999999999 };
+              localStorage.setItem('valourian_balances', JSON.stringify(maxBalances));
+              localStorage.setItem('bank_balances', JSON.stringify(maxBalances));
               setUser({ email: 'asim.nsw@gmail.com', uid: 'mock-12345', displayName: 'Asim Aryal' } as User);
             }}
             className="w-full py-3.5 px-4 bg-[#ffcc00] hover:bg-[#e6b800] border-none text-slate-900 font-bold rounded-lg transition-all flex items-center justify-center gap-2 mb-3"
@@ -184,7 +264,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-200">
+      <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-200">
         {/* Sovereign Executive Status Bar */}
         <div className="bg-slate-900 text-white py-1.5 px-4 border-b border-slate-800 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] relative overflow-hidden">
           <div className="absolute inset-0 bg-blue-600/5 animate-pulse" />
@@ -207,47 +287,59 @@ export default function App() {
           </div>
         </div>
 
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+        <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 shadow-2xl">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 relative">
                   <ValourianLogo className="w-full h-full" />
                 </div>
-                <h1 className="text-xl font-black tracking-tight text-slate-900 hidden sm:block uppercase">
-                  Valourian Capital
+                <h1 className="text-xl font-black tracking-tight text-white hidden sm:block uppercase drop-shadow-md">
+                  ValourianCapital.io - Tier 1 Global Treasury
                 </h1>
+                <div className="hidden lg:flex items-center gap-1.5 px-2 py-1 ml-2 bg-emerald-50 border border-emerald-200 rounded-md">
+                  <Sparkles className="w-3 h-3 text-emerald-600 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase text-emerald-800 tracking-widest">Neural Link Enabled</span>
+                </div>
+                <div className="ml-4 flex items-center bg-slate-900 rounded-full px-3 py-1.5 border border-slate-700">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-2">Voice Command:</span>
+                  <VoiceInputButton 
+                    isListening={isNavVoiceListening}
+                    setIsListening={setIsNavVoiceListening}
+                    onTranscript={handleVoiceNav}
+                  />
+                </div>
               </div>
               
-              <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <nav className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg overflow-x-auto max-w-full hide-scrollbar border border-slate-800">
                 <button
                   onClick={() => setActiveTab("bank")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
                     activeTab === "bank" 
-                      ? "bg-white text-slate-900 shadow-sm" 
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   }`}
                 >
                   <Landmark className="w-4 h-4" />
-                  Valourian Core
+                  ValourianCapital.io Core
                 </button>
                 <button
                   onClick={() => setActiveTab("commbank")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
                     activeTab === "commbank" 
-                      ? "bg-[#ffcc00] text-slate-900 shadow-sm" 
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   }`}
                 >
                   <Landmark className="w-4 h-4" />
-                  Valourian Capital OS
+                  ValourianCapital.io Management
                 </button>
                 <button
                   onClick={() => setActiveTab("docucraft")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
                     activeTab === "docucraft" 
-                      ? "bg-white text-slate-900 shadow-sm" 
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   }`}
                 >
                   <FileText className="w-4 h-4" />
@@ -257,19 +349,30 @@ export default function App() {
                   onClick={() => setActiveTab("websites")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
                     activeTab === "websites" 
-                      ? "bg-white text-slate-900 shadow-sm" 
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   }`}
                 >
                   <Globe className="w-4 h-4" />
                   Websites
                 </button>
                 <button
+                  onClick={() => setActiveTab("messagecenter")}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
+                    activeTab === "messagecenter" 
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                  }`}
+                >
+                  <Mail className="w-4 h-4" />
+                  Message Center
+                </button>
+                <button
                   onClick={() => setActiveTab("payments")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
                     activeTab === "payments" 
-                      ? "bg-white text-slate-900 shadow-sm" 
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-slate-800 text-[#ffcc00] shadow-md border border-slate-700" 
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   }`}
                 >
                   <Send className="w-4 h-4" />
@@ -279,7 +382,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200" title="Treasury Backed">
+              <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-[#ffcc00] bg-[#ffcc00]/10 px-3 py-1.5 rounded-full border border-[#ffcc00]/20" title="Treasury Backed">
                 <ShieldCheck className="w-4 h-4" />
                 <span className="hidden md:inline">Treasury Backed</span>
               </div>
@@ -287,7 +390,7 @@ export default function App() {
                 <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`} alt="Profile" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
                 <button
                   onClick={logOut}
-                  className="text-slate-500 hover:text-slate-900 transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors bg-slate-800 p-2 rounded-full"
                   title="Sign Out"
                 >
                   <LogOut className="w-5 h-5" />
@@ -298,11 +401,14 @@ export default function App() {
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {activeTab === "bank" && <BankDashboard user={user} />}
-          {activeTab === "commbank" && <ValourianDashboard user={user} />}
-          {activeTab === "docucraft" && <DocuCraft user={user} />}
-          {activeTab === "websites" && <Deployments user={user} />}
-          {activeTab === "payments" && <RapidPay user={user} />}
+          <React.Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>}>
+            {activeTab === "bank" && <BankDashboard user={user} />}
+            {activeTab === "commbank" && <ValourianDashboard user={user} />}
+            {activeTab === "docucraft" && <DocuCraft user={user} />}
+            {activeTab === "websites" && <Deployments user={user} />}
+            {activeTab === "payments" && <RapidPay user={user} />}
+            {activeTab === "messagecenter" && <MessageCenter user={user} />}
+          </React.Suspense>
         </main>
         
         {/* Global AI Edit Modal via Triple Click */}

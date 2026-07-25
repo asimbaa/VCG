@@ -11,6 +11,40 @@ import { toast } from 'sonner';
 // Define the comprehensive property registry representing premium global properties (NSW, US, UK, EU)
 export const GLOBAL_PROPERTIES_DATABASE = [
   {
+    id: "LRS-NSW-003",
+    address: "1/163 Prospect Hwy, Seven Hills, 2147 NSW Australia",
+    type: "Sovereign Logistics Warehouse",
+    folio: "1/DP16377",
+    value: "$4,500,000 AUD",
+    purchaseDate: "2026-07-24",
+    proprietor: "ASIM ARYAL (VALOURIAN CAPITAL)",
+    zoning: "IN1 General Industrial",
+    lot: "Lot 1 in Deposited Plan 16377",
+    lrsReference: "NSW-LRS-VOL-16377-1",
+    deedNumber: "NSW-DEED-L998124Z",
+    stampDutyPaid: "$240,000 AUD",
+    fundingSource: "Valourian Treasury Reserve",
+    tenureType: "Torrens Title / Freehold",
+    country: "Australia"
+  },
+  {
+    id: "LRS-NSW-004",
+    address: "Westfield Chatswood, 1 Anderson St, Chatswood NSW 2067, Australia",
+    type: "Valourian Sovereign Storefront (Home Essentials & Winter Wares)",
+    folio: "A/DP99123",
+    value: "$12,000,000 AUD",
+    purchaseDate: "2026-07-24",
+    proprietor: "ASIM ARYAL (VALOURIAN CAPITAL)",
+    zoning: "B3 Commercial Core",
+    lot: "Lot A in Deposited Plan 99123",
+    lrsReference: "NSW-LRS-VOL-99123-A",
+    deedNumber: "NSW-DEED-W456122C",
+    stampDutyPaid: "$650,000 AUD",
+    fundingSource: "Valourian Treasury Reserve",
+    tenureType: "Torrens Title / Freehold",
+    country: "Australia"
+  },
+  {
     id: "LRS-NSW-001",
     address: "1 Wingadal Place, Point Piper NSW 2027, Australia",
     type: "Waterfront Luxury Estate",
@@ -405,6 +439,8 @@ export function VaultRecords() {
   const [emailLogs, setEmailLogs] = useState<string[]>([]);
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [selectedScotPacTab, setSelectedScotPacTab] = useState<"assets" | "tech" | "businesses" | "approval">("assets");
+  const [showOpsModal, setShowOpsModal] = useState<boolean>(false);
+  const [opsType, setOpsType] = useState<"keys" | "cash" | "post">("keys");
 
   // Other massive non-property assets
   const ancillaryAssets = [
@@ -854,7 +890,7 @@ export function VaultRecords() {
         <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 mb-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border border-indigo-500/30 mb-4 animate-pulse">
-               <Sparkles className="w-3 h-3 text-indigo-400" /> VALOURIAN ENCRYPTED SECURE OS
+               <Sparkles className="w-3 h-3 text-indigo-400" /> VALOURIAN QUANTUM ENCRYPTED SECURE OS
             </div>
             <h2 className="text-4xl font-black text-white tracking-tight flex items-center gap-3">
                <ShieldCheck className="w-9 h-9 text-indigo-400" />
@@ -1673,7 +1709,67 @@ export function VaultRecords() {
               </motion.div>
            </div>
         )}
+
+        {showOpsModal && selectedPreviewProperty && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm pointer-events-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200">
+               <h3 className="text-xl font-bold text-slate-900 mb-2">Operations Dispatch</h3>
+               <p className="text-sm text-slate-500 mb-6">Schedule physical deliveries or pickups for {selectedPreviewProperty.id}.</p>
+               
+               <div className="space-y-4 mb-6">
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to secure location via Aura Drive Tesla Fleet.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'cash'} onChange={() => setOpsType('cash')} className="w-4 h-4 text-emerald-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Cash Treasury Delivery</p>
+                     <p className="text-xs text-slate-500">Secure armed transport of physical cash reserves to property.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'post'} onChange={() => setOpsType('post')} className="w-4 h-4 text-amber-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Post Office Pickup Notice</p>
+                     <p className="text-xs text-slate-500">Generate secure PIN for post office collection of sensitive packages.</p>
+                   </div>
+                 </label>
+               </div>
+               
+               <div className="flex gap-2">
+                 <button 
+                   onClick={() => setShowOpsModal(false)}
+                   className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={() => {
+                     if (opsType === 'keys') {
+                       toast.success(`Key delivery dispatched via Tesla Fleet for ${selectedPreviewProperty.id}. ETA 45m.`);
+                     } else if (opsType === 'cash') {
+                       toast.success(`Armored cash transport initiated to ${selectedPreviewProperty.address}.`);
+                     } else {
+                       toast.success(`Pickup notification and secure PIN sent to your Comm channels for ${selectedPreviewProperty.id}.`);
+                     }
+                     setShowOpsModal(false);
+                   }}
+                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Confirm Dispatch
+                 </button>
+               </div>
+            </div>
+          </div>
+        )}
       </AnimatePresence>
+
 
       {/* High Fidelity un-censored Certificate preview modal */}
       <AnimatePresence>
@@ -1766,14 +1862,80 @@ export function VaultRecords() {
                         onClick={() => handlePrint(selectedPreviewProperty)}
                         className="flex-1 bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
                       >
-                         <Printer className="w-4 h-4" /> Export Title PDF Record
+                         <Printer className="w-4 h-4" /> Export PDF
+                      </button>
+                      <button 
+                        onClick={() => setShowOpsModal(true)}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
+                      >
+                         <ShieldCheck className="w-4 h-4" /> Instruct Ops
                       </button>
                    </div>
                 </div>
               </motion.div>
            </div>
         )}
+
+        {showOpsModal && selectedPreviewProperty && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm pointer-events-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200">
+               <h3 className="text-xl font-bold text-slate-900 mb-2">Operations Dispatch</h3>
+               <p className="text-sm text-slate-500 mb-6">Schedule physical deliveries or pickups for {selectedPreviewProperty.id}.</p>
+               
+               <div className="space-y-4 mb-6">
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to secure location via Aura Drive Tesla Fleet.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'cash'} onChange={() => setOpsType('cash')} className="w-4 h-4 text-emerald-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Cash Treasury Delivery</p>
+                     <p className="text-xs text-slate-500">Secure armed transport of physical cash reserves to property.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'post'} onChange={() => setOpsType('post')} className="w-4 h-4 text-amber-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Post Office Pickup Notice</p>
+                     <p className="text-xs text-slate-500">Generate secure PIN for post office collection of sensitive packages.</p>
+                   </div>
+                 </label>
+               </div>
+               
+               <div className="flex gap-2">
+                 <button 
+                   onClick={() => setShowOpsModal(false)}
+                   className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={() => {
+                     if (opsType === 'keys') {
+                       toast.success(`Key delivery dispatched via Tesla Fleet for ${selectedPreviewProperty.id}. ETA 45m.`);
+                     } else if (opsType === 'cash') {
+                       toast.success(`Armored cash transport initiated to ${selectedPreviewProperty.address}.`);
+                     } else {
+                       toast.success(`Pickup notification and secure PIN sent to your Comm channels for ${selectedPreviewProperty.id}.`);
+                     }
+                     setShowOpsModal(false);
+                   }}
+                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Confirm Dispatch
+                 </button>
+               </div>
+            </div>
+          </div>
+        )}
       </AnimatePresence>
+
     </div>
   );
 }

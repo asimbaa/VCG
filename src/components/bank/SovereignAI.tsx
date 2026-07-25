@@ -30,6 +30,8 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { VoiceInputButton } from '../shared/VoiceInputButton';
+
 
 interface Message {
   role: 'user' | 'assistant';
@@ -101,6 +103,8 @@ export const SovereignAI: React.FC<{
   const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0]?.id || 'initial-session');
   const [activeAgent, setActiveAgent] = useState<'sovereign' | 'strategist' | 'financier' | 'researcher' | 'risk' | 'creative'>('sovereign');
   const [input, setInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+
   const [isTyping, setIsTyping] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -434,9 +438,9 @@ export const SovereignAI: React.FC<{
               </div>
               <div className="bg-slate-900/80 border border-white/10 p-4 rounded-[1.5rem] rounded-tl-none backdrop-blur-xl">
                  <div className="flex gap-1">
-                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1 h-1 bg-blue-400 rounded-full" />
-                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1 h-1 bg-blue-400 rounded-full" />
-                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1 h-1 bg-blue-400 rounded-full" />
+                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ type: "tween", repeat: Infinity, duration: 1 }} className="w-1 h-1 bg-blue-400 rounded-full" />
+                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ type: "tween", repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1 h-1 bg-blue-400 rounded-full" />
+                    <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ type: "tween", repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1 h-1 bg-blue-400 rounded-full" />
                  </div>
               </div>
             </div>

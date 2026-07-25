@@ -1,11 +1,11 @@
 // LogisticsMap.tsx - Updated with focus support
-import React from 'react';
+import React, { useState } from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { motion } from 'motion/react';
 import { Globe, ShieldCheck } from 'lucide-react';
 
 const API_KEY =
-  (typeof process !== "undefined" ? process.env?.GOOGLE_MAPS_PLATFORM_KEY : "") ||
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
@@ -17,6 +17,7 @@ interface LogisticsMapProps {
 }
 
 export const LogisticsMap: React.FC<LogisticsMapProps> = ({ shipments, selectedShipment }) => {
+  const [mapTypeId, setMapTypeId] = useState<string>('satellite');
   if (!hasValidKey) {
     return (
       <div className="bg-slate-950 h-full min-h-[400px] flex items-center justify-center border border-slate-800 relative overflow-hidden rounded-[2rem] p-8 shadow-2xl text-center group">
@@ -83,7 +84,8 @@ export const LogisticsMap: React.FC<LogisticsMapProps> = ({ shipments, selectedS
           center={center}
           zoom={selectedShipment ? 15 : 11}
           mapId="LOGISTICS_MAP_ID"
-          internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+          mapTypeId={mapTypeId}
+          
           gestureHandling="greedy"
           disableDefaultUI={true}
         >
@@ -108,6 +110,15 @@ export const LogisticsMap: React.FC<LogisticsMapProps> = ({ shipments, selectedS
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             Asset Radar Active
         </div>
+      </div>
+      
+      <div className="absolute top-4 right-4 z-20 pointer-events-auto">
+        <button
+          onClick={() => setMapTypeId(prev => prev === 'roadmap' ? 'satellite' : 'roadmap')}
+          className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white p-2 rounded-xl shadow-xl hover:bg-slate-800 transition-colors"
+        >
+          {mapTypeId === 'roadmap' ? <Globe className="w-5 h-5 text-blue-400" /> : <Globe className="w-5 h-5 text-emerald-400" />}
+        </button>
       </div>
     </div>
   );

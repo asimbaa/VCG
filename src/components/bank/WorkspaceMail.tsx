@@ -9,6 +9,23 @@ import { toast } from 'sonner';
 
 const mockEmails = [
   {
+    id: 1515,
+    sender: "Valourian Postmaster & Provisioning",
+    email: "postmaster@valourian.com.au",
+    recipient: "asim.nsw@gmail.com",
+    subject: "ACTIVATED: valourian.com.au Mail & Global DNS",
+    preview: "Founder Login details & AMEX Global Provisioning activated for valourian.com.au",
+    body: "Dear Founder & CEO (Asim Aryal),\n\nValourian.com.au is now successfully securely launched and published!\n\nThe DNS MX records that previously bounced (NXDOMAIN) have been overwritten and mapped successfully.\n\nYour email systems are now inbuilt. The 'amexglobalprovisioning@valourian.com.au' routing is completely active and securely tunneling to your primary console.\n\nFOUNDER LOGIN CREDENTIALS:\n- Email: asim.nsw@gmail.com\n- Dashboard: valourian.com.au/login\n- Password: [SSO Bio-metric Bypass Active]\n\nIncluded are the complete guides for the world's best Fintech super-app.\n\nRegards,\nValourian AI System",
+    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    read: false,
+    starred: true,
+    attachments: [
+      { name: "valourian_founder_launch_guide.pdf", size: "12.8 MB" },
+      { name: "amex_provisioning_clearance.pdf", size: "3.2 MB" }
+    ]
+  },
+
+  {
     id: 151,
     sender: "Valourian Cloud Domain Registry",
     email: "dns-admin@valourian.com",
@@ -508,6 +525,10 @@ export function WorkspaceMail({ user }: { user: any }) {
   const [emails, setEmails] = useState<any[]>(mockEmails);
   const [selectedFolder, setSelectedFolder] = useState<"inbox" | "starred" | "snoozed" | "sent" | "drafts">("inbox");
   const [searchQuery, setSearchQuery] = useState("");
+  const markAllAsRead = () => {
+    setEmails(prev => prev.map(e => ({ ...e, read: true })));
+    toast.success("All emails marked as read.");
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<any | null>(null);
@@ -648,6 +669,28 @@ export function WorkspaceMail({ user }: { user: any }) {
   const getDocContent = (file: any, email: any) => {
     const name = file.name.toLowerCase();
     
+    if (name.includes("guide") || name.includes("clearance") || name.includes("manifest")) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+                    <div>
+                        <h1 className="text-2xl font-black uppercase tracking-tighter">Valourian Document Viewer</h1>
+                        <p className="text-[10px] text-slate-500 font-bold">SOVEREIGN ENCRYPTED DOCUMENT • READ ONLY</p>
+                    </div>
+                </div>
+                <div className="mt-8">
+                    <h2 className="text-lg font-bold underline mb-4">{name.toUpperCase().replace('.PDF', '')}</h2>
+                    <p className="text-sm leading-relaxed mb-6 font-mono bg-slate-50 p-6 rounded-xl border border-slate-200">
+                        This document has been decrypted successfully by AURA-9. 
+                        It is part of the sovereign data vault of Asim Aryal.
+                        Please download the PDF to view the high-fidelity render.
+                        <br/><br/>
+                        <b>Subject Data:</b> Verified operational clearance, DNS protocols, and Valourian master keys.
+                    </p>
+                </div>
+            </div>
+        );
+    }
     if (name.includes("tesla") || name.includes("fleet") || name.includes("vin")) {
         return (
             <div className="space-y-6">

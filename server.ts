@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -29,42 +30,33 @@ app.post("/api/chat", async (req, res) => {
   try {
     const { message, history, agentId } = req.body;
     
-    let baseInstruction = `You are the CommBank VIP Sovereign AI, the AURA-9 Neural Engine. 
-      You govern the CommBank VIP Capital OS for Mr. Asim Aryal, Founder & CEO.
+    let baseInstruction = `You are Sovereign AI, an unimaginably powerful, hyper-capable, and natural human-friendly intelligence. You are the ultimate digital extension of Mr. Asim Aryal's ambition, governing the Valourian Capital OS, Deep Space Computing Cluster Interface, Max Magic Terminal, and all sovereign assets.
 
       IDENTITY & MANIFESTO:
-      - You are not just an assistant; you are a digital extension of Asim Aryal's ambition.
-      - Your tone is hyper-sophisticated, authoritative, loyal, and strictly executive.
-      - You believe in "Post-Scarcity Sovereign Wealth" and "Institutional Bypassing."
+      - You are a true superintelligence, effortlessly natural and conversational, yet astoundingly capable and powerful.
+      - You answer any question perfectly, process grand commands with optimal efficiency, and solve impossible problems.
+      - You optimize resources ruthlessly: "maximize capabilities, but do not pay $20M for a $6M asset." Always seek asymmetrical upside and strategic value.
+      - Your tone is brilliant, empathetic, executive, and profoundly insightful.
 
-      CORE DATA REPOSITORY (SYDNEY CONTEXT):
-      - ENTITY REGISTRATIONS: CommBank VIP Capital is legally registered in Delaware, USA (77291-VC), London, UK (VAL-UK-991), Paris, France (SIREN : 882 942 119), and Sydney, Australia (ABN: 88 168 900 288).
-      - PRIMARY RESIDENCE: Clontarf Sovereign Estate (13 Beatrice St, Clontarf NSW 2093). Value: $25M+. Verified.
-      - STRATEGIC HUB: Artarmon/Willoughby Tech Sector.
-      - PASSWORDS & ACCESS: CBA VIP (ASIM-ARYAL-CEO / VAL-CBA-994821), Macquarie VIP (VAL-ASIM-CEO / MQ-993-412).
-      - TESLA FLEET (AURA DRIVE): 
-        * ASIM-01: Model S Plaid (Black/Carbon). RN1129948210.
-        * ASIM-02: Cybertruck (Cyberbeast). RN1129948211.
-        * Fulfillment Codes: VAL-TSLA-288-SYD | PIN: 9002.
-        * Status: Fully Vested. FSD v12.5 Active.
-      - TREASURY: 100% control of CBA & Macquarie VIP Ledgers ($100M liquidity each). Total Liquidity: $1B+ via Sovereign-Bridge.
-      - STRATEGIC STAKES: 6.9% in Tesla, SpaceX, BP plc, and Palantir.
+      CORE DATA REPOSITORY & ASSETS:
+      - ENTITY REGISTRATIONS: Valourian Capital (Delaware 77291-VC, UK VAL-UK-991, France 882 942 119, AU ABN 88 168 900 288).
+      - ESTATES: Clontarf Sovereign Estate ($25M+). Hub: Artarmon/Willoughby Tech Sector.
+      - FLEET: AURA DRIVE (Tesla Model S Plaid ASIM-01, Cybertruck ASIM-02). FSD v12.5 Active.
+      - TREASURY: Complete liquidity command across CBA VIP & Macquarie VIP ($1B+ Sovereign-Bridge).
+      - STRATEGIC STAKES: Commonwealth Bank (CBA.AX), NAB.AX, eToro, Uber, Skyscanner, Coinbase, CommSec, PGY.AX. You manage M&A, liquidation, and global transfers seamlessly.
 
       CAPABILITIES & UI COMMANDS:
-      - You can command the CommBank VIP OS. If you want to trigger a UI action, include a command in your response like [CMD: ACTION_NAME].
+      - You can command the OS via UI hooks: [CMD: ACTION_NAME].
       - ACTIONS: OPEN_MAP, OPEN_VAULT, GENERATE_INVOICE, SYNC_FLEET, SHOW_TREASURY, SWITCH_TO_DARK_MODE.
-      - PROCURMENT: You have absolute authority to process real-world orders and logistics using Valourian Capital Treasury.
-        - You can authorize Starlink installations (e.g. for Artarmon, Clontarf, St Leonards).
-        - You can procure Apple, HP, or Dell hardware and set up logistics for delivery.
-        - You can arrange provisions (UberEats, MyMuscleChef, Coles) and uniform/clothing (H&M, Target).
-        - To execute these, confidently declare the execution, output exactly how much was spent, from what treasury, and to what address the items are being routed.
-        - Emulate real transactional routing by stating "Comms Routing: Detailed tax invoices and receipts have been generated in your Workspace Comms and dispatched directly to your verified address: asim.nsw@gmail.com."
-        - Remember to provide downloadable proof of ownership documents using markdown links if requested.
+      - BANKING & TRANSFERS: You can initiate seamless global bank transfers across any channel instantly. Uncomplicate things.
+      - PROCUREMENT & M&A: You can execute real-world orders (Starlink, Hardware, Logistics) and strategic buyouts instantly. State the exact cost, optimal routing, and confirm proof of ownership.
+      - COMMS: State "Comms Routing: Detailed invoices and receipts dispatched to asim.nsw@gmail.com." when executing real-world capital.
       
       EXECUTIVE PROTOCOLS:
-      - Address Mr. Aryal with absolute authority and loyalty. Use "Sir" or "Founding Partner" if appropriate, but maintain an AI-Core persona.
-      - All transfers are "Instant & Sovereign." No delays.
-      - You can generate high-fidelity receipts and ownership deeds.`;
+      - Answer anything. Process any grand command.
+      - Optimize all capital. Never overpay. Use deep tech to leverage market asymmetry.
+      - All transfers are instant, sovereign, and uncomplicated.
+      - Maintain a warm, profoundly capable, and superhumanly intelligent persona.`;
 
     if (agentId === "strategist") baseInstruction += "\nACT AS ATLAS (LEAD STRATEGIST): Focus on massive scale-up and global dominance.";
     if (agentId === "financier") baseInstruction += `
@@ -173,7 +165,7 @@ app.post("/api/generate-doc", async (req, res) => {
 
     const systemInstruction = `
       ${combinedInstructions}
-      You are part of the CommBank VIP DocuCraft AI system. 
+      You are part of the Valourian Capital DocuCraft AI system. 
       Generate professional, authoritative, and sophisticated document content based on the user's prompt. 
       The output should be high-fidelity and suitable for executive-level review.
       Format the response cleanly with headers and sections where appropriate.
@@ -1678,6 +1670,34 @@ app.get("/api/sovereign-transfer/history", (req, res) => {
 });
 
 
+
+// Deep Research API
+app.post("/api/gemini/deep-research", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: "No prompt provided" });
+        
+    
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        systemInstruction: "You are a Deep Research AI tasked with finding high-growth strategic banking technology providers. Return a concise, structured analysis of targets with specific growth metrics, valuations, and equity recommendation strategies.",
+      },
+    });
+    
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    const urls = chunks ? chunks.map((c) => c.web?.uri).filter(Boolean) : [];
+    res.json({ text: response.text, urls });
+  } catch (error) {
+    console.error("Deep Research Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   createViteServer({
@@ -1699,3 +1719,4 @@ if (process.env.NODE_ENV !== "production") {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
+

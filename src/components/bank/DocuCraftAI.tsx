@@ -32,6 +32,27 @@ export function DocuCraftAI({ onDocumentGenerated }: DocuCraftAIProps) {
       description: "Direct-to-treasury pipeline for Mac Studio clusters and Vision Pro logistics.",
       cost: 8500000,
       status: "ACTIVE"
+    },
+    {
+      id: "job-contract-ceo",
+      title: "CEO Executive Employment Contract",
+      description: "Comprehensive 25-year job contract for CEO Asim Aryal with full compensation details.",
+      cost: 0,
+      status: "DRAFT"
+    },
+    {
+      id: "payslips-executive",
+      title: "Executive Payslips & Statements (Retrieval)",
+      description: "Retrieve verifiable executive payslips and dividend statements.",
+      cost: 0,
+      status: "ACTIVE"
+    },
+    {
+      id: "valourian-gst",
+      title: "Australian GST Registration (Valourian Capital)",
+      description: "Official GST registration for Valourian Capital with ATO endpoints.",
+      cost: 250,
+      status: "DRAFT"
     }
   ];
 
@@ -194,7 +215,18 @@ export function DocuCraftAI({ onDocumentGenerated }: DocuCraftAIProps) {
                            <button className="flex-1 bg-emerald-50 text-emerald-700 font-bold py-3.5 rounded-xl border border-emerald-200 flex items-center justify-center gap-2 pointer-events-none">
                               <CheckCircle2 className="w-5 h-5 text-emerald-500" /> Contract Bound
                            </button>
-                           <button className="px-4 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center justify-center shadow-sm">
+                           <button 
+                             onClick={() => {
+                               toast.success("Document downloading securely over Sovereign network...");
+                               setTimeout(() => {
+                                 const link = document.createElement("a");
+                                 const activeDoc = contracts.find(c => c.id === activeContract);
+                                 link.href = "data:text/plain;charset=utf-8," + encodeURIComponent(`Valourian Capital Official Document\n\nTitle: ${activeDoc?.title}\nStatus: EXECUTED & SECURED\n\nDocument contents would be retrieved from Sovereign Vault...`);
+                                 link.download = `${activeDoc?.title?.replace(/\s+/g, '_')}_Official.txt`;
+                                 link.click();
+                               }, 1000);
+                             }}
+                             className="px-4 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center justify-center shadow-sm">
                               <Download className="w-5 h-5" />
                            </button>
                          </div>

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useGlobalCurrency } from "../../contexts/CurrencyContext";
+import { CurrencySelector } from "../ui/CurrencySelector";
 import * as d3 from 'd3';
-import { ShoppingBag, Search, ChevronRight, Clock, Star, MapPin, CreditCard, Gift, Send, Heart, Play, RefreshCw, XCircle, ShieldCheck, CheckCircle2, Trash2, Mail, Plus, Camera, ArrowUpRight, ArrowDownLeft, Compass, Phone, PhoneCall, PhoneOff, Volume2, VolumeX, Mic, MicOff, Loader2 } from 'lucide-react';
+import { ShoppingBag, Search, ChevronRight, Clock, Star, MapPin, CreditCard, Gift, Send, Heart, Play, RefreshCw, XCircle, ShieldCheck, CheckCircle2, Trash2, Mail, Plus, Camera, ArrowUpRight, ArrowDownLeft, Compass, Phone, PhoneCall, PhoneOff, Volume2, VolumeX, Mic, MicOff, Loader2, ShoppingCart, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, getDocs, query, deleteDoc, where, setDoc, onSnapshot } from 'firebase/firestore';
 import { sendEmailViaService, EmailPreviewModal, EmailData } from './EmailService';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { DeliveryMap } from './DeliveryMap';
+const DeliveryMap = React.lazy(() => import('./DeliveryMap').then(m => ({ default: m.DeliveryMap })));
 
 const RESTAURANTS = [
   {
@@ -77,6 +79,59 @@ const RESTAURANTS = [
       { id: 'g1', name: "Pippies with XO Sauce & Vermicelli", price: 88 },
       { id: 'g2', name: "Sovereign Roast Duck (Half)", price: 46 },
       { id: 'g3', name: "Steamed Barramundi Fillet", price: 54 }
+    ]
+  },
+  {
+    id: 6,
+    name: "Apple Store Sydney",
+    cuisine: "Tech & Electronics",
+    rating: 4.9,
+    deliveryTime: "30-50 min",
+    image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80",
+    is24Hours: false,
+    menu: [
+      { id: 'ap1', name: "MacBook Pro M4 Max", price: 7299 },
+      { id: 'ap2', name: "iPhone 17 Pro Max", price: 2999 },
+      { id: 'ap3', name: "Apple Studio Display Pro XDR", price: 8499 }
+    ]
+  },
+  {
+    id: 7,
+    name: "Zara Express",
+    cuisine: "Clothing & Fashion",
+    rating: 4.5,
+    deliveryTime: "25-45 min",
+    image: "https://images.unsplash.com/photo-1594938298593-7b4431e780dc?w=800&q=80",
+    is24Hours: false,
+    menu: [
+      { id: 'za1', name: "Luxury Silk Blend Suit", price: 499 },
+      { id: 'za2', name: "Cashmere Winter Coat", price: 2499 }
+    ]
+  },
+  {
+    id: 8,
+    name: "West Elm Homewares",
+    cuisine: "Furniture & Home",
+    rating: 4.6,
+    deliveryTime: "40-60 min",
+    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
+    is24Hours: false,
+    menu: [
+      { id: 'we1', name: "Mid-Century Modern Sofa", price: 3200 },
+      { id: 'we2', name: "Smart Sleep Mattress Pro", price: 3800 }
+    ]
+  },
+  {
+    id: 9,
+    name: "Amazon Warehouse Express",
+    cuisine: "Everything Delivery",
+    rating: 4.8,
+    deliveryTime: "20-30 min",
+    image: "https://images.unsplash.com/photo-1543512214-318c7553f230?w=800&q=80",
+    is24Hours: true,
+    menu: [
+      { id: 'am1', name: "Amazon Echo Studio Max", price: 349 },
+      { id: 'am2', name: "Kindle Oasis Premium", price: 499 }
     ]
   }
 ];
@@ -169,25 +224,47 @@ function getCoordAtProgress(route: [number, number][], progress: number): { lat:
   return { lat, lng };
 }
 
-export function D3ProgressBar({ progress, status }: {
+export function D3ProgressBar({ progress, status, secondsRemaining }: {
   progress: number;
   status: 'ordered' | 'preparing' | 'transit' | 'delivered';
+  secondsRemaining?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const [tooltip, setTooltip] = useState<{ show: boolean, x: number, y: number, title: string, time: string, desc: string }>({
+    show: false, x: 0, y: 0, title: '', time: '', desc: ''
+  });
   const [width, setWidth] = useState(400);
 
-  // ResizeObserver to adapt to container changes
+  const [etaSeconds, setEtaSeconds] = useState(0);
+
+  useEffect(() => {
+    if (progress >= 100) {
+      setEtaSeconds(0);
+    } else {
+      setEtaSeconds(Math.max(0, Math.floor(((100 - progress) / 100) * 1800)));
+    }
+  }, [progress]);
+
+  useEffect(() => {
+    if (progress >= 100) return;
+    const intv = setInterval(() => {
+      setEtaSeconds(s => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(intv);
+  }, [progress]);
+
+  const etaDisplay = progress >= 100 ? 'Arrived' : etaSeconds <= 0 ? 'Arriving now' : `${Math.floor(etaSeconds / 60)}m ${(etaSeconds % 60).toString().padStart(2, '0')}s`;
+
+
   useEffect(() => {
     if (!containerRef.current) return;
-    
     const observer = new ResizeObserver((entries) => {
       for (let entry of entries) {
         const { width: boxWidth } = entry.contentRect;
         setWidth(boxWidth || 400);
       }
     });
-    
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
@@ -202,13 +279,34 @@ export function D3ProgressBar({ progress, status }: {
 
     const paddingX = 40;
     const trackY = 40;
-    const trackWidth = Math.max(100, width - paddingX * 2);
+    const trackWidth = width - paddingX * 2;
+    
+    const getDesc = (key: string) => {
+      switch (key) {
+        case 'ordered': return 'Order received and confirmed by the restaurant.';
+        case 'preparing': return 'The kitchen is preparing your items.';
+        case 'transit': return 'Driver is on the way to your location.';
+        case 'delivered': return 'Order has been delivered successfully.';
+        default: return '';
+      }
+    };
+    
+    const getTime = (key: string) => {
+      const now = new Date();
+      switch (key) {
+        case 'ordered': now.setMinutes(now.getMinutes() - 15); return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'preparing': now.setMinutes(now.getMinutes() - 5); return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case 'transit': now.setMinutes(now.getMinutes() + 5); return `Expected: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        case 'delivered': now.setMinutes(now.getMinutes() + 15); return `Expected: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        default: return '';
+      }
+    };
 
     const steps = [
-      { key: 'ordered', label: 'Ordered', pct: 1, x: paddingX },
-      { key: 'preparing', label: 'Preparing', pct: 25, x: paddingX + trackWidth * 0.33 },
-      { key: 'transit', label: 'In Transit', pct: 60, x: paddingX + trackWidth * 0.66 },
-      { key: 'delivered', label: 'Arrived', pct: 100, x: paddingX + trackWidth }
+      { key: 'ordered', label: 'Ordered', pct: 1, x: paddingX, desc: getDesc('ordered'), time: getTime('ordered') },
+      { key: 'preparing', label: 'Preparing', pct: 25, x: paddingX + trackWidth * 0.33, desc: getDesc('preparing'), time: getTime('preparing') },
+      { key: 'transit', label: 'In Transit', pct: 60, x: paddingX + trackWidth * 0.66, desc: getDesc('transit'), time: getTime('transit') },
+      { key: 'delivered', label: 'Arrived', pct: 100, x: paddingX + trackWidth, desc: getDesc('delivered'), time: getTime('delivered') }
     ];
 
     // Current X position based on progress (0 to 100)
@@ -269,6 +367,23 @@ export function D3ProgressBar({ progress, status }: {
       .duration(1200)
       .ease(d3.easeCubicOut)
       .attr("x2", currentX);
+      
+    // 2.5 Animated dots moving along the track
+    if (progress > 0 && progress < 100) {
+      const dotSpeed = Math.max(300, 1500 - (progress * 10)); // Speed sync with progress
+      
+      svg.append("line")
+        .attr("x1", paddingX)
+        .attr("y1", trackY)
+        .attr("x2", currentX)
+        .attr("y2", trackY)
+        .attr("stroke", "rgba(255, 255, 255, 0.7)") 
+        .attr("stroke-width", "3")
+        .attr("stroke-linecap", "round")
+        .attr("stroke-dasharray", "1, 12")
+        .attr("class", "animated-track-dots")
+        .style("--dot-speed", `${dotSpeed}ms`);
+    }
 
     // 3. Draw milestones
     steps.forEach((step, idx) => {
@@ -276,8 +391,7 @@ export function D3ProgressBar({ progress, status }: {
       const isCurrent = status === step.key;
 
       const group = svg.append("g")
-        .attr("class", `milestone-${step.key}`)
-        .style("cursor", "pointer");
+        .attr("class", `milestone-group milestone-${step.key}`);
 
       // Outer glow circle for current active status
       if (isCurrent) {
@@ -321,7 +435,8 @@ export function D3ProgressBar({ progress, status }: {
         .attr("cx", step.x)
         .attr("cy", trackY)
         .attr("r", 0) // animate from 0
-        .attr("fill", isPassed ? "#06C167" : "#94a3b8");
+        .attr("fill", isPassed ? "#06C167" : "#94a3b8")
+        .attr("class", isCurrent ? "milestone-active-pulse" : "");
 
       innerCircle.transition()
         .delay(idx * 150)
@@ -343,19 +458,36 @@ export function D3ProgressBar({ progress, status }: {
         .text(step.label);
 
       // Interaction
-      group.on("mouseover", () => {
-        outerCircle.transition().duration(200).attr("r", 12).attr("stroke", "#06C167");
-        label.transition().duration(200).attr("font-size", "11px").attr("fill", "#06C167");
+      group.on("mouseover", (event) => {
+        outerCircle.transition().duration(200).attr("r", 12).attr("stroke", "#10b981").style("filter", "drop-shadow(0 0 4px #10b981)");
+        innerCircle.transition().duration(200).style("filter", "brightness(1.5)");
+        label.transition().duration(200).attr("font-size", "11px").attr("fill", "#10b981");
+        
+        // Tooltip calculation
+        if (containerRef.current) {
+           const containerRect = containerRef.current.getBoundingClientRect();
+           const viewBoxScale = containerRect.width / width;
+           setTooltip({
+              show: true,
+              x: step.x * viewBoxScale,
+              y: trackY * viewBoxScale - 15,
+              title: step.label,
+              time: step.time,
+              desc: step.desc
+           });
+        }
       }).on("mouseout", () => {
-        outerCircle.transition().duration(200).attr("r", 10).attr("stroke", isPassed ? "#06C167" : "#cbd5e1");
+        outerCircle.transition().duration(200).attr("r", 10).attr("stroke", isPassed ? "#06C167" : "#cbd5e1").style("filter", "none");
+        innerCircle.transition().duration(200).style("filter", "none");
         label.transition().duration(200).attr("font-size", "10px").attr("fill", isCurrent ? "#06C167" : isPassed ? "#334155" : "#94a3b8");
+        setTooltip(prev => ({ ...prev, show: false }));
       });
     });
 
     // 4. Glowing indicator bubble on the current progress X
     if (progress > 0 && progress < 100) {
       const trackerGroup = svg.append("g")
-        .attr("class", "live-tracker");
+        .attr("class", `live-tracker ${status === 'transit' ? 'jitter-wobble' : ''}`);
 
       // Background pulse ring
       trackerGroup.append("circle")
@@ -388,20 +520,105 @@ export function D3ProgressBar({ progress, status }: {
   }, [progress, status, width]);
 
   return (
-    <div ref={containerRef} className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl p-2 relative shadow-inner overflow-hidden">
+   <div ref={containerRef} className="D3ProgressBar w-full bg-slate-50 border border-slate-200/60 rounded-2xl p-2 relative shadow-inner overflow-hidden">
+      <style>{`
+        .D3ProgressBar .milestone-active-pulse {
+          animation: pulse-glow-d3 2s infinite alternate ease-in-out;
+          transform-origin: center;
+        }
+        @keyframes pulse-glow-d3 {
+          0% { fill: #064e3b; filter: drop-shadow(0 0 2px #064e3b); transform: scale(1); }
+          100% { fill: #a3e635; filter: drop-shadow(0 0 8px #a3e635); transform: scale(1.15); }
+        }
+        
+        .D3ProgressBar .milestone-group {
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+        
+        .D3ProgressBar .milestone-group:hover circle.outer-ring {
+          transform-origin: center;
+          transform: scale(1.2);
+          stroke: #10b981;
+          filter: brightness(1.2) drop-shadow(0 0 4px rgba(16, 185, 129, 0.5));
+          transition: all 0.3s ease;
+        }
+        
+        .D3ProgressBar .milestone-group:hover circle:not(.outer-ring) {
+          filter: brightness(1.3);
+          transition: all 0.3s ease;
+        }
+        
+        .D3ProgressBar .milestone-group:hover text {
+          fill: #10b981;
+          font-size: 11px;
+          transition: all 0.3s ease;
+        }
+        
+        .D3ProgressBar .animated-track-dots {
+          animation: slide-dots var(--dot-speed, 1s) linear infinite;
+        }
+        @keyframes slide-dots {
+          to { stroke-dashoffset: -13; }
+        }
+        
+        .D3ProgressBar .jitter-wobble {
+          animation: delivery-jitter 0.8s infinite ease-in-out;
+          transform-origin: center;
+        }
+        @keyframes delivery-jitter {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          25% { transform: translateY(-1.5px) rotate(-3deg); }
+          50% { transform: translateY(0px) rotate(0deg); }
+          75% { transform: translateY(1.5px) rotate(3deg); }
+        }
+      `}</style>
+      {/* ETA Display */}
+      <div className="absolute top-2 right-4 flex items-center gap-2 bg-slate-900/5 px-2 py-1 rounded-md border border-slate-900/10 shadow-sm">
+         <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">ETA</span>
+         <div className="relative w-4 h-4 flex items-center justify-center">
+           <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 24 24">
+             <circle className="text-slate-300" strokeWidth="3" stroke="currentColor" fill="transparent" r="10" cx="12" cy="12" />
+             <circle className="text-emerald-500 transition-all duration-1000 ease-linear" strokeWidth="3" strokeDasharray={62.8} strokeDashoffset={62.8 * (1 - (secondsRemaining || etaSeconds) / Math.max(1, (secondsRemaining || etaSeconds) > 1800 ? (secondsRemaining || etaSeconds) : 1800))} strokeLinecap="round" stroke="currentColor" fill="transparent" r="10" cx="12" cy="12" />
+           </svg>
+         </div>
+         <span className="text-xs font-mono font-bold text-emerald-600">
+           {secondsRemaining !== undefined ? (secondsRemaining <= 0 ? 'Arriving' : `${Math.floor(secondsRemaining / 60)}m ${(secondsRemaining % 60).toString().padStart(2, '0')}s`) : etaDisplay}
+         </span>
+      </div>
+
       <svg 
         ref={svgRef} 
-        className="w-full h-[80px] overflow-visible"
+        viewBox={`0 0 ${width} 80`}
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-auto overflow-visible"
       />
+      
+      {/* Tooltip */}
+      {tooltip.show && (
+       <div
+          className="absolute z-[100] bg-slate-900 border border-slate-800 shadow-xl rounded-xl p-3 max-w-[200px] pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-200"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          <div className="flex justify-between items-center mb-1">
+             <span className="font-bold text-white text-xs">{tooltip.title}</span>
+             <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded">{tooltip.time}</span>
+          </div>
+          <p className="text-[10px] text-slate-300 leading-tight">
+            {tooltip.desc}
+          </p>
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900 border-b border-r border-slate-800 transform rotate-45"></div>
+        </div>
+      )}
     </div>
   );
 }
-
 export function UberEatsApp({ user, balances, setBalances }: {
   user: any;
   balances: Record<string, number>;
   setBalances: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }) {
+  const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [activeTab, setActiveTab] = useState<'order' | 'history' | 'track' | 'cards'>('order');
   
   // Australia Post Address Validation State
@@ -413,7 +630,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
   // Linked Westpac/CBA Aussie debit or credit cards
   const [linkedCards, setLinkedCards] = useState<any[]>(() => {
     try {
-      const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.length > 0) {
@@ -435,27 +652,29 @@ export function UberEatsApp({ user, balances, setBalances }: {
     } catch {}
     return [
       {
-        id: "card-1",
-        cardholder: "Mr Asim Aryal",
-        cardNumber: "4539••••••••5519",
-        expiry: "09/30",
-        cvv: "382",
-        bank: "Commonwealth Bank of Australia",
-        bsb: "062-900",
-        accountNumber: "10938472",
-        balance: 550.00,
+        id: "visa_primary",
+        cardholder: "ASIM ARYAL",
+        cardNumber: "4242 4242 4242 4242",
+        expiry: "12/28",
+        cvv: "123",
+        pin: "0000",
+        bank: "Valourian Capital",
+        bsb: "062-951",
+        accountNumber: "1099 4335",
+        balance: 15000,
         network: "Visa",
       },
       {
-        id: "card-2",
-        cardholder: "Mr Asim Aryal",
-        cardNumber: "5108••••••••3821",
-        expiry: "12/28",
-        cvv: "104",
-        bank: "Westpac Banking Corporation",
-        bsb: "732-001",
-        accountNumber: "38291093",
-        balance: 1250.00,
+        id: "mastercard_sec",
+        cardholder: "ASIM ARYAL",
+        cardNumber: "5105 1051 0510 5100",
+        expiry: "05/29",
+        cvv: "456",
+        pin: "1234",
+        bank: "Valourian Capital",
+        bsb: "062-951",
+        accountNumber: "1099 8801",
+        balance: 12500,
         network: "Mastercard",
       }
     ];
@@ -464,7 +683,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
   useEffect(() => {
     const syncCards = () => {
       try {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.length > 0) {
@@ -535,12 +754,29 @@ export function UberEatsApp({ user, balances, setBalances }: {
       const currentStatus = activeOrder.status;
       const prevStatus = prevOrderStatusRef.current;
       
+
       if (prevStatus === 'preparing' && currentStatus === 'transit') {
         toast.info("Your order is now on the way!", {
           description: `Elite courier is in transit from ${activeOrder.restaurantName || 'the restaurant'} delivering your order.`,
           icon: "🚗",
           duration: 6000
         });
+
+        if ('Notification' in window) {
+          if (Notification.permission === 'granted') {
+            new Notification('Order in Transit', {
+              body: `Your order from ${activeOrder.restaurantName || 'the restaurant'} is on the way!`,
+            });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                new Notification('Order in Transit', {
+                  body: `Your order from ${activeOrder.restaurantName || 'the restaurant'} is on the way!`,
+                });
+              }
+            });
+          }
+        }
       } else if (prevStatus === 'ordered' && currentStatus === 'preparing') {
         toast.info("Chef is preparing your gourmet feast!", {
           description: `Your meal is being prepared at ${activeOrder.restaurantName || 'the restaurant'}.`,
@@ -571,6 +807,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
     "Valourian Capital Lodge, Mosman NSW 2088"
   ]);
   const [newAddressInput, setNewAddressInput] = useState("");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
   const [showAddAddress, setShowAddAddress] = useState(false);
   
   // Checkout & Filter States
@@ -1014,7 +1251,8 @@ export function UberEatsApp({ user, balances, setBalances }: {
             : `Premium food delivery from ${selectedRestaurant.name}`,
           items: itemsDetail,
           deliveryAddress: deliveryAddress,
-          confirmationEmail: confirmationEmail
+          confirmationEmail: confirmationEmail,
+          deliveryInstructions: deliveryInstructions
         });
 
         // Initialize Tracker via Firestore (this triggers onSnapshot listener above)
@@ -1024,6 +1262,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
           total: totalToPay,
           items: itemsDetail,
           status: 'ordered',
+          deliveryInstructions: deliveryInstructions,
           progress: 10,
           secondsRemaining: 40,
           timestamp: new Date().toISOString()
@@ -1035,12 +1274,38 @@ export function UberEatsApp({ user, balances, setBalances }: {
             email: "receipts@ubereats.com",
             receiverEmail: confirmationEmail,
             subject: `Your Uber Eats Order from ${selectedRestaurant.name}`,
-            preview: `Your order for AUD ${totalToPay.toFixed(2)} is being prepared.`,
-            body: `Hi Asim,\n\nYour order from ${selectedRestaurant.name} is confirmed and will be dispatched shortly.\n\nDELIVERY ADDRESS:\n----------------------------------------\n${deliveryAddress}\n\nORDER SUMMARY:\n----------------------------------------\nFood Subtotal: $${cartTotal.toFixed(2)} AUD\nDelivery Driver Tip: $${tipAmount.toFixed(2)} AUD\nVoucher Discount: -$${discountAmount.toFixed(2)} AUD\nTotal Charged: $${totalToPay.toFixed(2)} AUD\n\nThank you for choosing Uber Eats Sovereign.`,
+            preview: `Your order for ${formatConverted(totalToPay)} is being prepared.`,
+            body: `Hi Asim,
+
+Your order from ${selectedRestaurant.name} is confirmed and will be dispatched shortly.
+
+DELIVERY DETAILS:
+----------------------------------------
+Destination Address: ${deliveryAddress}
+Specific Instructions: ${deliveryInstructions || "None provided"}
+Logistics: Uber Sovereign Fleet Priority
+
+ORDER SUMMARY:
+----------------------------------------
+Food Subtotal: $${cartTotal.toFixed(2)} AUD
+Delivery Driver Tip: $${tipAmount.toFixed(2)} AUD
+Voucher Discount: -$${discountAmount.toFixed(2)} AUD
+Total Charged: $${totalToPay.toFixed(2)} AUD
+
+Thank you for choosing Uber Eats Sovereign.`,
           }, setPreviewEmail);
         }
 
-        toast.success(`Order placed at ${selectedRestaurant.name}! AUD ${totalToPay.toFixed(2)} charged. Receipt sent to ${confirmationEmail}`);
+        toast.success(`Order placed at ${selectedRestaurant.name}! ${formatConverted(totalToPay)} charged. Receipt sent to ${confirmationEmail}`);
+        
+        // Send email receipt
+        import('../../utils/email').then(module => {
+             const htmlBody = module.generateProfessionalReceipt({
+                 merchant: selectedRestaurant.name,
+                 amount: formatConverted(totalToPay),
+             });
+             module.sendWorkspaceEmail(confirmationEmail || "asim.nsw@gmail.com", `Uber Eats Reserve Receipt`, htmlBody);
+        }).catch(e => console.error(e));
         setCart([]);
         setSelectedRestaurant(null);
         setShowConfirmModal(false);
@@ -1093,12 +1358,12 @@ export function UberEatsApp({ user, balances, setBalances }: {
           email: "support@ubereats.com",
           receiverEmail: scheduledOrder.confirmationEmail || confirmationEmail,
           subject: `Cancelled Scheduled Order Dispatch - ${scheduledOrder.restaurantName}`,
-          preview: `Refund of AUD ${refundAmount.toFixed(2)} credited back to your account.`,
-          body: `Dear Mr. Asim,\n\nAs requested, your scheduled order from ${scheduledOrder.restaurantName} (slated for delivery on ${new Date(scheduledOrder.scheduledTime).toLocaleString()}) has been successfully cancelled.\n\nREFUND CREDITED:\n----------------------------------------\nAUD ${refundAmount.toFixed(2)} has been credited back to your primary AUD ledger.\n\nSovereign profile clearance remains positive.\n\nBest regards,\nUber Eats Enterprise Support`,
+          preview: `Refund of ${formatConverted(refundAmount)} credited back to your account.`,
+          body: `Dear Mr. Asim,\n\nAs requested, your scheduled order from ${scheduledOrder.restaurantName} (slated for delivery on ${new Date(scheduledOrder.scheduledTime).toLocaleString()}) has been successfully cancelled.\n\nREFUND CREDITED:\n----------------------------------------\n${formatConverted(refundAmount)} has been credited back to your primary AUD ledger.\n\nSovereign profile clearance remains positive.\n\nBest regards,\nUber Eats Enterprise Support`,
         }, setPreviewEmail);
       }
 
-      toast.success(`Scheduled order from ${scheduledOrder.restaurantName} cancelled. AUD ${refundAmount.toFixed(2)} credited back to your treasury.`);
+      toast.success(`Scheduled order from ${scheduledOrder.restaurantName} cancelled. ${formatConverted(refundAmount)} credited back to your treasury.`);
       loadScheduledOrders();
       loadOrderHistory();
     } catch (err) {
@@ -1149,13 +1414,13 @@ export function UberEatsApp({ user, balances, setBalances }: {
           sender: "Uber Eats Corporate Refunds",
           email: "refunds@ubereats.com",
           receiverEmail: user.email || "asim.nsw@gmail.com",
-          subject: `REFUND ISSUED: AUD ${refundAmount.toFixed(2)} credited to VIP Treasury`,
+          subject: `REFUND ISSUED: ${formatConverted(refundAmount)} credited to VIP Treasury`,
           preview: `Unilateral order cancellation confirmed. Refund cleared.`,
-          body: `Dear Mr. Aryal,\n\nAs requested, the active order from ${activeOrder.restaurantName} was successfully cancelled.\n\nREFUND DEPOSITED: AUD ${refundAmount.toFixed(2)} dynamically credited to your main AUD treasury line.\n\nYour sovereign clearance profile continues with positive integrity limits.\n\nBest,\nUber Eats Enterprise Support`,
+          body: `Dear Mr. Aryal,\n\nAs requested, the active order from ${activeOrder.restaurantName} was successfully cancelled.\n\nREFUND DEPOSITED: ${formatConverted(refundAmount)} dynamically credited to your main AUD treasury line.\n\nYour sovereign clearance profile continues with positive integrity limits.\n\nBest,\nUber Eats Enterprise Support`,
         }, setPreviewEmail);
       }
 
-      toast.success(`Order cancelled successfully! AUD ${refundAmount.toFixed(2)} refunded to your account.`);
+      toast.success(`Order cancelled successfully! ${formatConverted(refundAmount)} refunded to your account.`);
       setActiveOrder(null);
       setActiveTab('order');
       loadOrderHistory();
@@ -1200,8 +1465,8 @@ export function UberEatsApp({ user, balances, setBalances }: {
           email: "gifts@ubereats.com",
           receiverEmail: recipientEmail,
           subject: `You received an Uber Eats Voucher!`,
-          preview: `Asim Aryal has sent you an Uber Eats voucher worth AUD ${voucherAmount.toFixed(2)}.`,
-          body: `Hello,\n\nYou've received an exclusive corporate Uber Eats voucher.\n\nSender: Asim Aryal\nAmount: AUD ${voucherAmount.toFixed(2)}\n\nUse this digital cash voucher to order premium dining experiences right to your door.`,
+          preview: `Asim Aryal has sent you an Uber Eats voucher worth ${formatConverted(voucherAmount)}.`,
+          body: `Hello,\n\nYou've received an exclusive corporate Uber Eats voucher.\n\nSender: Asim Aryal\nAmount: ${formatConverted(voucherAmount)}\n\nUse this digital cash voucher to order premium dining experiences right to your door.`,
           isVoucher: true,
           voucherAmount: voucherAmount
         }, setPreviewEmail);
@@ -1322,7 +1587,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                           key={item.id} 
                           whileHover={{ scale: 1.02, y: -2 }}
                           whileTap={{ scale: 0.98 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                          transition={{ type: "tween", stiffness: 300, damping: 20 }}
                           className="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow cursor-default"
                         >
                           <div>
@@ -1348,8 +1613,8 @@ export function UberEatsApp({ user, balances, setBalances }: {
                           <motion.span
                             key={cart.length}
                             initial={{ scale: 0.6, opacity: 0 }}
-                            animate={{ scale: [1, 1.3, 1], opacity: 1 }}
-                            transition={{ type: "spring", stiffness: 450, damping: 15 }}
+                            animate={{ scale: [1, 1.5, 1], opacity: 1 }}
+                            transition={{ type: "tween", stiffness: 500, damping: 10, bounce: 0.5 }}
                             className="bg-[#06C167] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm font-mono"
                           >
                             {cart.length}
@@ -1362,8 +1627,16 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         </div>
                       ) : (
                         <div className="space-y-3 mb-4">
+                           <AnimatePresence>
                             {cart.map((item, idx) => (
-                              <div key={idx} className="flex justify-between text-sm items-center border-b border-slate-100 pb-2">
+                              <motion.div 
+                                key={`${item.id}-${idx}`}
+                                initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, height: "auto", scale: 1 }}
+                                exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                                transition={{ type: "tween", duration: 0.2 }}
+                                className="flex justify-between text-sm items-center border-b border-slate-100 pb-2 overflow-hidden"
+                              >
                                  <span className="text-slate-700 font-medium">{item.name}</span>
                                  <div className="flex items-center gap-2">
                                    <span className="font-bold text-slate-900 font-mono">${item.price}</span>
@@ -1374,20 +1647,34 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                      ✕
                                    </button>
                                  </div>
-                              </div>
+                              </motion.div>
                             ))}
+                           </AnimatePresence>
                             <div className="pt-3 flex justify-between font-black text-base text-slate-900">
                                <span>Order Total</span>
                                <motion.span
                                  key={cartTotal}
                                  initial={{ scale: 0.8, opacity: 0.5 }}
                                  animate={{ scale: [1, 1.1, 1], opacity: 1 }}
-                                 transition={{ type: "spring", stiffness: 350, damping: 12 }}
+                                 transition={{ type: "tween", stiffness: 350, damping: 12 }}
                                  className="font-mono text-[#06C167]"
                                >
                                  ${cartTotal} AUD
                                </motion.span>
                             </div>
+                            
+                            {cart.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  toast.success(`Group Order Link Created: https://valourian.com/group-order/${Math.random().toString(36).substr(2, 9)}`, {
+                                    description: 'Share this link with your friends to add items to your cart.'
+                                  });
+                                }}
+                                className="w-full mt-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-200"
+                              >
+                                <Users className="w-4 h-4" /> Start Group Order
+                              </button>
+                            )}
                         </div>
                       )}
 
@@ -1416,6 +1703,19 @@ export function UberEatsApp({ user, balances, setBalances }: {
                             </div>
                           </div>
 
+                          {/* Delivery Instructions */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                              DELIVERY INSTRUCTIONS
+                            </label>
+                            <input
+                              type="text"
+                              value={deliveryInstructions}
+                              onChange={(e) => setDeliveryInstructions(e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-[#06C167] font-sans"
+                              placeholder="e.g. Leave at the front door"
+                            />
+                          </div>
                           {/* Contact Phone Input */}
                           <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-500 tracking-wider flex items-center justify-between">
@@ -1443,9 +1743,9 @@ export function UberEatsApp({ user, balances, setBalances }: {
                               {savedAddresses.map((addr) => {
                                 const isSelected = deliveryAddress === addr;
                                 return (
-                                  <button
+                                  <div
                                     key={addr}
-                                    type="button"
+                                    
                                     onClick={() => setDeliveryAddress(addr)}
                                     className={`w-full text-left p-2.5 text-xs rounded-xl border transition-all flex items-start gap-2 cursor-pointer ${
                                       isSelected
@@ -1461,7 +1761,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                     <span className="truncate flex-1 pr-1">{addr}</span>
                                     {!["Level 55, Sovereign Tower, Sydney CBD, NSW 2000", "Penthouse Suite, 1 Barangaroo Ave, Sydney NSW 2000", "Valourian Capital Lodge, Mosman NSW 2088"].includes(addr) && (
                                       <button
-                                        type="button"
+                                        
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setSavedAddresses(savedAddresses.filter(a => a !== addr));
@@ -1475,7 +1775,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
                                     )}
-                                  </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -1495,25 +1795,28 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                       onChange={(e) => {
                                         const queryVal = e.target.value;
                                         setNewAddressInput(queryVal);
-                                        if (queryVal.trim().length > 2) {
-                                          setIsSearchingAddress(true);
-                                          const matches = AUSTRALIA_POST_SUGGESTIONS.filter(item => 
-                                            item.full.toLowerCase().includes(queryVal.toLowerCase())
-                                          );
-                                          setAddressSuggestions(matches);
-                                          
-                                          if (matches.length > 0) {
-                                            setAddressDpid(matches[0].dpid);
-                                            setAddressAmasStatus("AMAS CERTIFIED");
+                                        if ((window as any).addressSearchTimeout) clearTimeout((window as any).addressSearchTimeout);
+                                        (window as any).addressSearchTimeout = setTimeout(() => {
+                                          if (queryVal.trim().length > 2) {
+                                            setIsSearchingAddress(true);
+                                            const matches = AUSTRALIA_POST_SUGGESTIONS.filter(item => 
+                                              item.full.toLowerCase().includes(queryVal.toLowerCase())
+                                            );
+                                            setAddressSuggestions(matches);
+                                            
+                                            if (matches.length > 0) {
+                                              setAddressDpid(matches[0].dpid);
+                                              setAddressAmasStatus("AMAS CERTIFIED");
+                                            } else {
+                                              const hashStr = queryVal.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0).toString();
+                                              setAddressDpid("5" + hashStr.padStart(7, "0").substring(0, 7));
+                                              setAddressAmasStatus("PROVISIONAL PASS");
+                                            }
+                                            setTimeout(() => setIsSearchingAddress(false), 200);
                                           } else {
-                                            const hashStr = queryVal.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0).toString();
-                                            setAddressDpid("5" + hashStr.padStart(7, "0").substring(0, 7));
-                                            setAddressAmasStatus("PROVISIONAL PASS");
+                                            setAddressSuggestions([]);
                                           }
-                                          setTimeout(() => setIsSearchingAddress(false), 200);
-                                        } else {
-                                          setAddressSuggestions([]);
-                                        }
+                                        }, 300); // Mock debounce function
                                       }}
                                       className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-red-500 resize-none font-sans"
                                       placeholder="Type street, suburb, state or postcode (e.g. George St)..."
@@ -1530,7 +1833,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                     </div>
                                     {addressSuggestions.map((item, idy) => (
                                       <button
-                                        type="button"
+                                        
                                         key={idy}
                                         onClick={() => {
                                           setNewAddressInput(item.full);
@@ -1569,7 +1872,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
 
                                 <div className="flex gap-2">
                                   <button
-                                    type="button"
+                                    
                                     onClick={() => {
                                       if (!newAddressInput.trim()) return toast.error("Please enter a valid address");
                                       const trimmed = newAddressInput.trim();
@@ -1586,7 +1889,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                     Verify & Save
                                   </button>
                                   <button
-                                    type="button"
+                                    
                                     onClick={() => {
                                       setShowAddAddress(false);
                                       setNewAddressInput("");
@@ -1600,7 +1903,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                               </div>
                             ) : (
                               <button
-                                type="button"
+                                
                                 onClick={() => setShowAddAddress(true)}
                                 className="text-[#06C167] hover:text-[#05a155] text-[10px] font-black uppercase flex items-center gap-1 pt-1.5 cursor-pointer"
                               >
@@ -1626,7 +1929,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
 
                             <div className="grid grid-cols-2 gap-2">
                               <button
-                                type="button"
+                                
                                 onClick={() => setCheckoutPaymentMethod('vault')}
                                 className={`p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center gap-1 cursor-pointer ${
                                   checkoutPaymentMethod === 'vault'
@@ -1639,7 +1942,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                               </button>
 
                               <button
-                                type="button"
+                                
                                 id="payment-card-method-btn"
                                 onClick={() => setCheckoutPaymentMethod('card')}
                                 className={`p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center gap-1 cursor-pointer ${
@@ -1701,7 +2004,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                 <div className="flex justify-between items-center">
                                   <span className="text-[8px] font-black text-[#06C167] uppercase tracking-widest block font-sans">Sovereign Card Gateway</span>
                                   <button
-                                    type="button"
+                                    
                                     id="scan-checkout-card-btn"
                                     onClick={() => {
                                       setIsScanningFromCheckout(true);
@@ -1804,7 +2107,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                               >
                                 <div className="absolute top-1.5 right-1.5 z-20">
                                   <button
-                                    type="button"
+                                    
                                     onClick={() => {
                                       setIsScanningCard(false);
                                       setScanStep("idle");
@@ -1826,7 +2129,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                   <motion.div
                                     className="absolute left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_8px_#ef4444]"
                                     animate={{ top: ["0%", "100%", "0%"] }}
-                                    transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
+                                    transition={{ type: "tween", repeat: Infinity, duration: 2.5, ease: "linear" }}
                                   />
 
                                   <div className="absolute inset-5 border border-dashed border-white/20 rounded flex flex-col items-center justify-between pointer-events-none p-1">
@@ -1845,7 +2148,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                     <div className="text-center space-y-1.5 z-10 px-2">
                                       <p className="text-[10px] font-bold text-emerald-400 font-sans">Card outline matched!</p>
                                       <button
-                                        type="button"
+                                        
                                         id="analyze-checkout-frame-btn"
                                         onClick={() => {
                                           setScanStep("ocr_processing");
@@ -1903,7 +2206,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
 
                                 {scanStep === "completed" && scannedCardData && (
                                   <button
-                                    type="button"
+                                    
                                     id="populate-scanned-details-btn"
                                     onClick={() => {
                                       setCheckoutCardNumber(scannedCardData.cardNumber);
@@ -1955,7 +2258,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                     </div>
                     <div className="flex items-center gap-3">
                       <button
-                        type="button"
+                        
                         onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black transition-all text-center uppercase tracking-wider rounded-xl border font-sans cursor-pointer ${
                           showOnlyFavorites 
@@ -1968,7 +2271,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       </button>
 
                       <button
-                        type="button"
+                        
                         onClick={() => setShowOnly24Hours(!showOnly24Hours)}
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black transition-all text-center uppercase tracking-wider rounded-xl border font-sans cursor-pointer ${
                           showOnly24Hours 
@@ -2007,7 +2310,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       </div>
                       <div className="flex gap-3 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200">
                         {RESTAURANTS.filter(r => favorites.includes(r.id)).map(r => (
-                          <div 
+                         <div
                             key={r.id} 
                             onClick={() => setSelectedRestaurant(r)}
                             className="bg-white hover:border-emerald-200 border border-slate-200 p-3 rounded-xl flex items-center gap-3 cursor-pointer shrink-0 hover:shadow-sm transition-all select-none"
@@ -2142,7 +2445,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Secure tokenised debit/credit gateways</p>
                   </div>
                   <button
-                    type="button"
+                    
                     onClick={() => {
                       setIsScanningCard(true);
                       setScanStep("accessing_camera");
@@ -2186,7 +2489,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       <motion.div
                         className="absolute left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_10px_#ef4444]"
                         animate={{ top: ["0%", "100%", "0%"] }}
-                        transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
+                        transition={{ type: "tween", repeat: Infinity, duration: 2.5, ease: "linear" }}
                       />
 
                       {/* Align Guides */}
@@ -2208,7 +2511,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                           <p className="text-xs font-bold text-emerald-400 font-sans">Card outline matched! Keep steady...</p>
                           <span className="text-[10px] text-slate-400 uppercase tracking-widest font-sans">Scanning Holograms & Chip BIN numbers</span>
                           <button
-                            type="button"
+                            
                             onClick={() => {
                               setScanStep("ocr_processing");
                               const banksList = [
@@ -2297,7 +2600,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
 
                         <div className="flex gap-2 pt-2">
                           <button
-                            type="button"
+                            
                             onClick={() => {
                               const newCard = {
                                 id: `card-${Date.now()}`,
@@ -2322,7 +2625,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                             Link Tokenised Card
                           </button>
                           <button
-                            type="button"
+                            
                             onClick={() => {
                               setScanStep("aligning");
                               setScannedCardData(null);
@@ -2385,7 +2688,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                           </div>
                           <div className="text-right flex-shrink-0">
                             <span className="text-[7px] font-black uppercase block opacity-70 font-sans">Card Balance</span>
-                            <span className="font-mono font-bold text-xs block">${card.balance.toFixed(2)} AUD</span>
+                            <span className="font-mono font-bold text-xs block">{formatConverted(card.balance)} AUD</span>
                           </div>
                         </div>
 
@@ -2461,7 +2764,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                     </div>
 
                     <button
-                      type="button"
+                      
                       disabled={isTransferring || !transferAmountInput || Number(transferAmountInput) <= 0}
                       onClick={async () => {
                         const amount = Number(transferAmountInput);
@@ -2552,7 +2855,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       </div>
                       <div className="flex justify-between text-xs font-semibold pt-1 border-t border-slate-200">
                         <span className="text-slate-500 font-sans">Disbursed Amount:</span>
-                        <span className="text-slate-900 font-mono font-bold">${Number(transferAmountInput || 0).toFixed(2)} AUD</span>
+                        <span className="text-slate-900 font-mono font-bold">{formatConverted(Number(transferAmountInput || 0))} AUD</span>
                       </div>
                     </div>
 
@@ -2756,6 +3059,31 @@ export function UberEatsApp({ user, balances, setBalances }: {
                             SOVEREIGN TRANSACTION SECURELY ENCRYPTED
                           </div>
 
+                          {/* Rating Functionality */}
+                          {order.recipient?.includes("Uber Eats") && (
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Rate Order:</span>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    onClick={async () => {
+                                      try {
+                                        await updateDoc(doc(db, "transactions", order.id), { rating: star });
+                                        setPastOrders(prev => prev.map(o => o.id === order.id ? { ...o, rating: star } : o));
+                                        toast.success(`You rated this order ${star} stars!`);
+                                      } catch (error) {
+                                        toast.error("Failed to submit rating.");
+                                      }
+                                    }}
+                                    className={`transition-colors ${(order.rating || 0) >= star ? 'text-yellow-400' : 'text-slate-200 hover:text-yellow-200'}`}
+                                  >
+                                    <Star className="w-4 h-4 fill-current" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           {/* Re-order Functionality */}
                           {order.items && order.items.length > 0 && order.recipient?.includes("Uber Eats") && (
                             <div className="pt-3 border-t border-slate-100 flex justify-end">
@@ -2791,9 +3119,9 @@ export function UberEatsApp({ user, balances, setBalances }: {
                                       }
                                   }, 300);
                                 }}
-                                className="px-4 py-2 bg-[#06C167] text-white hover:bg-[#05a155] active:bg-[#048243] rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
+                                className="flex items-center gap-1.5 px-4 py-2 bg-[#06C167] text-white hover:bg-[#05a155] active:bg-[#048243] rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
                               >
-                                Re-Order Items
+                                <ShoppingCart className="w-3 h-3" /> Re-Order Items
                               </button>
                             </div>
                           )}
@@ -2819,7 +3147,12 @@ export function UberEatsApp({ user, balances, setBalances }: {
                 <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
                   
                   {/* Header Row */}
-                  <div className="flex justify-between items-start border-b pb-4">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.4, ease: "easeOut" }}
+                    className="flex justify-between items-start border-b pb-4"
+                  >
                     <div>
                       <span className="text-[#06C167] text-[10px] font-black uppercase tracking-widest">Active System Tracking</span>
                       <h3 className="text-xl font-extrabold text-slate-900 mt-0.5">{activeOrder.restaurantName}</h3>
@@ -2873,15 +3206,17 @@ export function UberEatsApp({ user, balances, setBalances }: {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
 
                   {/* Real-time Leaflet GIS Delivery Tracker Map */}
                   <AnimatePresence>
                     {showTrackingMap && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
+                        initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                        exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                        transition={{ type: "tween", duration: 0.5, ease: "anticipate" }}
+                        id="delivery-map-container"
                         className={`relative delivery-map-container transition-all duration-300 bg-white ${isMapExpanded ? 'fixed inset-4 z-[100] h-auto rounded-3xl shadow-2xl !mt-0 p-4' : 'overflow-hidden rounded-xl border border-slate-200'}`}
                       >
                         {isMapExpanded && (
@@ -2905,18 +3240,25 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         >
                           {isMapExpanded ? 'Collapse Map' : 'Expand Map'}
                         </button>
-                        <DeliveryMap 
-                          restaurantName={activeOrder.restaurantName} 
-                          progress={activeOrder.progress} 
-                          latitude={activeOrder.latitude}
-                          longitude={activeOrder.longitude}
-                        />
+                        <React.Suspense fallback={<div className="w-full h-full bg-slate-900 animate-pulse flex items-center justify-center"><div className="text-emerald-500 font-mono text-[10px] uppercase tracking-widest">Initializing Map...</div></div>}>
+                          <DeliveryMap 
+                            restaurantName={activeOrder.restaurantName} 
+                            progress={activeOrder.progress} 
+                            latitude={activeOrder.latitude}
+                            longitude={activeOrder.longitude}
+                          />
+                        </React.Suspense>
                       </motion.div>
                     )}
                   </AnimatePresence>
 
                   {/* D3-Animated Dynamic Progress Bar & Tracker UI */}
-                  <div className="space-y-3 pt-2">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.4, delay: 0.1, ease: "easeOut" }}
+                    className="space-y-3 pt-2"
+                  >
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-[#06C167] animate-ping"></span>
@@ -2927,11 +3269,16 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       </span>
                     </div>
                     
-                    <D3ProgressBar progress={activeOrder.progress} status={activeOrder.status} />
-                  </div>
+                    <D3ProgressBar progress={activeOrder.progress} status={activeOrder.status} secondsRemaining={activeOrder.secondsRemaining} />
+                  </motion.div>
 
                   {/* Status Message Details */}
-                  <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 space-y-1.5 shadow-md col-span-1">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.4, delay: 0.2, ease: "easeOut" }}
+                    className="p-4 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 space-y-1.5 shadow-md col-span-1"
+                  >
                     <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest block leading-none">Sub-Ledger Dispatch Details</span>
                     <p className="text-xs font-medium font-sans">
                       {activeOrder.status === 'ordered' && "Unilateral Treasury Clearance OK. Dispatching request route files directly to partner."}
@@ -2943,7 +3290,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                        <span>SECURITY REF: VC-ETA-9942</span>
                        <span>PLATFORM: COPA-9 SECTOR 3</span>
                     </div>
-                  </div>
+                  </motion.div>
 
                   {/* Secure Twilio Voice Bridge Calling Panel */}
                   {activeOrder.status !== 'delivered' && (
@@ -2957,7 +3304,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         <p className="text-[10px] text-slate-500 leading-tight">Direct encrypted bridge protects customer/driver personal phone numbers</p>
                       </div>
                       <button
-                        type="button"
+                        
                         id="twilio-voice-dial-btn"
                         onClick={handleStartVoiceBridgeCall}
                         className="bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap self-stretch sm:self-auto text-center"
@@ -2978,8 +3325,60 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         <XCircle className="w-4 h-4" /> Cancel Order (Instant AUD Refund)
                       </button>
                     ) : activeOrder.status === 'delivered' ? (
-                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 p-3 rounded-xl text-xs font-bold justify-center">
-                        <ShieldCheck className="w-4 h-4 animate-bounce" /> Unilateral delivery handoff confirmed successfully.
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 p-3 rounded-xl text-xs font-bold justify-center">
+                          <ShieldCheck className="w-4 h-4 animate-bounce" /> Unilateral delivery handoff confirmed successfully.
+                        </div>
+                        
+                        {/* Rating and Feedback Form */}
+                        <form onSubmit={async (e) => {
+                          e.preventDefault();
+                          const form = e.currentTarget;
+                          const fd = new FormData(form);
+                          const rating = parseInt(fd.get("rating") as string);
+                          const feedback = fd.get("feedback") as string;
+                          try {
+                            await addDoc(collection(db, "delivery_feedback"), {
+                              orderId: activeOrder.id,
+                              restaurantName: activeOrder.restaurantName,
+                              rating,
+                              feedback,
+                              userId: user?.uid,
+                              timestamp: new Date().toISOString()
+                            });
+                            toast.success("Feedback submitted!");
+                            form.reset();
+                            form.style.display = "none";
+                            // Show a thank you message
+                            const msg = document.createElement("div");
+                            msg.className = "text-center text-emerald-600 font-bold text-xs p-3 bg-emerald-50 rounded-xl";
+                            msg.innerText = "Thank you for your feedback!";
+                            form.parentNode?.appendChild(msg);
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Failed to submit feedback.");
+                          }
+                        }} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                           <h4 className="font-black text-slate-800 text-sm">Rate Your Delivery</h4>
+                           <div className="flex items-center gap-2">
+                             {[1, 2, 3, 4, 5].map((star) => (
+                               <label key={star} className="cursor-pointer">
+                                 <input type="radio" name="rating" value={star} className="peer sr-only" required />
+                                 <Star className="w-6 h-6 text-slate-300 peer-checked:text-amber-400 peer-checked:fill-amber-400 hover:text-amber-300 transition-colors" />
+                               </label>
+                             ))}
+                           </div>
+                           <textarea 
+                             name="feedback"
+                             rows={2} 
+                             required
+                             placeholder="How was your order? (e.g. fast delivery, food was hot)" 
+                             className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-[#06C167] focus:outline-none resize-none font-sans"
+                           />
+                           <button type="submit" className="w-full bg-slate-900 text-white font-heavy uppercase tracking-widest text-xs py-2.5 rounded-xl hover:bg-slate-800 transition-colors">
+                             Submit Feedback
+                           </button>
+                        </form>
                       </div>
                     ) : (
                       <div className="bg-amber-50 text-amber-600 border border-amber-100 p-3 rounded-xl text-xs font-bold text-center">
@@ -3116,7 +3515,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              transition={{ type: "spring", stiffness: 380, damping: 25 }}
+              transition={{ type: "tween", stiffness: 380, damping: 25 }}
               className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden p-6 space-y-6 relative"
             >
               <button 
@@ -3175,6 +3574,17 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       <span className="text-[8.5px] bg-emerald-100 px-1.5 py-0.5 rounded/default uppercase font-black text-emerald-700">verified stay profile</span>
                     </p>
                   </div>
+                  
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Specific Delivery Instructions</span>
+                    <input
+                      type="text"
+                      placeholder="e.g., Leave at the front door"
+                      value={deliveryInstructions}
+                      onChange={(e) => setDeliveryInstructions(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#06C167] font-sans"
+                    />
+                  </div>
                 </div>
 
                 {/* Driver Tipping Selector */}
@@ -3184,7 +3594,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                     {[0, 5, 10, 15, 20].map((pct) => (
                       <button
                         key={pct}
-                        type="button"
+                        
                         onClick={() => setTipPercentage(pct)}
                         className={`py-2 text-xs font-black rounded-xl border transition-all ${
                           tipPercentage === pct
@@ -3211,7 +3621,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         </div>
                       </div>
                       <button
-                        type="button"
+                        
                         onClick={() => setAppliedVoucher(null)}
                         className="text-slate-500 hover:text-slate-700 text-[9px] font-extrabold uppercase bg-white border border-slate-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
                       >
@@ -3228,7 +3638,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#06C167] font-mono uppercase"
                       />
                       <button
-                        type="button"
+                        
                         onClick={async () => {
                           if (!voucherCodeInput.trim()) return toast.error("Please enter a voucher code");
                           const code = voucherCodeInput.trim().toUpperCase();
@@ -3311,18 +3721,18 @@ export function UberEatsApp({ user, balances, setBalances }: {
                 <div className="pt-4 border-t border-slate-100 space-y-1.5 bg-emerald-50/40 p-4 rounded-xl border border-emerald-100/50">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500 font-semibold font-sans">Subtotal:</span>
-                    <span className="font-mono text-slate-700">${cartTotal.toFixed(2)} AUD</span>
+                    <span className="font-mono text-slate-700">{formatConverted(cartTotal)}</span>
                   </div>
                   {tipPercentage > 0 && (
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-semibold font-sans">Driver Tip ({tipPercentage}%):</span>
-                      <span className="font-mono text-slate-700">+${(Math.round((cartTotal * tipPercentage / 100) * 100) / 100).toFixed(2)} AUD</span>
+                      <span className="font-mono text-slate-700">+{formatConverted(cartTotal * tipPercentage / 100)}</span>
                     </div>
                   )}
                   {appliedVoucher && (
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-[#06C167] font-semibold font-sans">E-Voucher Discount:</span>
-                      <span className="font-mono text-[#06C167]">-${appliedVoucher.amount.toFixed(2)} AUD</span>
+                      <span className="font-mono text-[#06C167]">-{formatConverted(appliedVoucher.amount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center border-t border-emerald-200/50 pt-2 font-black">
@@ -3331,7 +3741,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       <span className="text-[10px] text-slate-400 font-bold block font-sans">No auxiliary dispatch cost</span>
                     </div>
                     <span className="text-xl font-bold font-mono text-[#06C167]">
-                      ${(Math.max(0, cartTotal + Math.round((cartTotal * tipPercentage / 100) * 100) / 100 - (appliedVoucher?.amount || 0))).toFixed(2)} AUD
+                      {formatConverted(Math.max(0, cartTotal + (cartTotal * tipPercentage / 100) - (appliedVoucher?.amount || 0)))}
                     </span>
                   </div>
                 </div>
@@ -3339,14 +3749,14 @@ export function UberEatsApp({ user, balances, setBalances }: {
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
-                  type="button"
+                  
                   onClick={() => setShowConfirmModal(false)}
                   className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase text-xs tracking-wider rounded-xl transition-colors cursor-pointer text-center"
                 >
                   Cancel & Edit
                 </button>
                 <button
-                  type="button"
+                  
                   onClick={handleOrder}
                   disabled={isProcessing}
                   className="py-3 bg-[#06C167] hover:bg-[#05a155] text-white font-heavy uppercase text-xs tracking-wider rounded-xl transition-all shadow-md font-black cursor-pointer text-center"
@@ -3392,14 +3802,14 @@ export function UberEatsApp({ user, balances, setBalances }: {
                   {callStatus !== 'ended' && (
                     <motion.div
                       animate={{ scale: [1, 1.6, 1], opacity: [0.4, 0, 0.4] }}
-                      transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                      transition={{ type: "tween", repeat: Infinity, duration: 2, ease: "easeInOut" }}
                       className="absolute inset-0 rounded-full border-2 border-emerald-500/30 -m-3"
                     />
                   )}
                   {callStatus === 'dialing' && (
                     <motion.div
                       animate={{ scale: [1, 2, 1], opacity: [0.2, 0, 0.2] }}
-                      transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                      transition={{ type: "tween", repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
                       className="absolute inset-0 rounded-full border border-sky-500/20 -m-6"
                     />
                   )}
@@ -3435,8 +3845,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                         <motion.span
                           key={i}
                           animate={{ height: isMuted ? 4 : [6, 16, 6] }}
-                          transition={{
-                            repeat: Infinity,
+                          transition={{ type: "tween", repeat: Infinity,
                             duration: 0.5 + i * 0.1,
                             ease: "easeInOut"
                           }}
@@ -3464,7 +3873,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       setIsMuted(!isMuted);
                       toast.info(isMuted ? "Microphone active" : "Microphone muted");
                     }}
-                    type="button"
+                    
                     disabled={callStatus !== 'connected'}
                     className={`p-3.5 rounded-full border transition-all cursor-pointer ${
                       isMuted 
@@ -3481,7 +3890,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                       setIsSpeakerOn(!isSpeakerOn);
                       toast.info(isSpeakerOn ? "Speakerphone off" : "Speakerphone on");
                     }}
-                    type="button"
+                    
                     disabled={callStatus !== 'connected'}
                     className={`p-3.5 rounded-full border transition-all cursor-pointer ${
                       isSpeakerOn 
@@ -3501,7 +3910,7 @@ export function UberEatsApp({ user, balances, setBalances }: {
                   
                   {callStatus !== 'ended' ? (
                     <button
-                      type="button"
+                      
                       id="twilio-hangup-btn"
                       onClick={handleEndVoiceBridgeCall}
                       className="w-full py-3 bg-red-650 hover:bg-red-700 active:scale-98 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer font-sans"

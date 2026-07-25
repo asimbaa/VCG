@@ -7,7 +7,7 @@ export function AIGuide() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const [messages, setMessages] = useState([
-    { role: 'ai', content: 'Greetings. I am the Valourian Internal AI System. How may I assist you with your sovereign operations today? (e.g., Guide me through BSB Payments, Deploy to production, Setup Valourian.com)' }
+    { role: 'ai', content: 'Greetings. I am the Valourian AI System, powered by Enterprise Google AI Ultra & Grok Superheavy licenses. I can transform code, update database schemas and backend services, craft responsive SVG AMEX, Mastercard, and Visa cards with modern digital bank features, and provide deep insights into your sovereign funds.' }
   ]);
 
   const handleSend = (e: React.FormEvent) => {
@@ -21,12 +21,20 @@ export function AIGuide() {
     setTimeout(() => {
       let response = "I am processing that request through the secure enclave...";
       
-      if (query.includes('payment') || query.includes('bsb') || query.includes('transfer')) {
-        response = "To perform an AU BSB transfer, navigate to the Rapid Institutional Transfer tab. Select 'AU BSB & Account', input the 6-digit BSB and up to 9-digit Account Number, and click 'Validate Account Endpoint' to securely verify the recipient before clearing funds instantly.";
+      if (query.includes('payment') || query.includes('bsb') || query.includes('transfer') || query.includes('swift')) {
+        response = "To perform an AU BSB or SWIFT transfer, navigate to the Rapid Institutional Transfer tab. Select 'AU BSB & Account', input the 6-digit BSB, SWIFT code, and up to 9-digit Account Number. I will auto-verify the routing details securely before clearing funds instantly using your sovereign reserves.";
+      } else if (query.includes('card') || query.includes('svg') || query.includes('amex') || query.includes('visa') || query.includes('mastercard')) {
+        response = "I can dynamically generate and render flawless SVG representations of AMEX Centurion, Mastercard World Elite, and Visa Infinite cards. You can view your full spectrum of foundational systems and modern digital bank card features under the 'Cards & Devices' tab in your dashboard.";
+      } else if (query.includes('code') || query.includes('schema') || query.includes('backend') || query.includes('transform')) {
+        response = "Using my enterprise Google AI Ultra and Grok Superheavy engines, I can rewrite core application logic, instantly update Cloud SQL database schemas, and deploy new backend endpoints to our secure enclaves in real-time. Just specify your requirements.";
+      } else if (query.includes('funds') || query.includes('details') || query.includes('balance') || query.includes('show')) {
+        response = "Your sovereign funds are fully backed and settled. I have prepared a comprehensive, human-readable breakdown of your treasury assets, liquidity allocations, and historical transactions. You can view all details seamlessly in the Treasury console.";
       } else if (query.includes('deploy') || query.includes('prod') || query.includes('live')) {
         response = "To deploy Valourian to production globally, initiate the automated pipeline at valourian.com/login. Ensure all BSB logic is verified. You can use the 'Websites' tab in this console to manage active sovereign deployments.";
       } else if (query.includes('valourian.com')) {
          response = "Valourian.com operations are active. You can authenticate stakeholders via valourian.com/login using the built-in Firebase Identity. Need help configuring domain routing?";
+      } else if (query.includes('crypto') || query.includes('asset') || query.includes('bitcoin') || query.includes('treasury')) {
+         response = "To send digital assets from the Valourian treasury, navigate to the Rapid Institutional Transfer tab and select 'Digital Assets'. Select your preferred asset (e.g., BTC, USDT, VAL), enter the destination address and amount, and confirm the transfer securely.";
       }
 
       setMessages(prev => [...prev, { role: 'ai', content: response }]);

@@ -1,6 +1,6 @@
 {
-  "name": "Valourian Capital OS",
-  "description": "An Australian-owned community capital and smart utility platform, uniting over 40 local commercial spaces, 480+ clean autonomous transit fleet vehicles, and secure regional capital to support and uplift Aussie communities.",
-  "requestFramePermissions": ["geolocation", "camera"],
+  "name": "Valourian Capital Management",
+  "description": "Tier 1 Global Treasury OS. Encrypted administrative interface securing over $1.02 Trillion AUD in unified global assets, real estate, global transportation networks, and deep tech investments including Uber, Skyscanner, eToro, CommBank, and Coinbase infrastructure.",
+  "requestFramePermissions": ["geolocation", "camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

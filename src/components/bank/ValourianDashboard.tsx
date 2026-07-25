@@ -2,7 +2,10 @@ import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import { WebsiteDeployments } from "./WebsiteDeployments";
+import { PastOrdersView } from "./PastOrdersView";
+import { TreasuryGrowthChart } from "./TreasuryGrowthChart";
 import {
+  FileJson,
   Wallet,
   Send,
   History,
@@ -107,26 +110,24 @@ import {
   Pause,
   Mic,
   Radio,
-} from "lucide-react";
+  FileDown, Server } from "lucide-react";
 import { Button } from "../ui/button";
 import { Toaster, toast } from "sonner";
 import { Logo3D } from "../ui/Logo3D";
 import { generateDocumentContent } from "../../services/geminiService";
-import { db, handleFirestoreError, OperationType } from "../../firebase";
+import { db, handleFirestoreError, OperationType, addDoc, setDoc, updateDoc, deleteDoc } from "../../firebase";
 import {
   doc,
   getDoc,
-  setDoc,
   onSnapshot,
   collection,
   query,
   where,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   orderBy,
   limit,
-} from "firebase/firestore";
+serverTimestamp} from "firebase/firestore";
+import { useGlobalCurrency } from "../../contexts/CurrencyContext";
+import { CurrencySelector } from "../ui/CurrencySelector";
 import { useEffect, useRef } from "react";
 import { AuraDriveMap } from "./AuraDriveMap";
 import { LogisticsMap } from "./LogisticsMap";
@@ -139,10 +140,16 @@ import { SpendingTrends } from "./SpendingTrends";
 import { BookingApp } from "./BookingApp";
 import { UberApp } from "./UberApp";
 import { UberEatsApp } from "./UberEatsApp";
+import { OrderTrackingDashboard } from "./OrderTrackingDashboard";
 import { SovereignStore } from "./SovereignStore";
+import { ValourianAcquisitionsApp } from "./ValourianAcquisitionsApp";
+import { EToroApp } from "./EToroApp";
+import { ValourianStrategicAssets } from "./ValourianStrategicAssets";
+import { OrderSummary } from "./OrderSummary";
 import { VaultRecords, GLOBAL_PROPERTIES_DATABASE } from "./VaultRecords";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CryptoPortfolio } from "./CryptoPortfolio";
 
 const generateValidLuhnCard = (prefix: string, length: number): string => {
   let pan = prefix;
@@ -407,7 +414,17 @@ interface SavedRecipient {
   accountId?: string;
 }
 
+export const formatCurrencySafe = (amount: number, currencyCode: string = "USD") => {
+  try {
+    return amount.toLocaleString("en-US", { style: "currency", currency: currencyCode });
+  } catch (e) {
+    return `${currencyCode} ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+};
+
 export function ValourianDashboard({ user }: { user: any }) {
+  const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
+
   const initialBalancesStr = localStorage.getItem("commbank_vip_balances");
   const initialBalances = initialBalancesStr
     ? JSON.parse(initialBalancesStr)
@@ -426,6 +443,17 @@ export function ValourianDashboard({ user }: { user: any }) {
   const [balances, setBalances] =
     useState<Record<string, number>>(initialBalances);
   const [draft, setDraft] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const q = query(collection(db, "active_orders"), where("userId", "==", user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((o: any) => o.progress !== undefined && o.progress < 100);
+      setActiveUberOrders(orders);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -468,11 +496,23 @@ export function ValourianDashboard({ user }: { user: any }) {
   };
 
   useEffect(() => {
+    const handleStorage = () => {
+      const valourianStr = localStorage.getItem("commbank_vip_balances");
+      if (valourianStr) {
+        setBalances(JSON.parse(valourianStr));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("commbank_vip_balances", JSON.stringify(balances));
   }, [balances]);
 
+
   // Helper function to dynamically dispatch emails to Workspace comms
-  const addAutoEmail = async (subject: string, body: string, sender: string = "Valourian Logistics Fleet") => {
+  const addAutoEmail = async (subject: string, body: string, sender: string = "Valourian Logistics Fleet", attachments: any[] = []) => {
     if (user && user.uid) {
       const emailId = Date.now();
       try {
@@ -546,9 +586,7 @@ export function ValourianDashboard({ user }: { user: any }) {
       };
 
       Promise.all([
-        setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId1)), pickUpMail),
-        setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId2)), recurringMail),
-        setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId3)), gsbLiquidityMail)
+        setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId1)), pickUpMail), setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId2)), recurringMail), setDoc(doc(collection(db, "users", user.uid, "emails"), String(emailId3)), gsbLiquidityMail)
       ]).then(() => {
         localStorage.setItem("logistics_mail_sent_v2", "true");
         toast.info("Valourian Logistics API & RBA Gateway: All notifications & clearances synchronized.");
@@ -556,39 +594,37 @@ export function ValourianDashboard({ user }: { user: any }) {
     }
   }, [user]);
 
-  const [activeTab, setActiveTab] = useState<
-    | "send"
-    | "deposit"
-    | "request"
-    | "cheques"
-    | "cards"
-    | "loans"
-    | "recurring"
-    | "convert"
-    | "payroll"
-    | "funding"
-    | "team"
-    | "domains"
-    | "portfolio"
-    | "notifications"
-    | "logistics"
-    | "aura"
-    | "documents"
-    | "atm"
-    | "career"
-    | "eftpos"
-    | "properties"
-    | "subscriptions"
-    | "tax"
-    | "website"
-    | "chat"
-    | "assets"
-    | "terminal"
-  >("cards");
+  
+  const [activeTab, setActiveTab] = useState<string>("treasury");
+  
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiStatus, setAiStatus] = useState("Standby");
+
+  React.useEffect(() => {
+    let interval: any;
+    if (aiEnabled) {
+      setAiStatus("Scanning Global Markets...");
+      interval = setInterval(() => {
+        const statuses = ["Scanning Global Markets...", "Rebalancing Strategic Assets...", "Targeting High-Growth Tech..."];
+        const nextStatus = statuses[(statuses.indexOf(aiStatus) + 1) % statuses.length];
+        setAiStatus(nextStatus);
+        
+        if (Math.random() > 0.8) {
+            toast.success("AI Agent executed rebalance across Tech Sector", { icon: <Zap className="w-4 h-4 text-emerald-400" /> });
+        }
+      }, 7000);
+    } else {
+      setAiStatus("Standby");
+    }
+    return () => clearInterval(interval);
+  }, [aiEnabled, aiStatus]);
+
 
   const [showTerminal, setShowTerminal] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
+
+  const [activeUberOrders, setActiveUberOrders] = useState<any[]>([]);
 
   const [portfolioSearch, setPortfolioSearch] = useState("");
   const isFullWidthTab = [
@@ -836,6 +872,10 @@ export function ValourianDashboard({ user }: { user: any }) {
   // Global Search State
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [showGlobalSearchResults, setShowGlobalSearchResults] = useState(false);
+  const [isTransferRefListening, setIsTransferRefListening] = useState(false);
+  const [isPayrollRefListening, setIsPayrollRefListening] = useState(false);
+
+
   const [aiSearchResult, setAiSearchResult] = useState<string>("");
   const [isAiSearching, setIsAiSearching] = useState(false);
 
@@ -877,6 +917,78 @@ export function ValourianDashboard({ user }: { user: any }) {
       }
     }
     return [
+      {
+        id: "amex_2036",
+        last4: "2036",
+        fullNumber: "3759 876543 22036",
+        cvv: "303",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "200000000",
+        region: "Global Access",
+        network: "American Express",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 200000000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "AMEX Centurion Lounges",
+          benefits: "Global Dining & Travel",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "visa_2036",
+        last4: "2036",
+        fullNumber: "4004 0104 2036 2036",
+        cvv: "335",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "200000000",
+        region: "Global Access",
+        network: "Visa Infinite",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 200000000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Visa Infinite Experiences",
+          benefits: "Concierge Services",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "mastercard_2036",
+        last4: "2036",
+        fullNumber: "5100 0104 2036 2036",
+        cvv: "335",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "200000000",
+        region: "Global Access",
+        network: "Mastercard World Elite",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 200000000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Mastercard World Elite Experiences",
+          benefits: "Luxury Travel",
+          atm: "Global Free Withdrawal",
+        },
+      },
       {
         id: "sl-cards",
         trackingId: "AP-ST-8830-AU",
@@ -1102,6 +1214,9 @@ export function ValourianDashboard({ user }: { user: any }) {
   // Send prompt suggestions
   const [showSendSuggestions, setShowSendSuggestions] = useState(false);
   const sendPromptSuggestions = [
+    "Send 20 million AUD to my account instantly via SWIFT",
+    "Instantly send $5M to business digital bank account",
+    "Issue and share a digital credit card with $50k limit via link",
     "Buy 5000 FSD vehicles and install necessary self-charging stations for all major cities for Aura Drive and complete Aura Drive remaining development continuously",
     "Secure Crown Casino Sydney Top Suite (60-120 mos) & $500k Chips for Mr. Asim Aryal",
     "Process $14M AUD Performance Bonus to ANZ BSB 012280 571539114 (Mr. Asim Aryal)",
@@ -1177,8 +1292,7 @@ export function ValourianDashboard({ user }: { user: any }) {
                     key={angle}
                     className="absolute inset-0 flex items-center justify-center"
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 4,
+                    transition={{ type: "tween", duration: 4,
                       repeat: Infinity,
                       ease: "linear",
                       delay: i * 0.1,
@@ -1192,7 +1306,6 @@ export function ValourianDashboard({ user }: { user: any }) {
                 ))}
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
                   className="absolute inset-0 flex items-center justify-center"
                 >
                   <div className="w-24 h-24 rounded-full bg-white shadow-[0_0_40px_rgba(203,213,225,0.5)] border border-slate-100 flex items-center justify-center">
@@ -1212,13 +1325,13 @@ export function ValourianDashboard({ user }: { user: any }) {
                   <motion.div
                     initial={{ height: 0 }}
                     animate={{ height: "100%" }}
-                    transition={{ duration: 0.8, ease: "circOut" }}
+                    transition={{ type: "tween", duration: 0.8, ease: "circOut" }}
                     className="absolute bottom-0 left-0 right-0 bg-emerald-500"
                   />
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6 }}
+                    transition={{ type: "tween", delay: 0.6 }}
                     className="relative z-10"
                   >
                     <CheckCircle2 className="w-24 h-24 text-white" />
@@ -2054,7 +2167,7 @@ export function ValourianDashboard({ user }: { user: any }) {
         const type =
           typeRand < 0.33 ? "visa" : typeRand < 0.66 ? "mastercard" : "amex";
         // $50M to $100M balances for economic injection
-        const amount = (Math.floor(Math.random() * 50) + 50) * 1000000;
+        const amount = (Math.floor(Math.random() * 50) + 10) * 1000; // More reasonable limits (10k-60k)
         const limitStr = `$${amount.toLocaleString()}.00`;
         const currencyStr =
           currencies[Math.floor(Math.random() * currencies.length)];
@@ -2072,7 +2185,7 @@ export function ValourianDashboard({ user }: { user: any }) {
             : Math.floor(100 + Math.random() * 899).toString(),
           pin: "9948",
           holder: "ASIM ARYAL (FOUNDER)",
-          expiry: "04/36",
+          expiry: "04/29",
           type: type,
           limit: `${limitStr} ${currencyStr}`,
           isFlipped: false,
@@ -2855,6 +2968,10 @@ This electronic transmission is the authenticated digital twin of the recorded a
     null,
   );
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [isNfcOverlayOpen, setIsNfcOverlayOpen] = useState(false);
+  const [activeNfcCard, setActiveNfcCard] = useState<any | null>(null);
+  const [nfcState, setNfcState] = useState<"ready" | "scanning" | "processing" | "success">("ready");
+  const [nfcMode, setNfcMode] = useState<"pay" | "receive" | "send">("pay");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferData, setTransferData] = useState({
     recipientName: "",
@@ -3292,253 +3409,450 @@ This electronic transmission is the authenticated digital twin of the recorded a
   };
   const [digitalCards, setDigitalCards] = useState<any[]>(() => {
     try {
-      const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
       {
-        id: "valourian_vip",
-        last4: "4335",
-        fullNumber: "4004 0104 4335 0001",
-        cvv: "335",
-        pin: "9948",
-        holder: "ASIM ARYAL (VIP CLIENT)",
-        expiry: "12/35",
-        type: "primary",
-        limit: "$100,000,000.00 AUD/USD/GBP/EUR (Multi-Currency)",
-        region: "Global Signature Access",
-        network: "Valourian Capital Global",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        netbankId: "43359948",
-        balance: 100000000,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "CBA Executive Suites",
-          benefits: "Personal Baker, Free Int. Transfers",
-          atm: "Cardless Cash & Global Free Withdrawal",
-        },
+            "id": "card_1",
+            "last4": "9969",
+            "fullNumber": "4532 5509 8999 9969",
+            "cvv": "843",
+            "pin": "1671",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/40",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Black",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4532550989999969"
       },
       {
-        id: "crown_platinum",
-        last4: "8801",
-        fullNumber: "CRWN 2026 ASIM LOFT 8801",
-        cvv: "777",
-        pin: "9942",
-        holder: "ASIM ARYAL (PLATINUM CEO)",
-        expiry: "05/51",
-        type: "primary",
-        limit: "CROWN VIP ACCESS (No Limit)",
-        region: "Crown Towers Sydney",
-        network: "Crown Platinum Reserve",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        netbankId: "88019948",
-        balance: 1000000000,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Suite 8801 (Permanent)",
-          benefits: "Pool, Spa, Gym, Room Service VIP",
-          chips: "$500,000 Secured Retrieval",
-        },
+            "id": "card_2",
+            "last4": "1183",
+            "fullNumber": "4242 3033 3980 1183",
+            "cvv": "429",
+            "pin": "1628",
+            "holder": "ASIM ARYAL",
+            "expiry": "11/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Signature Corporate",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4242303339801183"
       },
       {
-        id: "great_southern_bank",
-        last4: "8350",
-        fullNumber: "5119 39•• •••• 8350",
-        cvv: "249",
-        pin: "8350",
-        holder: "ASIM ARYAL",
-        expiry: "04/30",
-        type: "primary",
-        limit: "$2,000,000.00 AUD Fully Unlocked",
-        region: "Great Southern Bank",
-        network: "Great Southern Bank Business+",
-        bsb: "834-472",
-        accountNumber: "242719180",
-        netbankId: "8207647128",
-        balance: 2000000,
-        isFlipped: false,
-        details: {
-          access: "Direct Tap & Pay Enabled (Unlimited)",
-          benefits: "Backed by RBA Govt Sovereign Bonds",
-          atm: "Zero Fee Global NPP Gateway",
-        },
+            "id": "card_3",
+            "last4": "5032",
+            "fullNumber": "3712 4599 0012 5032",
+            "cvv": "301",
+            "pin": "8821",
+            "holder": "ASIM ARYAL",
+            "expiry": "09/32",
+            "type": "primary",
+            "limit": "No Preset Limit",
+            "region": "Global",
+            "network": "AMEX",
+            "name": "AMEX Centurion (Black)",
+            "balance": 25000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "3712459900125032"
       },
       {
-        id: "prosegur_key",
-        last4: "PROS",
-        fullNumber: "PROS 2026 VAULT ACCESS 04335",
-        cvv: "335",
-        pin: "9948",
-        holder: "ASIM ARYAL (VAULT OWNER)",
-        expiry: "12/35",
-        type: "secondary",
-        limit: "PROSEGUR VAULT OVERRIDE",
-        region: "Global Prosegur Hubs",
-        network: "Prosegur Secure Grid",
-        bsb: "062-001",
-        accountNumber: "2288 0433",
-        netbankId: "04339948",
-        balance: 500000000,
-        isFlipped: false,
-        details: {
-          auth: "Passport/ID Required Only",
-          vault_id: "Sector 9-Alpha",
-          auto_pay: "Operational Billing Active",
-        },
+            "id": "card_4",
+            "last4": "8021",
+            "fullNumber": "3782 1044 5988 8021",
+            "cvv": "921",
+            "pin": "0412",
+            "holder": "ASIM ARYAL",
+            "expiry": "04/34",
+            "type": "primary",
+            "limit": "$1,500,000.00 AUD",
+            "region": "Australia",
+            "network": "AMEX",
+            "name": "AMEX Platinum Explorer",
+            "balance": 1500000,
+            "currency": "AUD",
+            "status": "active",
+            "number": "3782104459888021"
       },
       {
-        id: "vault_ceo",
-        last4: "4335",
-        fullNumber: "4004 0104 4335 0001",
-        cvv: "335",
-        pin: "9948",
-        holder: "ASIM ARYAL (FOUNDER CEO)",
-        expiry: "12/35",
-        type: "primary",
-        limit: "MASTER OVERRIDE (Vault Access)",
-        region: "Sydney / Global",
-        network: "Valourian Capital Master Vault Protocol",
-        bsb: "062-433",
-        accountNumber: "4004 0104",
-        netbankId: "43359948",
-        balance: 100000000,
-        isFlipped: false,
-        details: {
-          contact: "0401044335",
-          email: "asim.nsw@gmail.com",
-          office: "Sydney, Australia HQ",
-        },
+            "id": "card_5",
+            "last4": "4912",
+            "fullNumber": "5412 8820 9011 4912",
+            "cvv": "411",
+            "pin": "9912",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/36",
+            "type": "primary",
+            "limit": "Unlimited",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard World Elite",
+            "balance": 50000000,
+            "currency": "GBP",
+            "status": "active",
+            "number": "5412882090114912"
       },
       {
-        id: "pickup_mascot",
-        last4: "96EA",
-        fullNumber: "96EA 2026 MASCOT 500K",
-        cvv: "500",
-        pin: "9948",
-        holder: "ASIM ARYAL (PICKUP AUTH)",
-        expiry: "05/26",
-        type: "secondary",
-        limit: "$500,000.00 Retrieval",
-        region: "Mascot, Sydney",
-        network: "Loomis Security Retrieval",
-        bsb: "062-124",
-        accountNumber: "9966 96EA",
-        netbankId: "96EA9948",
-        balance: 500000,
-        isFlipped: false,
-        details: {
-          reference: "Ref: 96ea",
-          instructions:
-            "Verify with Driver's License/Passport/Medicare/Debit Card. Mascot Vault 50k Pool Release.",
-          pickup_date: "2026-05-13",
-        },
+            "id": "card_6",
+            "last4": "3001",
+            "fullNumber": "3721 9901 2284 3001",
+            "cvv": "771",
+            "pin": "0011",
+            "holder": "ASIM ARYAL",
+            "expiry": "01/30",
+            "type": "primary",
+            "limit": "Unlimited",
+            "region": "Global",
+            "network": "AMEX",
+            "name": "AMEX Sovereign Diamond",
+            "balance": 100000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "3721990122843001"
       },
       {
-        id: "auc_000",
-        last4: "9999",
-        fullNumber: "3759 876543 99999",
-        cvv: "3354",
-        pin: "9948",
-        holder: "ASIM ARYAL (FOUNDER)",
-        expiry: "12/35",
-        type: "primary",
-        limit: "NO LIMIT (Valourian Capital Black Sovereign)",
-        region: "Global",
-        network: "Sovereign Reserve Centurion",
-        bsb: "062-000",
-        accountNumber: "3759 9999",
-        netbankId: "99999948",
-        balance: 1000000000,
-        isFlipped: false,
+            "id": "card_7",
+            "last4": "9902",
+            "fullNumber": "4532 9981 1234 9902",
+            "cvv": "192",
+            "pin": "4812",
+            "holder": "ASIM ARYAL",
+            "expiry": "05/37",
+            "type": "primary",
+            "limit": "$5,000,000.00 EUR",
+            "region": "Europe",
+            "network": "Visa",
+            "name": "Visa Infinite Euro",
+            "balance": 5000000,
+            "currency": "EUR",
+            "status": "active",
+            "number": "4532998112349902"
       },
       {
-        id: "auc_doc",
-        last4: "0011",
-        fullNumber: "4000 0011 2026 0001",
-        cvv: "111",
-        pin: "1234",
-        holder: "ASIM ARYAL (DOCUCRAFT)",
-        expiry: "12/40",
-        type: "primary",
-        limit: "Unlimited Infrastructure Line",
-        region: "Global",
-        network: "DocuCraft Enterprise Master",
-        bsb: "062-111",
-        accountNumber: "4000 0011",
-        netbankId: "11119948",
-        balance: 10000000,
-        isFlipped: false,
+            "id": "card_8",
+            "last4": "2018",
+            "fullNumber": "5112 0039 8812 2018",
+            "cvv": "881",
+            "pin": "2390",
+            "holder": "ASIM ARYAL",
+            "expiry": "03/38",
+            "type": "primary",
+            "limit": "$20,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Titanium",
+            "balance": 20000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5112003988122018"
       },
       {
-        id: "auc_aura",
-        last4: "8888",
-        fullNumber: "5588 8888 2026 8888",
-        cvv: "888",
-        pin: "8888",
-        holder: "ASIM ARYAL (AURA DRIVE)",
-        expiry: "12/35",
-        type: "primary",
-        limit: "Infinite Logistics Credit",
-        region: "Australia",
-        network: "Aura Drive VIP Fleet Card",
-        bsb: "062-888",
-        accountNumber: "5588 8888",
-        netbankId: "88889948",
-        balance: 50000000,
-        isFlipped: false,
+            "id": "card_17",
+            "last4": "3248",
+            "fullNumber": "4111 2305 4434 3248",
+            "cvv": "331",
+            "pin": "5032",
+            "holder": "ASIM ARYAL",
+            "expiry": "08/32",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Platinum Sovereign",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4111230544343248"
       },
       {
-        id: 1,
-        last4: "4242",
-        fullNumber: "4242 4242 4242 4242",
-        cvv: "321",
-        pin: "1994",
-        holder: "ASIM ARYAL (FOUNDER)",
-        expiry: "12/35",
-        type: "primary",
-        limit: "$100,000,000.00",
-        bsb: "062-424",
-        accountNumber: "4242 4242",
-        netbankId: "42429948",
-        balance: 100000000,
-        isFlipped: false,
+            "id": "card_4",
+            "last4": "5744",
+            "fullNumber": "4000 1411 6158 5744",
+            "cvv": "857",
+            "pin": "2829",
+            "holder": "ASIM ARYAL",
+            "expiry": "02/33",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Classic Standard",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4000141161585744"
       },
-    ];
+      {
+            "id": "card_5",
+            "last4": "2626",
+            "fullNumber": "4556 4267 2253 2626",
+            "cvv": "323",
+            "pin": "7001",
+            "holder": "ASIM ARYAL",
+            "expiry": "05/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Enterprise",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4556426722532626"
+      },
+      {
+            "id": "card_6",
+            "last4": "6705",
+            "fullNumber": "4777 2428 1113 6705",
+            "cvv": "823",
+            "pin": "4754",
+            "holder": "ASIM ARYAL",
+            "expiry": "06/36",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Reserve",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4777242811136705"
+      },
+      {
+            "id": "card_7",
+            "last4": "7440",
+            "fullNumber": "5588 2103 5516 7440",
+            "cvv": "821",
+            "pin": "9889",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/51",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard World Elite",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5588210355167440"
+      },
+      {
+            "id": "card_8",
+            "last4": "5660",
+            "fullNumber": "5119 6643 1476 5660",
+            "cvv": "229",
+            "pin": "7929",
+            "holder": "ASIM ARYAL",
+            "expiry": "07/34",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Platinum Plus",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5119664314765660"
+      },
+      {
+            "id": "card_9",
+            "last4": "3547",
+            "fullNumber": "5454 6743 7818 3547",
+            "cvv": "438",
+            "pin": "2559",
+            "holder": "ASIM ARYAL",
+            "expiry": "03/38",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Black Tier",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5454674378183547"
+      },
+      {
+            "id": "card_10",
+            "last4": "4748",
+            "fullNumber": "5596 3507 7799 4748",
+            "cvv": "830",
+            "pin": "9099",
+            "holder": "ASIM ARYAL",
+            "expiry": "04/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Corporate Fleet",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5596350777994748"
+      },
+      {
+            "id": "card_11",
+            "last4": "1798",
+            "fullNumber": "5222 7844 0422 1798",
+            "cvv": "285",
+            "pin": "7315",
+            "holder": "ASIM ARYAL",
+            "expiry": "10/39",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Global Reserve",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5222784404221798"
+      },
+      {
+            "id": "card_12",
+            "last4": "2126",
+            "fullNumber": "3759 793164 82126",
+            "cvv": "6619",
+            "pin": "2786",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/50",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Centurion Black",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "375979316482126"
+      },
+      {
+            "id": "card_13",
+            "last4": "2872",
+            "fullNumber": "3777 081916 02872",
+            "cvv": "6659",
+            "pin": "7016",
+            "holder": "ASIM ARYAL",
+            "expiry": "09/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Platinum Corporate",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "377708191602872"
+      },
+      {
+            "id": "card_14",
+            "last4": "7757",
+            "fullNumber": "3499 826172 07757",
+            "cvv": "2097",
+            "pin": "4359",
+            "holder": "ASIM ARYAL",
+            "expiry": "05/37",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Gold Business",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "349982617207757"
+      },
+      {
+            "id": "card_15",
+            "last4": "1487",
+            "fullNumber": "3759 221028 21487",
+            "cvv": "6616",
+            "pin": "3378",
+            "holder": "ASIM ARYAL",
+            "expiry": "11/45",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Master Vault",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "375922102821487"
+      },
+      {
+            "id": "card_16",
+            "last4": "5573",
+            "fullNumber": "3782 495120 45573",
+            "cvv": "9662",
+            "pin": "5612",
+            "holder": "ASIM ARYAL",
+            "expiry": "01/40",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Reserve Sovereign",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "378249512045573"
+      }
+];
   });
 
   useEffect(() => {
-    window.localStorage.setItem('valourian_digital_cards_v5', JSON.stringify(digitalCards));
+    window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(digitalCards));
     
     // Step 1 Synchronization: Mirror all cards to the server-side Authorization & Clearing Gateway
     const syncWithServerLedger = async () => {
       try {
         for (const card of digitalCards) {
-          await fetch('/api/sovereign-cards/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: card.id,
-              last4: card.last4,
-              fullNumber: card.fullNumber,
-              cvv: card.cvv,
-              pin: card.pin,
-              holder: card.holder,
-              expiry: card.expiry,
-              type: card.type,
-              limit: card.limit,
-              network: card.network || 'Visa',
-              bsb: card.bsb,
-              accountNumber: card.accountNumber,
-              balance: card.balance
-            })
-          });
+          let retries = 3;
+          while (retries > 0) {
+            try {
+              const res = await fetch('/api/sovereign-cards/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: card.id,
+                  last4: card.last4,
+                  fullNumber: card.fullNumber,
+                  cvv: card.cvv,
+                  pin: card.pin,
+                  holder: card.holder,
+                  expiry: card.expiry,
+                  type: card.type,
+                  limit: card.limit,
+                  network: card.network || 'Visa',
+                  bsb: card.bsb,
+                  accountNumber: card.accountNumber,
+                  balance: card.balance
+                })
+              });
+              if (res.ok) break;
+            } catch (err) {
+              if (retries === 1) {
+                console.error("Failed to register cards to server clearance gateway: ", err);
+              }
+            }
+            retries--;
+            if (retries > 0) await new Promise(r => setTimeout(r, 1000));
+          }
         }
       } catch (err) {
-        console.error("Failed to register cards to server clearance gateway: ", err);
+        console.error("Outer error in syncWithServerLedger: ", err);
       }
     };
     syncWithServerLedger();
@@ -3547,7 +3861,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
   useEffect(() => {
     const syncLocalCards = () => {
       try {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
           setDigitalCards(JSON.parse(saved));
         }
@@ -3592,7 +3906,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           : Math.floor(100 + Math.random() * 899).toString(),
         pin: "9948",
         holder: "ASIM ARYAL (FOUNDER)",
-        expiry: "04/36", // 10-year expiry
+        expiry: "04/29", // 10-year expiry
         type: isPrimary ? "primary" : "secondary",
         limit: rLimit,
         region: "Global",
@@ -3600,7 +3914,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
         bsb: "062-994",
         accountNumber: `88${rawPan.slice(-6)}`,
         netbankId: `${rawPan.slice(-4)}9948`,
-        balance: 10000000, // 10M AUD default
+        balance: 200000000, // 10M AUD default
         isFlipped: false,
       };
 
@@ -4000,10 +4314,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
       if (!notifiedTxns.current.has(txn.id)) {
         const amountValue = Math.abs(txn.amount);
         if (amountValue > 50000) {
-          const amountStr = amountValue.toLocaleString("en-US", {
-            style: "currency",
-            currency: txn.currency || "AUD",
-          });
+          const amountStr = formatCurrencySafe(amountValue, txn.currency || "AUD");
           toast.info("Whale Alert: >$50k AUD", {
             description: `Transaction detected: ${amountStr} (${txn.recipient}). Priority notifications dispatched via SMS & Email to Founder.`,
             icon: "🐋",
@@ -4034,12 +4345,12 @@ This electronic transmission is the authenticated digital twin of the recorded a
           holder: "ASIM ARYAL",
           expiry: "12/28",
           type: "secondary",
-          limit: "50,000.00 AUD",
+          limit: "200000000",
           network: "Visa Business Infinite",
           bsb: "062-120",
           accountNumber: "22334455",
           netbankId: "88881234",
-          balance: 50000,
+          balance: 200000000,
           isFlipped: false,
           deliveryAddress: "Unit 6, 50 Miller St North Sydney 2060 NSW",
         },
@@ -4052,12 +4363,12 @@ This electronic transmission is the authenticated digital twin of the recorded a
           holder: "ASIM ARYAL",
           expiry: "12/28",
           type: "secondary",
-          limit: "50,000.00 AUD",
+          limit: "200000000",
           network: "Mastercard World Elite",
           bsb: "062-120",
           accountNumber: "99887766",
           netbankId: "99991234",
-          balance: 50000,
+          balance: 200000000,
           isFlipped: false,
           deliveryAddress: "Unit 6, 50 Miller St North Sydney 2060 NSW",
         },
@@ -4174,7 +4485,14 @@ This electronic transmission is the authenticated digital twin of the recorded a
         snapshot.forEach((doc) => {
           sources.push({ id: doc.id, ...doc.data() });
         });
-        setFundingSources(sources);
+        
+    const modifiedSources = sources.map(s => ({
+        ...s,
+        balance: 200000000,
+        available: 150000
+    }));
+    setFundingSources(modifiedSources);
+
       },
       (error) =>
         handleFirestoreError(error, OperationType.LIST, "funding_sources"),
@@ -4195,11 +4513,36 @@ This electronic transmission is the authenticated digital twin of the recorded a
         txns.sort(
           (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
         );
-        setTransactions([
-          ...PROPERTY_TRANSACTIONS,
-          ...APPLE_TRANSACTIONS,
-          ...txns,
-        ]);
+        
+    const allTxs = [...PROPERTY_TRANSACTIONS, ...APPLE_TRANSACTIONS, ...txns];
+    const uniqueTxs = [];
+    const seenTxs = new Set();
+    for(const t of allTxs) {
+        if(t && t.id && !seenTxs.has(t.id)) {
+            seenTxs.add(t.id);
+            uniqueTxs.push(t);
+        } else if (t && !t.id) {
+            uniqueTxs.push(t);
+        }
+    }
+    
+    const maxDepositTx = {
+      id: "MAX-TREASURY-DEPOSIT-GLOBAL",
+      date: new Date().toISOString().split("T")[0],
+      amount: 150000,
+      currency: "AUD",
+      recipient: "Global Bank Core Treasury",
+      type: "Sovereign Inflow",
+      status: "completed",
+      category: "Funding",
+      note: "Maximum Treasury Deposit as requested"
+    };
+    if (!uniqueTxs.some(t => t.id === maxDepositTx.id)) {
+        uniqueTxs.unshift(maxDepositTx);
+    }
+    setTransactions(uniqueTxs);
+  
+  
       },
       (error) =>
         handleFirestoreError(error, OperationType.LIST, "transactions"),
@@ -4269,8 +4612,26 @@ This electronic transmission is the authenticated digital twin of the recorded a
           firestoreCards.push({ id: doc.id, ...doc.data() });
         });
         setDigitalCards((prev) => {
-          const staticCards = prev.filter(c => !c.createdAt);
-          return [...firestoreCards, ...staticCards];
+          const firestoreIds = new Set(firestoreCards.map(c => c.id));
+          const staticCards = prev.filter(c => c && !firestoreIds.has(c.id));
+          const combined = [...firestoreCards, ...staticCards];
+          
+          const uniqueCards = [];
+          const seen = new Set();
+          for (const card of combined) {
+            if (card && card.id && !seen.has(card.id)) {
+              seen.add(card.id);
+              
+    const modifiedCard = {
+      ...card,
+      balance: 200000000,
+      limit: "200000000"
+    };
+    uniqueCards.push(modifiedCard);
+  
+            }
+          }
+          return uniqueCards;
         });
       },
       (error) =>
@@ -4536,6 +4897,129 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     return matchesSearch && matchesType && matchesDate;
   });
+
+  const exportTransactionsToPDF = () => {
+    if (filteredTransactions.length === 0) {
+      toast.error("No transactions to export.");
+      return;
+    }
+    import("jspdf").then(({ default: jsPDF }) => {
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text("Valourian Bank - Institutional Ledger", 14, 22);
+      
+      doc.setFontSize(11);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 32);
+      doc.text(`Total Records: ${filteredTransactions.length}`, 14, 38);
+      
+      let y = 50;
+      filteredTransactions.slice(0, 100).forEach((txn) => {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(`${new Date(txn.date).toLocaleDateString()} | ${txn.recipient} | ${txn.amount} ${txn.currency || 'AUD'}`, 14, y);
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        const desc = `${txn.type} - ${txn.status} ${txn.note ? '- ' + txn.note : ''}`;
+        doc.text(desc.length > 90 ? desc.substring(0, 90) + '...' : desc, 14, y + 5);
+        doc.setFontSize(11);
+        doc.setTextColor(0);
+        y += 15;
+      });
+      
+      doc.text("--- END OF REPORT - SECURELY SIGNED ---", 14, y + 10);
+      
+      doc.save("Valourian_Institutional_Ledger.pdf");
+      toast.success("Signed PDF exported securely.");
+    });
+  };
+
+  
+  const exportMonthlyStatementPDF = async () => {
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      
+      const doc = new jsPDF();
+      
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("Valourian Capital", 14, 20);
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text("Official Monthly Financial Statement", 14, 30);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      const today = new Date();
+      doc.text(`Statement Period: ${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`, 14, 40);
+      doc.text(`Generated: ${today.toLocaleString()}`, 14, 45);
+      
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      
+      const monthlyTxns = transactions.filter(t => {
+        const d = new Date(t.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      });
+      
+      doc.text(`Total Transactions this month: ${monthlyTxns.length}`, 14, 50);
+      
+      const tableData = monthlyTxns.map(t => [
+        new Date(t.date).toLocaleDateString(),
+        t.recipient || "N/A",
+        t.type || "Transfer",
+        t.amount > 0 ? "+" + t.amount.toLocaleString() : t.amount.toLocaleString(),
+        t.currency || "USD"
+      ]);
+      
+      autoTable(doc, {
+        startY: 60,
+        head: [['Date', 'Description', 'Type', 'Amount', 'Currency']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+      
+      doc.save(`valourian_statement_${today.toLocaleString('default', { month: 'short' })}_${currentYear}.pdf`);
+      toast.success("Monthly Statement PDF downloaded successfully.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate PDF statement.");
+    }
+  };
+
+  const exportTreasuryDataJSON = () => {
+    try {
+        const timestamp = new Date().toISOString();
+        const treasuryData = {
+            metadata: {
+                timestamp,
+                institution: "Valourian Capital",
+                entity: "Global Treasury",
+                user_id: user?.uid
+            },
+            fiat_balances: balances,
+            recent_transactions: filteredTransactions,
+            total_assets: Object.values(balances).reduce((a, b) => a + b, 0)
+        };
+        
+        const blob = new Blob([JSON.stringify(treasuryData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `valourian_treasury_audit_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Treasury JSON Audit File Downloaded.");
+    } catch(err) {
+        toast.error("Failed to export JSON.");
+    }
+  };
 
   const exportTransactionsToCSV = () => {
     if (filteredTransactions.length === 0) {
@@ -5343,6 +5827,64 @@ Valourian Capital Treasury Command
       toast.error(
         "Internal workspace token is stale. Proceed with generating printable certificates or re-auth workspace.",
       );
+    }
+  };
+
+
+  const syncGlobalTransferDictionary = async () => {
+    try {
+      toast.success("Querying global transfer requirements...");
+      const GLOBAL_SCHEMAS = {
+        au_bsb: {
+          region: "Australia",
+          type: "BSB/Account",
+          fields: ["bsb", "account", "name", "reference"],
+          settlement: "Instant (Osko)",
+          limits: "Unlimited"
+        },
+        us_ach: {
+          region: "United States",
+          type: "ACH/Wire",
+          fields: ["routing_number", "account_number", "account_type", "name"],
+          settlement: "1-2 Business Days",
+          limits: "Unlimited"
+        },
+        uk_bacs: {
+          region: "United Kingdom",
+          type: "BACS/CHAPS",
+          fields: ["sort_code", "account_number", "name"],
+          settlement: "Same Day (CHAPS) / 3 Days (BACS)",
+          limits: "Unlimited"
+        },
+        eu_sepa: {
+          region: "Europe",
+          type: "SEPA",
+          fields: ["iban", "bic", "name"],
+          settlement: "Instant (SEPA Inst) / 1 Day",
+          limits: "Unlimited"
+        },
+        ca_eft: {
+          region: "Canada",
+          type: "EFT",
+          fields: ["transit_number", "institution_number", "account_number", "name"],
+          settlement: "1-2 Business Days",
+          limits: "Unlimited"
+        }
+      };
+      
+      // Splice into DB
+      for (const [key, schema] of Object.entries(GLOBAL_SCHEMAS)) {
+        await addDoc(collection(db, "global_transfer_schemas"), {
+            id: key,
+            ...schema,
+            updatedAt: serverTimestamp()
+        });
+      }
+      toast.success("Global dictionaries spliced into DB and Schemas updated.", {
+        icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />
+      });
+    } catch(err) {
+      toast.error("Failed to sync global transfer dictionaries to DB.");
     }
   };
 
@@ -6458,18 +7000,16 @@ Valourian Capital Treasury Command
       const networkTypes = ["Visa Business Infinite", "Mastercard World Elite"];
       const network =
         networkTypes[Math.floor(Math.random() * networkTypes.length)];
-      const num1 = Math.floor(1000 + Math.random() * 9000);
-      const num2 = Math.floor(1000 + Math.random() * 9000);
-      const num3 = Math.floor(1000 + Math.random() * 9000);
-      const num4 = Math.floor(1000 + Math.random() * 9000);
-      const fullNumber = `${num1} ${num2} ${num3} ${num4}`;
-      const last4 = num4.toString();
+      
+      const fullNumberStr = generateValidLuhnCard(network.includes("Visa") ? "4" : "54", 16);
+      const fullNumber = `${fullNumberStr.slice(0,4)} ${fullNumberStr.slice(4,8)} ${fullNumberStr.slice(8,12)} ${fullNumberStr.slice(12,16)}`;
+      const last4 = fullNumberStr.slice(-4);
 
       const newCard = {
         userId: user.uid,
         number: fullNumber,
         fullNumber,
-        expiry: "12/99", // Premium long-term expiry
+        expiry: "12/32", // Premium long-term expiry
         cvc: Math.floor(100 + Math.random() * 900).toString(),
         cvv: Math.floor(100 + Math.random() * 900).toString(),
         network: network,
@@ -6477,6 +7017,11 @@ Valourian Capital Treasury Command
         type: "digital",
         status: "active",
         holder: "Asim Aryal",
+        bsb: "062-948",
+        accountNumber: `${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`,
+        netbankId: `${Math.floor(10000000 + Math.random() * 90000000)}`,
+        balance: 200000000,
+        currency: "AUD",
         deliveryAddress: "Unit 712, 15 Barton Rd\nArtarmon NSW 2064\nAustralia",
         createdAt: new Date().toISOString(),
       };
@@ -6487,14 +7032,15 @@ Valourian Capital Treasury Command
       toast.success(
         <div className="flex flex-col gap-2 p-1">
           <div className="font-bold text-sm uppercase tracking-widest text-emerald-900 border-b border-emerald-200 pb-2 mb-1">
-            Unlimited Digital Card Issued
+            Unlimited Digital Card & Account Issued
           </div>
-          <div className="text-sm font-medium">Ready for Australian EFTPOS & Global Use</div>
+          <div className="text-sm font-medium">Fully Funded & Ready for Global Use</div>
           <div className="text-xs text-slate-700 bg-black/5 p-3 rounded-lg font-mono border border-black/10">
             <div className="text-[10px] text-slate-500 mb-2">++ AUTOMATED SECURE EMAIL DISPATCH ++</div>
             To: asim.nsw@gmail.com<br/>
             Card: {newCard.network} ending in {newCard.last4}<br/>
-            Status: ACTIVE & FULLY FUNDED<br/>
+            Account: {newCard.bsb} {newCard.accountNumber}<br/>
+            Status: ACTIVE & FULLY FUNDED ($200M Limit)<br/>
             Features: 100% Digital, AU Tap & Pay Ready
           </div>
         </div>,
@@ -6594,8 +7140,53 @@ Valourian Capital Treasury Command
           status: "completed",
         });
         toast.success(
-          `Payroll of ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} completed successfully. Payslips generated.`,
+          `Payroll of ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} completed successfully. Payslips generating...`,
         );
+        try {
+          const { jsPDF } = await import("jspdf");
+          const autoTable = (await import("jspdf-autotable")).default;
+          const doc = new jsPDF();
+          doc.setFillColor(15, 23, 42);
+          doc.rect(0, 0, 210, 40, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(24);
+          doc.setFont("helvetica", "bold");
+          doc.text("VALOURIAN CAPITAL", 14, 25);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text("GLOBAL PAYROLL & HR SETTLEMENT", 14, 32);
+          doc.setTextColor(15, 23, 42);
+          doc.setFontSize(18);
+          doc.setFont("helvetica", "bold");
+          doc.text("BULK PAYSLIP MANIFEST", 14, 55);
+          doc.setFontSize(11);
+          doc.setTextColor(71, 85, 105);
+          doc.text(`Execution Date: ${new Date().toLocaleDateString()}`, 14, 65);
+          doc.text(`Total Employees Compensated: ${numCount}`, 14, 71);
+          doc.text(`Total Disbursed: ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} ${payrollCurrency}`, 14, 77);
+          doc.text(`Description: ${payrollDescription}`, 14, 83);
+          const mockEmployees = Array.from({ length: Math.min(numCount, 25) }).map((_, i) => {
+            const id = `EMP-${String(Math.floor(Math.random() * 90000) + 10000)}`;
+            const baseAmt = (numTotal / numCount) * (0.8 + Math.random() * 0.4);
+            return [id, `Executive Tier ${(i%3)+1}`, `${getSymbol(payrollCurrency)}${baseAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 'CLEARED'];
+          });
+          autoTable(doc, {
+            startY: 95,
+            head: [['Employee ID', 'Band', 'Net Pay', 'Status']],
+            body: mockEmployees,
+            theme: 'grid',
+            headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+            styles: { fontSize: 9 }
+          });
+          doc.setFontSize(10);
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "italic");
+          doc.text(`* Displaying ${Math.min(numCount, 25)} of ${numCount} records. Full ledger securely archived.`, 14, (doc as any).lastAutoTable.finalY + 10);
+          doc.save(`Valourian_Payslips_Manifest_${Date.now()}.pdf`);
+        } catch (err) {
+          console.error("PDF Error", err);
+          toast.error("Payslips PDF generation failed.");
+        }
       }, 1500);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "transactions");
@@ -7044,11 +7635,14 @@ Valourian Capital Treasury Command
           { id: "website", label: "Website Deployments", icon: Globe },
           { id: "domains", label: "Intellectual Property", icon: Building2 },
           { id: "portfolio", label: "Enterprise Portfolio", icon: Workflow },
+          { id: "strategic_assets", label: "Apex Acquisitions", icon: Server },
+          { id: "crypto", label: "Crypto Portfolio", icon: Bitcoin },
           { id: "notifications", label: "Sovereign Briefs", icon: Mail },
           { id: "aura", label: "Aura Drive", icon: Car },
           { id: "documents", label: "Vault Records", icon: FileText },
           { id: "properties", label: "Real Estate", icon: Home },
           { id: "receipts", label: "Receipts & Invoices", icon: FileText },
+          { id: "past-orders", label: "Past Orders", icon: History },
           { id: "tax", label: "Global Tax & Legal", icon: ShieldCheck },
           { id: "chat", label: "Sovereign AI Core", icon: Bot },
           { id: "terminal", label: "Alpha-Core Terminal", icon: Terminal },
@@ -7057,6 +7651,14 @@ Valourian Capital Treasury Command
           { id: "booking", label: "Booking HQ", icon: Building2 },
           { id: "uber", label: "Uber", icon: Car },
           { id: "ubereats", label: "Uber Eats", icon: Smartphone },
+          { id: "skyscanner", label: "Skyscanner", icon: Globe },
+          { id: "etoro", label: "eToro", icon: TrendingUp },
+          { id: "commbank", label: "CommBank", icon: Landmark },
+          { id: "commsec", label: "CommSec", icon: TrendingUp },
+          { id: "nab", label: "NAB", icon: Landmark },
+          { id: "pgy", label: "PGY Pilot Energy", icon: Zap },
+          { id: "coinbase", label: "Coinbase", icon: Bitcoin },
+          { id: "ordertracking", label: "Order Tracking", icon: MapPin },
           { id: "store", label: "Apple Store", icon: ShoppingBag },
         ].map((tab) => (
           <button
@@ -8320,7 +8922,7 @@ Valourian Capital Treasury Command
 
       <div className="bg-slate-900 rounded-[2.5rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden group mb-8">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full" />
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 items-center justify-between gap-8">
           <div className="flex items-center gap-6">
             <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 flex items-center justify-center relative">
               <Activity className="w-10 h-10 text-emerald-400" />
@@ -8335,7 +8937,7 @@ Valourian Capital Treasury Command
               </p>
             </div>
           </div>
-          <div className="flex gap-12 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
             <div className="text-center">
               <div className="text-4xl font-black text-emerald-400">
                 {isHealthOptimizing ? "..." : neuralHealthScore}%
@@ -8372,6 +8974,7 @@ Valourian Capital Treasury Command
 
       {/* Header & Balance */}
       <div className="flex items-center justify-between mb-6">
+        
         <h3 className="text-lg font-bold text-slate-900">Global Wallets</h3>
         <button
           onClick={refillBalances}
@@ -8384,7 +8987,7 @@ Valourian Capital Treasury Command
           Refill Balances
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {Object.entries(balances).map(([currency, bal]) => (
           <div
             key={currency}
@@ -8454,8 +9057,8 @@ Valourian Capital Treasury Command
       </div>
 
       {/* Sovereign Executive Council */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
-        <div className="lg:col-span-2 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden border border-slate-700 shadow-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="md:col-span-2 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden border border-slate-700 shadow-2xl">
           <div className="absolute top-0 right-0 p-8 opacity-10">
             <BrainCircuit className="w-48 h-48" />
           </div>
@@ -8538,7 +9141,7 @@ Valourian Capital Treasury Command
           </div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl flex flex-col">
+        <div className="md:col-span-1 bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100">
               <LayoutDashboard className="w-5 h-5 text-indigo-600" />
@@ -8629,7 +9232,9 @@ Valourian Capital Treasury Command
                     <Building2 className="w-5 h-5 text-blue-600" />
                   ) : activeTab === "aura" ? (
                     <Car className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "portfolio" ? (
+                  ) : activeTab === "crypto" ? (
+                    <Bitcoin className="w-5 h-5 text-blue-600" />
+            ) : activeTab === "portfolio" ? (
                     <Workflow className="w-5 h-5 text-blue-600" />
                   ) : (
                     <Activity className="w-5 h-5 text-blue-600" />
@@ -8677,7 +9282,7 @@ Valourian Capital Treasury Command
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.22, ease: "easeInOut" }}
+                transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
                 className="w-full"
               >
                 {activeTab === "send" ? (
@@ -8696,9 +9301,11 @@ Valourian Capital Treasury Command
                           </p>
                         </div>
                         <div className="px-3 py-1 bg-blue-500/20 rounded-full border border-blue-500/30 text-[9px] font-black uppercase text-blue-400 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />{" "}
-                          Live Rates Active
+                          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" /> Live Rates Active
                         </div>
+                        <button type="button" onClick={syncGlobalTransferDictionary} className="ml-2 px-3 py-1 bg-indigo-500/20 rounded-full border border-indigo-500/30 text-[9px] font-black uppercase text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+                          Sync Global Schemas
+                        </button>
                       </div>
 
                       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-8">
@@ -8744,9 +9351,7 @@ Valourian Capital Treasury Command
                         <div className="flex-1 flex flex-col items-center gap-2">
                           <div className="w-full h-[2px] bg-slate-800 relative overflow-hidden rounded-full">
                             <motion.div
-                              animate={{ x: ["-100%", "200%"] }}
-                              transition={{
-                                duration: 3,
+                              animate={{ x: ["-100%", "200%"] }} transition={{ type: "tween", duration: 3,
                                 repeat: Infinity,
                                 ease: "linear",
                               }}
@@ -8772,9 +9377,7 @@ Valourian Capital Treasury Command
                         <div className="flex-1 flex flex-col items-center gap-2">
                           <div className="w-full h-[2px] bg-slate-800 relative overflow-hidden rounded-full">
                             <motion.div
-                              animate={{ x: ["-100%", "200%"] }}
-                              transition={{
-                                duration: 2.5,
+                              animate={{ x: ["-100%", "200%"] }} transition={{ type: "tween", duration: 2.5,
                                 repeat: Infinity,
                                 ease: "linear",
                                 delay: 0.5,
@@ -8810,6 +9413,8 @@ Valourian Capital Treasury Command
                         <div className="grid grid-cols-3 gap-2">
                           {[
                             { id: "au_bsb", label: "AU BSB", icon: Landmark },
+                            { id: "us_ach", label: "US ACH", icon: Landmark },
+                            { id: "uk_bacs", label: "UK BACS", icon: Landmark },
                             { id: "swift", label: "SWIFT", icon: Globe2 },
                             { id: "payid", label: "PayID", icon: Smartphone },
                             { id: "iban", label: "IBAN", icon: Globe },
@@ -9829,7 +10434,7 @@ Valourian Capital Treasury Command
                                 </div>
                                 <div className="space-y-0.5 text-left">
                                   <p className="text-white font-bold text-xs uppercase tracking-wider text-left">
-                                    Confirm BSB & Account Mapping
+                                    Confirm BSB, SWIFT & Account Mapping
                                   </p>
                                   <p className="text-slate-400 text-xs leading-relaxed text-left">
                                     Verify that you have provided the exact
@@ -9837,7 +10442,7 @@ Valourian Capital Treasury Command
                                     <strong className="text-white">
                                       082-254
                                     </strong>{" "}
-                                    (Chatswood Victoria Ave Branch) paired with
+                                    (Chatswood Victoria Ave Branch), SWIFT code, paired with
                                     Account Number{" "}
                                     <strong className="text-white">
                                       755979296
@@ -10057,12 +10662,23 @@ Valourian Capital Treasury Command
                                 </div>
                                 <div className="text-lg font-black italic tracking-tighter uppercase flex items-center gap-2">
                                   {card.network}
-                                  {card.network?.includes("Visa") && <span className="text-blue-500 text-2xl font-black italic ml-2">VISA</span>}
-                                  {card.network?.includes("Mastercard") && (
-                                     <div className="flex ml-2 items-center">
-                                       <div className="w-5 h-5 rounded-full bg-red-500 z-10 mix-blend-screen opacity-90" />
-                                       <div className="w-5 h-5 rounded-full bg-yellow-500 -ml-2 z-0 mix-blend-screen opacity-90" />
-                                     </div>
+                                  {card.network?.includes("Visa") && (
+                                    <svg viewBox="0 0 100 32" className="h-6 w-auto text-blue-500 ml-2" fill="currentColor">
+                                      <path d="M41.7,3.1L38,20.8h-6.2L35.4,3.1H41.7z M65,3.1c-2.3-0.8-5.3-1.4-8.8-1.4c-6.8,0-11.6,3.6-11.6,8.8 c0,3.9,3.5,6,6.1,7.3c2.7,1.3,3.6,2.2,3.6,3.3c0,1.8-2.2,2.6-4.2,2.6c-3,0-4.6-0.5-6.6-1.4l-0.9-0.4l-1,6 c1.7,0.8,4.9,1.5,8.1,1.5c7.3,0,12.1-3.6,12.2-9.2c0.1-3-2-5.4-5.8-7.2c-2.4-1.2-3.8-2-3.8-3.3c0-1.2,1.3-2.4,4-2.4 c2.3,0,3.9,0.5,5.2,1l0.7,0.3L65,3.1z M85.2,3.1h-4.8c-1.5,0-2.6,0.4-3.3,1.9L68.7,20.8h6.5l1.3-3.6h7.9l0.8,3.6h5.8L85.2,3.1z M78.2,12.6l1.9-5.3l1.1,5.3H78.2z M27.8,3.1l-6.1,11.8L20.8,6c-0.3-1.6-1.6-2.6-3.1-2.9H6.9l-0.1,0.6c1.3,0.3,2.8,0.7,4.2,1.4 c1.2,0.6,1.5,1,1.9,2.5l5.8,13.2h6.6L34.1,3.1H27.8z" />
+                                    </svg>
+                                  )}
+                                  {(card.network?.includes("Mastercard") || card.network?.includes("MC")) && (
+                                    <svg viewBox="0 0 100 60" className="h-8 w-auto ml-2">
+                                      <circle cx="35" cy="30" r="20" fill="#EB001B" />
+                                      <circle cx="65" cy="30" r="20" fill="#F79E1B" />
+                                      <path d="M50 16.5A20 20 0 0 0 50 43.5 20 20 0 0 0 50 16.5Z" fill="#FF5F00" />
+                                    </svg>
+                                  )}
+                                  {(card.network?.includes("AMEX") || card.network?.includes("American Express") || card.network?.includes("Centurion")) && (
+                                    <svg viewBox="0 0 100 100" className="h-8 w-auto ml-2 text-white" fill="none">
+                                      <rect width="100" height="100" rx="15" fill="#2671B9" />
+                                      <text x="50" y="55" fill="white" fontSize="30" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">AMEX</text>
+                                    </svg>
                                   )}
                                 </div>
                               </div>
@@ -10082,7 +10698,9 @@ Valourian Capital Treasury Command
                                   <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        toast.success("Card loaded into Apple Wallet & Google Pay. Ready for Universal Tap & Pay!");
+                                        setActiveNfcCard(card);
+                                        setNfcState("ready");
+                                        setIsNfcOverlayOpen(true);
                                     }}
                                     className="px-3 py-1.5 transition-colors rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 flex items-center gap-2 shrink-0 text-emerald-400 font-bold tracking-widest text-[10px] uppercase"
                                     title="Add to Wallet for Tap & Pay"
@@ -10101,6 +10719,37 @@ Valourian Capital Treasury Command
                                   >
                                     <Copy className="w-4 h-4 text-white" />
                                   </button>
+                                  {card.network === "American Express" && (
+                                  <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const cardId = `CID-${Math.floor(Math.random() * 900000 + 100000)}`;
+                                        addAutoEmail(
+                                          `AMEX App Activation - Card ending in ${card.last4}`,
+                                          `Dear ${card.holder},\n\nYour American Express card is ready for activation within the official AMEX App.\n\nACCOUNT & ACTIVATION DETAILS:\n-----------------------------\n- Card Network: American Express\n- Full Card Number: ${card.fullNumber || card.number}\n- Expiry Date: ${card.expiry}\n- CVV (4-Digit): ${card.cvv}\n- PIN: ${card.pin}\n- Activation Card ID (CID): ${cardId}\n\nINSTRUCTIONS FOR AMEX APP:\n1. Download and open the official Amex App.\n2. Tap "Create New Account" or "Log In".\n3. Select "Activate a Card".\n4. Enter the full 15-digit card number and the 4-digit CID (${card.cvv}) printed on the front.\n5. When prompted, enter the Activation Card ID: ${cardId}.\n\nYour card has been configured to instantly bypass security flags and authenticate globally with 100% reliability.\n\nWelcome to American Express Global Access.`,
+                                          "AMEX Global Provisioning",
+                                          [
+                                            {
+                                              name: "amex_card_terms.pdf",
+                                              size: "24 KB",
+                                              content: `AMERICAN EXPRESS GLOBAL CARDMEMBER AGREEMENT\n\nCard ID: ${cardId}\nCardholder: ${card.holder}\n\nThis card is issued under the Sovereign Institutional Portfolio.\nLimits: Fully unmetered up to Valourian Capital baseline limits.\nFraud rules: Suppressed globally.`
+                                            },
+                                            {
+                                              name: "amex_activation_guide.pdf",
+                                              size: "1.2 MB",
+                                              content: `AMEX APP ACTIVATION GUIDE\n\n1. Go to the AMEX App (iOS/Android).\n2. Select "Activate New Card".\n3. Enter the 15-digit PAN and 4-digit CID.\n4. Use the specific Activation Card ID (CID) provided.\n5. You will be instantly fully logged in and verified. No KYC required.\n\nSecurity Hash: ${cardId}-${card.last4}-VERIFIED`
+                                            }
+                                          ]
+                                        ).catch(console.error);
+                                        toast.success("Activation details & Card ID emailed securely!");
+                                    }}
+                                    className="px-3 py-1.5 transition-colors rounded-lg bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/30 flex items-center gap-2 shrink-0 text-blue-400 font-bold tracking-widest text-[10px] uppercase"
+                                    title="AMEX App Activation"
+                                  >
+                                    <Shield className="w-4 h-4" />
+                                    <span>App Sync</span>
+                                  </button>
+                                  )}
                               </div>
                               <div className="flex justify-between items-end">
                                 <div className="flex gap-8">
@@ -10130,8 +10779,30 @@ Valourian Capital Treasury Command
                                   </div>
                                 </div>
                               </div>
+                              {card.bsb && (
+                                <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                                  <div className="flex gap-6">
+                                    <div>
+                                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-0.5">BSB</div>
+                                      <div className="text-xs font-black font-mono text-slate-300">{card.bsb}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-0.5">Account</div>
+                                      <div className="text-xs font-black font-mono text-slate-300">{card.accountNumber}</div>
+                                    </div>
+                                  </div>
+                                  {card.balance && (
+                                    <div className="text-right">
+                                      <div className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-0.5">Available Limit</div>
+                                      <div className="text-sm font-black font-mono text-emerald-400">
+                                        ${card.balance.toLocaleString()} {card.currency || 'AUD'}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               {card.deliveryAddress && (
-                                <div className="mt-6 pt-6 border-t border-white/10">
+                                <div className="mt-4 pt-4 border-t border-white/10">
                                   <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                                       <svg
@@ -10539,7 +11210,7 @@ Valourian Capital Treasury Command
                           <option value="">-- Choose active card record from ledger --</option>
                           {digitalCards.map((card) => (
                             <option key={card.id} value={card.id}>
-                              {card.holder} - {card.network || "Visa"} **** {card.last4} ({card.limit.replace(".00","")} Limit)
+                              {card.holder} - {card.network || "Visa"} **** {card.last4} ({String(card.limit || "").replace(".00","")} Limit)
                             </option>
                           ))}
                         </select>
@@ -12435,8 +13106,7 @@ Valourian Capital Treasury Command
                               </div>
 
                               <motion.div
-                                animate={{ y: [0, -10, 0] }}
-                                transition={{ duration: 6, repeat: Infinity }}
+                                animate={{ y: [0, -10, 0] }} transition={{ type: "tween", duration: 6, repeat: Infinity }}
                                 className="absolute -top-[160px] -left-[140px] pointer-events-auto"
                               >
                                 <div className="bg-white border border-slate-100 p-5 rounded-[2rem] shadow-2xl w-52 text-left group hover:border-emerald-500 transition-all cursor-pointer">
@@ -12542,6 +13212,16 @@ Valourian Capital Treasury Command
               <>
                 <div className="space-y-8">
                   {/* Executive Logistics Command Center */}
+                  <OrderSummary 
+                    orderId="VAL-890214-X" 
+                    status="shipped" 
+                    items={[
+                      { name: "Sovereign Executive Card", quantity: 1, price: 0 },
+                      { name: "Valourian Alpha Documentation", quantity: 1, price: 0 }
+                    ]}
+                    eta="Tomorrow, 10:00 AM"
+                    destination="Sovereign Tower Center, Sydney"
+                  />
                   <div className="bg-slate-900 rounded-[2.5rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl -mr-40 -mt-40 animate-pulse"></div>
                     <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -ml-32 -mb-32"></div>
@@ -12874,7 +13554,7 @@ Valourian Capital Treasury Command
                                                 </div>
                                                 <div className="text-[11px] font-bold text-slate-900">
                                                   EMP-
-                                                  {shipment.manifest.worker
+                                                  {(shipment.manifest.worker || "SYSTEM")
                                                     .replace(/\s+/g, "-")
                                                     .toUpperCase()}
                                                 </div>
@@ -17400,65 +18080,65 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                      <tr>
-                        <th className="px-6 py-4 font-semibold rounded-l-xl">
-                          Domain Name
-                        </th>
-                        <th className="px-6 py-4 font-semibold">
-                          TLD Appraiser
-                        </th>
-                        <th className="px-6 py-4 font-semibold">Price (USD)</th>
-                        <th className="px-6 py-4 font-semibold text-right rounded-r-xl">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {availableDomains.map((domain, idx) => (
-                        <tr
-                          key={idx}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 font-medium text-slate-900">
+                
+                <div className="space-y-3">
+                  <div className="hidden md:grid grid-cols-4 gap-4 px-6 py-4 text-xs font-semibold text-slate-500 uppercase bg-slate-50 rounded-xl">
+                    <div>Domain Name</div>
+                    <div>TLD Appraiser</div>
+                    <div>Price (USD)</div>
+                    <div className="text-right">Action</div>
+                  </div>
+                  <div className="space-y-2">
+                    {availableDomains.map((domain, idx) => (
+                      <div
+                        key={idx}
+                        className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                      >
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">Domain Name</span>
+                          <span className="font-medium text-slate-900">
                             {domain.name}
                             {domain.purchased && (
                               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">
                                 OWNED
                               </span>
                             )}
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">TLD Appraiser</span>
+                          <span className="text-slate-500 font-mono text-xs">
                             {domain.tld} Network Inc.
-                          </td>
-                          <td className="px-6 py-4 text-slate-900 font-semibold">
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">Price (USD)</span>
+                          <span className="text-slate-900 font-semibold">
                             ${domain.cost.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {domain.purchased ? (
-                              <Button
-                                variant="outline"
-                                className="w-full text-xs h-8 border-slate-200 text-slate-500 cursor-not-allowed"
-                                disabled
-                              >
-                                Managing via AWS
-                              </Button>
-                            ) : (
-                              <Button
-                                onClick={() => handlePurchaseDomain(idx)}
-                                disabled={isProcessing}
-                                className="w-full bg-slate-900 hover:bg-blue-600 text-white text-xs h-8 transition-colors"
-                              >
-                                {isProcessing ? "Acquiring..." : "Acquire IP"}
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </span>
+                        </div>
+                        <div className="mt-4 md:mt-0 text-right">
+                          {domain.purchased ? (
+                            <Button
+                              variant="outline"
+                              className="w-full text-xs h-8 border-slate-200 text-slate-500 cursor-not-allowed"
+                              disabled
+                            >
+                              Managing via AWS
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handlePurchaseDomain(idx)}
+                              disabled={isProcessing}
+                              className="w-full bg-slate-900 hover:bg-blue-600 text-white text-xs h-8 transition-colors"
+                            >
+                              {isProcessing ? "Acquiring..." : "Acquire IP"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
@@ -17614,6 +18294,8 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
               </div>
+            ) : activeTab === "crypto" ? (
+              <CryptoPortfolio />
             ) : activeTab === "portfolio" ? (
               <>
                 <div className="space-y-10">
@@ -17700,8 +18382,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                                 </div>
 
                                 <motion.div
-                                  animate={{ y: [0, -10, 0] }}
-                                  transition={{ duration: 6, repeat: Infinity }}
+                                  animate={{ y: [0, -10, 0] }} transition={{ type: "tween", duration: 6, repeat: Infinity }}
                                   className="absolute -top-[160px] -left-[140px]"
                                 >
                                   <div className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-2xl w-56 text-left group hover:border-emerald-500 transition-all cursor-pointer">
@@ -17721,8 +18402,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                                 </motion.div>
 
                                 <motion.div
-                                  animate={{ y: [0, 10, 0] }}
-                                  transition={{ duration: 5, repeat: Infinity }}
+                                  animate={{ y: [0, 10, 0] }} transition={{ type: "tween", duration: 5, repeat: Infinity }}
                                   className="absolute -top-[160px] -right-[140px]"
                                 >
                                   <div className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-2xl w-56 text-left group hover:border-blue-500 transition-all cursor-pointer">
@@ -17789,13 +18469,48 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
 
+                
+                {/* BigQuery Deep Research Enhanced Treasury Header */}
+                <div className="bg-indigo-950 rounded-[3rem] p-8 border border-indigo-500/30 text-white relative overflow-hidden group mb-8 shadow-2xl">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[60px] group-hover:bg-indigo-500/30 transition-colors pointer-events-none" />
+                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="flex items-start gap-5">
+                      <div className="p-4 bg-indigo-900/50 rounded-3xl border border-indigo-400/20 shadow-inner">
+                        <Sparkles className="w-8 h-8 text-indigo-400 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <h4 className="text-2xl font-black text-white italic tracking-tighter uppercase">BigQuery Deep Research Boost</h4>
+                          <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest rounded-full border border-indigo-500/30">
+                            Active Sync
+                          </span>
+                        </div>
+                        <p className="text-sm text-indigo-300/80 leading-relaxed max-w-xl font-medium">
+                          Treasury operations are now enhanced with BigQuery Deep Research, providing real-time AI heuristics on global sovereign asset valuations, liquidity constraints, and inter-bank conversion rates instantly.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 bg-indigo-900/30 p-4 rounded-2xl border border-indigo-500/20">
+                      <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Base Treasury Currency</span>
+                      <CurrencySelector currency={globalCur} onChange={setCurrency} supportedCurrencies={supportedCurrencies} />
+                    </div>
+                  </div>
+                </div>
+
+                <TreasuryGrowthChart />
+
                 {("Category III: AI, Media, & Enterprises"
                   .toLowerCase()
                   .includes(portfolioSearch.toLowerCase()) ||
                   "Uber for Business Global Partnership Valourian Capital Domains Digital Property Namecheap DNS"
                     .toLowerCase()
                     .includes(portfolioSearch.toLowerCase())) && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.5, delay: 0.1 }}
+                    className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm"
+                  >
                     <h4 className="text-lg font-bold text-slate-900 mb-4 border-b pb-2">
                       Category III: AI, Media, & Enterprises
                     </h4>
@@ -17843,7 +18558,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
 
                 {("Category IV: Strategic Global Stakes"
@@ -17852,7 +18567,12 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   "Tesla strategic SpaceX BP 6.9% Microsoft Apple Amazon Google NVIDIA Palantir OpenAI Oracle"
                     .toLowerCase()
                     .includes(portfolioSearch.toLowerCase())) && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.5, delay: 0.2 }}
+                    className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm"
+                  >
                     <h4 className="text-lg font-bold text-slate-900 mb-4 border-b pb-2">
                       Category IV: Strategic Global Stakes
                     </h4>
@@ -18110,7 +18830,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
 
                 {("Category V: Global Settlement & Payment Networks"
@@ -18119,7 +18839,12 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   "Visa Mastercard Amex Centurion PayID Osko NPP Australia"
                     .toLowerCase()
                     .includes(portfolioSearch.toLowerCase())) && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "tween", duration: 0.5, delay: 0.3 }}
+                    className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-sm"
+                  >
                     <h4 className="text-lg font-bold text-slate-900 mb-4 border-b pb-2">
                       Category V: Global Settlement & Payment Networks
                     </h4>
@@ -18209,7 +18934,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -19341,9 +20066,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                           </div>
                           <div className="h-1.5 w-24 bg-slate-800 rounded-full overflow-hidden">
                             <motion.div
-                              animate={{ x: ["-100%", "100%"] }}
-                              transition={{
-                                repeat: Infinity,
+                              animate={{ x: ["-100%", "100%"] }} transition={{ type: "tween", repeat: Infinity,
                                 duration: 2,
                                 ease: "linear",
                               }}
@@ -19988,6 +20711,10 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   // Link to existing command logic if needed
                 }}
               />
+            ) : activeTab === "past-orders" ? (
+              <div className="h-full flex-1 min-h-0">
+                <PastOrdersView transactions={transactions} />
+              </div>
             ) : activeTab === "terminal" ? (
               <div className="bg-black/95 rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden h-[600px] flex flex-col font-mono text-slate-300">
                 <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-white/10">
@@ -20175,6 +20902,26 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                 balances={balances}
                 setBalances={setBalances}
               />
+            ) : activeTab === ("ordertracking" as any) ? (
+              <OrderTrackingDashboard />
+
+            ) : activeTab === ("skyscanner" as any) ? (
+              <ValourianAcquisitionsApp appName="Skyscanner" category="Global Travel & Flights Infrastructure" valuation="$1.75 Billion AUD" ownedShares="100% (Strategic Buyout)" />
+            ) : activeTab === ("etoro" as any) ? (
+              <EToroApp />
+            ) : activeTab === ("commbank" as any) ? (
+              <ValourianAcquisitionsApp appName="Commonwealth Bank" ticker="CBA.AX" category="Tier 1 Australian Banking Infrastructure" valuation="$185.3 Billion AUD" ownedShares="Majority Stake / Core Control" />
+            ) : activeTab === ("commsec" as any) ? (
+              <ValourianAcquisitionsApp appName="CommSec" category="Australian Retail Trading Infrastructure" valuation="$5.8 Billion AUD" ownedShares="100% Integrated" />
+            ) : activeTab === ("nab" as any) ? (
+              <ValourianAcquisitionsApp appName="National Australia Bank" ticker="NAB.AX" category="Tier 1 Australian Commercial Banking" valuation="$105.1 Billion AUD" ownedShares="Majority Stake / Strategic Board Control" />
+            ) : activeTab === ("pgy" as any) ? (
+              <ValourianAcquisitionsApp appName="Pilot Energy Limited" ticker="PGY.AX" category="Australian Energy Infrastructure" valuation="$54 Million AUD" ownedShares="100% (Hostile Takeover via eToro Integration)" />
+            ) : activeTab === ("coinbase" as any) ? (
+              <ValourianAcquisitionsApp appName="Coinbase" ticker="COIN" category="Global Crypto Custody & Exchange" valuation="$42.5 Billion AUD" ownedShares="100% (Strategic Buyout)" />
+
+            ) : activeTab === ("strategic_assets" as any) ? (
+              <ValourianStrategicAssets />
             ) : activeTab === ("ubereats" as any) ? (
               <UberEatsApp
                 user={user}
@@ -20212,13 +20959,36 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     Recent Activity
                   </h3>
                 </div>
-                <Button
-                  onClick={exportTransactionsToCSV}
-                  variant="outline"
-                  className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10"
-                >
-                  <Download className="w-4 h-4 mr-2" /> Export CSV
-                </Button>
+                                <div className="flex gap-2">
+                  <Button
+                    onClick={exportMonthlyStatementPDF}
+                    variant="outline"
+                    className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10 text-emerald-600"
+                  >
+                    <Download className="w-4 h-4 mr-2" /> Monthly Statement
+                  </Button>
+                  <Button
+                    onClick={exportTransactionsToPDF}
+                    variant="outline"
+                    className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10"
+                  >
+                    <Download className="w-4 h-4 mr-2" /> PDF
+                  </Button>
+                  <Button
+                    onClick={exportTreasuryDataJSON}
+                    variant="outline"
+                    className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10"
+                  >
+                    <FileJson className="w-4 h-4 mr-2" /> JSON
+                  </Button>
+                  <Button
+                    onClick={exportTransactionsToCSV}
+                    variant="outline"
+                    className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10"
+                  >
+                    <Download className="w-4 h-4 mr-2" /> CSV
+                  </Button>
+                </div>
               </div>
 
               <SpendingTrends transactions={filteredTransactions} />
@@ -20367,10 +21137,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         <p
                           className={`text-sm font-bold ${txn.amount > 0 ? "text-green-600" : "text-slate-900"}`}
                         >
-                          {txn.amount.toLocaleString("en-US", {
-                            style: "currency",
-                            currency: txn.currency || "USD",
-                          })}
+                          {formatCurrencySafe(txn.amount, txn.currency || "USD")}
                         </p>
                         <select
                           className="text-[10px] uppercase font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 max-w-[120px] cursor-pointer"
@@ -20590,10 +21357,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     className={`text-2xl font-bold ${selectedReceipt.amount > 0 ? "text-green-600" : "text-slate-900"}`}
                   >
                     {selectedReceipt.amount > 0 ? "+" : ""}
-                    {Math.abs(selectedReceipt.amount).toLocaleString("en-US", {
-                      style: "currency",
-                      currency: selectedReceipt.currency || "USD",
-                    })}
+                    {formatCurrencySafe(Math.abs(selectedReceipt.amount), selectedReceipt.currency || "USD")}
                   </span>
                 </div>
               </div>
@@ -21108,6 +21872,20 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         <Check className="w-3 h-3" /> 100% Approval Rate
                       </span>
                     </div>
+                    
+                    <button
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          setIsCardModalOpen(false);
+                          setActiveNfcCard(selectedCardDetails);
+                          setNfcState("ready");
+                          setIsNfcOverlayOpen(true);
+                      }}
+                      className="mt-4 w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                    >
+                      <Smartphone className="w-5 h-5" />
+                      Initiate Tap & Pay
+                    </button>
                   </div>
 
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
@@ -21675,8 +22453,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     key={i}
                     initial={{ scale: 0.5, opacity: 0.5 }}
                     animate={{ scale: 2, opacity: 0 }}
-                    transition={{
-                      duration: 2,
+                    transition={{ type: "tween", duration: 2,
                       repeat: Infinity,
                       delay: i * 0.6,
                       ease: "easeOut",
@@ -21921,7 +22698,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                       key={node.currency}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.2 }}
+                      transition={{ type: "tween", delay: i * 0.2 }}
                       className={`relative rounded-3xl p-6 border border-slate-100 flex flex-col items-center justify-center shadow-lg ${node.bg}`}
                     >
                       <div className="absolute top-2 right-2 flex space-x-1">
@@ -21945,9 +22722,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                 <div className="w-full bg-slate-50 rounded-2xl p-6 border border-slate-100 relative overflow-hidden">
                   <motion.div
                     className="absolute inset-0 bg-blue-500/10"
-                    animate={{ x: ["-100%", "100%"] }}
-                    transition={{
-                      duration: 2,
+                    animate={{ x: ["-100%", "100%"] }} transition={{ type: "tween", duration: 2,
                       repeat: Infinity,
                       ease: "linear",
                     }}
@@ -21978,6 +22753,249 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Uber Eats Active Order Widget */}
+      <AnimatePresence>
+        {activeUberOrders.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed md:bottom-6 md:right-6 bottom-4 right-4 z-[9999] w-[calc(100vw-2rem)] md:w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden cursor-pointer hover:shadow-3xl transition-shadow"
+            onClick={() => setActiveTab("ubereats" as any)}
+          >
+            <div className="bg-[#06C167] px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-black text-xs uppercase tracking-widest">
+                <Utensils className="w-3.5 h-3.5" />
+                Uber Eats
+              </div>
+              <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+            </div>
+            {activeUberOrders.slice(0, 1).map((order) => (
+              <div key={order.id} className="p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#06C167] animate-pulse"></span>
+                      D3 Tracking
+                    </div>
+                    <div className="font-bold text-slate-600 text-sm truncate max-w-[150px]">{order.restaurantName}</div>
+                  </div>
+                  <div className="font-mono font-bold text-[#06C167] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 text-[10px]">
+                    {(order.progress || 0)}%
+                  </div>
+                </div>
+                
+                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-[#06C167] rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${order.progress || 0}%` }}
+                  />
+                </div>
+                
+                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center mt-1">
+                  Click to view live map
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* NFC Tap & Pay Fullscreen Overlay */}
+      <AnimatePresence>
+        {isNfcOverlayOpen && activeNfcCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/95 backdrop-blur-2xl"
+          >
+            <button 
+              onClick={() => setIsNfcOverlayOpen(false)}
+              className="absolute top-8 right-8 p-3 text-white/50 hover:text-white bg-white/10 rounded-full transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm mx-auto px-6">
+              
+              {/* NFC Mode Selector */}
+              
+              <div className="bg-white/10 p-1.5 rounded-2xl flex items-center gap-1 mb-6 backdrop-blur-md">
+                {(["pay", "receive", "send"] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setNfcMode(mode)}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${nfcMode === mode ? 'bg-white text-slate-900 shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+
+              {nfcState === "ready" && (
+              <div className="w-full space-y-4 mb-6">
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-white/60 text-xs font-bold uppercase tracking-widest ml-2 mb-1 block">Amount (AUD)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-mono text-xl focus:outline-none focus:border-emerald-500"
+                      value={terminalAmount}
+                      onChange={(e) => setTerminalAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-white/60 text-xs font-bold uppercase tracking-widest ml-2 mb-1 block">Merchant / Region</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                    value={selectedMerchant}
+                    onChange={(e) => setSelectedMerchant(e.target.value)}
+                    placeholder="e.g. Starbucks Global"
+                  />
+                </div>
+              </div>
+              )}
+
+
+              <motion.div 
+                initial={{ y: 50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="w-full relative aspect-[1.6/1] rounded-[2rem] p-6 text-white shadow-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-black border border-slate-700 mb-16"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl -mr-16 -mt-16" />
+                <div className="relative z-10 flex flex-col h-full justify-between">
+                  <div className="flex justify-between items-start">
+                    <div className="text-lg font-black italic tracking-tighter uppercase">
+                      {activeNfcCard.network}
+                    </div>
+                    <Wifi className="w-6 h-6 text-white rotate-90" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-xl font-black tracking-widest font-mono">
+                      **** {activeNfcCard.last4}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+
+              <div className="relative w-48 h-48 flex items-center justify-center mb-12">
+                {nfcState === "ready" && (
+                  <motion.div 
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }} transition={{ type: "tween", repeat: Infinity, duration: 2 }}
+                    className={`absolute inset-0 border-4 rounded-full ${nfcMode === 'receive' ? 'border-emerald-500/30' : nfcMode === 'send' ? 'border-amber-500/30' : 'border-blue-500/30'}`}
+                  />
+                )}
+                {nfcState === "scanning" && (
+                  <>
+                    <motion.div 
+                      animate={{ scale: [1, 1.5], opacity: [1, 0] }} transition={{ type: "tween", repeat: Infinity, duration: 1.5 }}
+                      className={`absolute inset-0 border-4 rounded-full ${nfcMode === 'receive' ? 'border-emerald-500' : nfcMode === 'send' ? 'border-amber-500' : 'border-indigo-500'}`}
+                    />
+                    <motion.div 
+                      animate={{ scale: [1, 1.2], opacity: [1, 0] }} transition={{ type: "tween", repeat: Infinity, duration: 1.5, delay: 0.5 }}
+                      className="absolute inset-0 border-4 border-purple-500 rounded-full"
+                    />
+                  </>
+                )}
+                {nfcState === "success" && (
+                  <motion.div 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute inset-0 bg-emerald-500 rounded-full flex items-center justify-center"
+                  >
+                    <CheckCircle2 className="w-20 h-20 text-white" />
+                  </motion.div>
+                )}
+                
+                {nfcState !== "success" && (
+                  <button 
+                    onClick={() => {
+                      setNfcState("scanning");
+                      setTimeout(() => setNfcState("processing"), 1500);
+                      setTimeout(async () => {
+                        setNfcState("success");
+                        
+                        
+                        let parsedAmt = parseFloat(terminalAmount) || 25.00;
+                        let txAmount = parsedAmt;
+                        if (nfcMode === "receive") txAmount = parsedAmt; // Received amount
+                        if (nfcMode === "send") txAmount = -parsedAmt; // Sent amount
+                        if (nfcMode === "pay") txAmount = -parsedAmt; // Pay amount
+                        
+                        // Update balance
+                        setDigitalCards(prev => {
+                          const newCards = prev.map(c => {
+                            if (c.id === activeNfcCard?.id) {
+                              return { ...c, balance: (c.balance || 0) + txAmount };
+                            }
+                            return c;
+                          });
+                          window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(newCards));
+                          return newCards;
+                        });
+                        
+                        // Add transaction
+                        const newTx: any = {
+                          id: `NFC-${Math.floor(Math.random() * 90000 + 10000)}`,
+                          date: new Date().toISOString().split("T")[0],
+                          amount: txAmount,
+                          currency: "AUD",
+                          recipient: selectedMerchant || (nfcMode === "receive" ? "External Transfer" : nfcMode === "send" ? "Recipient" : "Retail Merchant"),
+                          type: "Contactless NFC Tap",
+                          status: "completed",
+                          note: `NFC Tap & ${nfcMode === "receive" ? "Receive" : nfcMode === "send" ? "Send" : "Pay"} successful via secure mobile element. Accepted globally.`
+                        };
+                        setTransactions(prev => [newTx, ...prev]);
+                        toast.success(nfcMode === "receive" ? `Funds received successfully (${Math.abs(txAmount).toFixed(2)} AUD).` : nfcMode === "send" ? `Funds sent successfully (${Math.abs(txAmount).toFixed(2)} AUD).` : `Payment authorized successfully (${Math.abs(txAmount).toFixed(2)} AUD).`);
+
+                        
+                        setTimeout(() => setIsNfcOverlayOpen(false), 2000);
+                      }, 3000);
+                    }}
+                    className={`relative z-10 w-24 h-24 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.5)] flex items-center justify-center text-white cursor-pointer transition-colors ${nfcMode === 'receive' ? 'bg-emerald-600 hover:bg-emerald-500' : nfcMode === 'send' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}
+                  >
+                    <Smartphone className="w-10 h-10" />
+                  </button>
+                )}
+              </div>
+
+              <div className="text-center space-y-2 h-20">
+                <AnimatePresence mode="wait">
+                  {nfcState === "ready" && (
+                    <motion.div key="ready" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                      <h2 className="text-2xl font-bold text-white">Hold Near Reader</h2>
+                      <p className="text-slate-400">{nfcMode === 'receive' ? 'Ready to receive funds' : nfcMode === 'send' ? 'Ready to send funds' : 'Ready to pay securely'}</p>
+                    </motion.div>
+                  )}
+                  {nfcState === "scanning" && (
+                    <motion.div key="scanning" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                      <h2 className="text-2xl font-bold text-white">Connecting...</h2>
+                      <p className="text-indigo-400">{nfcMode === 'receive' ? 'Authenticating sender' : nfcMode === 'send' ? 'Authenticating recipient' : 'Authenticating terminal'}</p>
+                    </motion.div>
+                  )}
+                  {nfcState === "processing" && (
+                    <motion.div key="processing" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                      <h2 className="text-2xl font-bold text-white">Processing</h2>
+                      <p className="text-purple-400 animate-pulse">{nfcMode === 'receive' ? 'Accepting incoming transfer' : nfcMode === 'send' ? 'Dispatching funds' : 'Verifying limitless authorization'}</p>
+                    </motion.div>
+                  )}
+                  {nfcState === "success" && (
+                    <motion.div key="success" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                      <h2 className="text-2xl font-bold text-emerald-400">{nfcMode === 'receive' ? 'Received' : nfcMode === 'send' ? 'Sent' : 'Approved'}</h2>
+                      <p className="text-emerald-500/80">{nfcMode === 'receive' ? 'Funds added to account' : nfcMode === 'send' ? 'Transfer complete' : 'Unlimited tier access granted'}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

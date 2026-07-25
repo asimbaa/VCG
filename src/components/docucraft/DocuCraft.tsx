@@ -17,7 +17,9 @@ import {
   Receipt,
   BarChart3,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -106,6 +108,56 @@ export function DocuCraft({ user }: DocuCraftProps) {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState(SUGGESTIONS);
+
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.onresult = (event) => {
+        let currentTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setPrompt(currentTranscript);
+      };
+      recognitionRef.current.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+        toast.error("Microphone error: " + event.error);
+      };
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      toast.success("Voice dictation paused. Neural Link disengaged.");
+    } else {
+      if (recognitionRef.current) {
+        setPrompt(""); // Clear previous on new start
+        try {
+          recognitionRef.current.start();
+          setIsListening(true);
+          toast.success("Neural Link Microphone active. Speak your instructions.");
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        toast.error("Speech recognition is not supported in this browser.");
+      }
+    }
+  };
+
 
   // Global Escape key handler for dropdown
   React.useEffect(() => {
@@ -318,9 +370,22 @@ export function DocuCraft({ user }: DocuCraftProps) {
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   placeholder="e.g., Draft a business proposal for a new SaaS product, or explain quantum computing intuitively..."
-                  className="w-full min-h-[120px] p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-y"
+                  className="w-full min-h-[120px] p-4 pr-14 pb-14 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-y"
                   required
                 />
+                
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`absolute right-3 bottom-3 p-2 rounded-xl transition-all shadow-sm flex items-center justify-center ${
+                    isListening
+                      ? "bg-rose-100 text-rose-600 animate-pulse border border-rose-200"
+                      : "bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+                  }`}
+                  title={isListening ? "Stop Neural Link Mic" : "Start Neural Link Voice Dictation"}
+                >
+                  {isListening ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                </button>
                 
                 <AnimatePresence>
                   {showSuggestions && (

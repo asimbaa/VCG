@@ -67,7 +67,7 @@ const NeuralSentryOverlay = () => {
 };
 
 const API_KEY =
-  (typeof process !== "undefined" ? process.env?.GOOGLE_MAPS_PLATFORM_KEY : "") ||
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
@@ -92,11 +92,11 @@ const RouteDisplay = ({ origin, destination }: {
     polylinesRef.current.forEach(p => p.setMap(null));
     polylinesRef.current = [];
 
-    routesLib.Route.computeRoutes({
+    (routesLib as any).Route.computeRoutes({
       origin,
       destination,
-      travelMode: 'DRIVING' as any,
-      fields: ['path', 'viewport'],
+      travelMode: 'DRIVING',
+      fields: ['path', 'distanceMeters', 'durationMillis', 'viewport'],
     }).then(({ routes }) => {
       if (routes?.[0]) {
         const newPolylines = routes[0].createPolylines();
@@ -120,6 +120,8 @@ const RouteDisplay = ({ origin, destination }: {
 };
 
 export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
+  const [mapTypeId, setMapTypeId] = useState<string>('satellite');
+
   const [activeCar, setActiveCar] = useState<any>(null);
   const [progress, setProgress] = useState(0);
   const [isSpotting, setIsSpotting] = useState(false);
@@ -348,7 +350,7 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
         <motion.div 
           initial={{ x: -50, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ type: "tween", duration: 0.5, ease: "easeOut" }}
           className="uber-dispatch-panel absolute top-4 left-4 z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-700 p-4 rounded-2xl shadow-2xl w-80 pointer-events-auto flex flex-col gap-3"
         >
           <h4 className="text-white font-black text-xs uppercase tracking-widest flex items-center justify-between">
@@ -513,7 +515,8 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
            defaultCenter={fleet.length > 10 ? { lat: 20, lng: 0 } : { lat: -33.81, lng: 151.18 }}
            defaultZoom={fleet.length > 10 ? 2 : 13}
            mapId="AURA_DRIVE_MAP"
-          internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+           mapTypeId={mapTypeId}
+          
           gestureHandling="greedy"
         >
           {ACTIVE_FLEET.map((car) => {
@@ -535,7 +538,7 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
                       key={`ping-${car.id}`}
                       initial={{ scale: 0.8, opacity: 0.5 }}
                       animate={{ scale: isUber ? 2.5 : 3, opacity: 0 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                      transition={{ type: "tween", duration: 2, repeat: Infinity, ease: "easeOut" }}
                       className={`absolute inset-0 rounded-full pointer-events-none ${isAsim01 ? 'bg-blue-500' : isUber ? 'bg-slate-400' : 'bg-emerald-500'}`}
                     />
                   )}
@@ -543,8 +546,7 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
                     <motion.div 
                       key="pulse"
                       initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 4, opacity: [0, 0.5, 0] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
+                      animate={{ scale: 4, opacity: [0, 0.5, 0] }} transition={{ type: "tween", duration: 1.5, repeat: Infinity }}
                       className="absolute inset-0 bg-blue-500 rounded-full pointer-events-none"
                     />
                   )}
@@ -607,8 +609,7 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
                 <AdvancedMarker key={idx} position={{lat: hub.lat, lng: hub.lng}} zIndex={40}>
                    <div className="relative group cursor-pointer">
                       <motion.div 
-                        animate={{ scale: [1, 2, 1], opacity: [0.8, 0, 0.8] }} 
-                        transition={{ duration: 2, repeat: Infinity }}
+                        animate={{ scale: [1, 2, 1], opacity: [0.8, 0, 0.8] }}
                         className="absolute inset-0 bg-blue-500 rounded-full blur-md"
                       />
                       <div className="relative w-8 h-8 rounded-full bg-slate-900 border-2 border-blue-400 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.6)]">
@@ -627,10 +628,19 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
           {activePos && <RouteDisplay origin={activePos} destination={homePos} />}
           
           <AdvancedMarker position={homePos} title="Your Home (712/15 Barton Rd)">
-             <Pin background="#ef4444" glyphText="H" glyphColor="#fff" />
+             <Pin background="#ef4444"  glyphColor="#fff" />
           </AdvancedMarker>
         </Map>
       </APIProvider>
+      
+      <div className="absolute top-4 right-4 z-20 pointer-events-auto">
+        <button
+          onClick={() => setMapTypeId(prev => prev === 'roadmap' ? 'satellite' : 'roadmap')}
+          className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white p-2 rounded-xl shadow-xl hover:bg-slate-800 transition-colors"
+        >
+          {mapTypeId === 'roadmap' ? <Globe className="w-5 h-5 text-blue-400" /> : <Globe className="w-5 h-5 text-emerald-400" />}
+        </button>
+      </div>
       
       {activeCar && (
         <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 backdrop-blur-xl p-5 rounded-2xl border border-white/10 shadow-2xl z-10 transition-all text-left">
@@ -676,7 +686,7 @@ export const AuraDriveMap: React.FC<AuraDriveMapProps> = ({ fleet }) => {
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${summonProgress}%` }}
-                  transition={{ duration: 0.3 }}
+                  transition={{ type: "tween", duration: 0.3 }}
                   className="bg-blue-400 h-full rounded-full"
                   style={{ width: `${summonProgress}%` }}
                 />

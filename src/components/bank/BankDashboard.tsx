@@ -1,3 +1,4 @@
+import { SovereignLogisticsDashboard } from "./SovereignLogisticsDashboard";
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
@@ -133,6 +134,11 @@ import { DocuCraftAI } from "./DocuCraftAI";
 import { SovereignAI } from "./SovereignAI";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CryptoPortfolio } from "./CryptoPortfolio";
+import { VoiceInputButton } from '../shared/VoiceInputButton';
+import { HistoricalYieldComparison } from "./HistoricalYieldComparison";
+import { ExpertAgentsView } from "./ExpertAgentsView";
+import { BlackCardsController } from "./BlackCardsController";
 
 const generateValidLuhnCard = (prefix: string, length: number): string => {
   let pan = prefix;
@@ -211,6 +217,14 @@ interface SavedRecipient {
   cardExpiry?: string;
   accountId?: string;
 }
+
+export const formatCurrencySafe = (amount: number, currencyCode: string = "USD") => {
+  try {
+    return amount.toLocaleString("en-US", { style: "currency", currency: currencyCode });
+  } catch (e) {
+    return `${currencyCode} ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+};
 
 export function BankDashboard({ user }: { user: any }) {
   const initialBalancesStr = localStorage.getItem("valourian_balances");
@@ -374,7 +388,7 @@ export function BankDashboard({ user }: { user: any }) {
     | "funding"
     | "team"
     | "domains"
-    | "portfolio"
+    | "portfolio" | "crypto"
     | "notifications"
     | "logistics"
     | "aura"
@@ -654,6 +668,12 @@ export function BankDashboard({ user }: { user: any }) {
   // Global Search State
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [showGlobalSearchResults, setShowGlobalSearchResults] = useState(false);
+
+  // Tap & Pay states
+  const [tappedCard, setTappedCard] = useState<any>(null);
+  const [tapAmount, setTapAmount] = useState("");
+  const [tapMode, setTapMode] = useState<"pay" | "refund">("pay");
+  const [tapStatus, setTapStatus] = useState<"idle" | "tapping" | "success">("idle");
   const [aiSearchResult, setAiSearchResult] = useState<string>("");
   const [isAiSearching, setIsAiSearching] = useState(false);
 
@@ -695,6 +715,78 @@ export function BankDashboard({ user }: { user: any }) {
       }
     }
     return [
+      {
+        id: "amex_2036",
+        last4: "2036",
+        fullNumber: "3759 876543 22036",
+        cvv: "303",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "No Limit",
+        region: "Global Access",
+        network: "American Express",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 150000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "AMEX Centurion Lounges",
+          benefits: "Global Dining & Travel",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "visa_2036",
+        last4: "2036",
+        fullNumber: "4004 0104 2036 2036",
+        cvv: "335",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "No Limit",
+        region: "Global Access",
+        network: "Visa Infinite",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 150000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Visa Infinite Experiences",
+          benefits: "Concierge Services",
+          atm: "Global Free Withdrawal",
+        },
+      },
+      {
+        id: "mastercard_2036",
+        last4: "2036",
+        fullNumber: "5100 0104 2036 2036",
+        cvv: "335",
+        pin: "2036",
+        holder: "ASIM ARYAL",
+        expiry: "12/36",
+        type: "primary",
+        limit: "No Limit",
+        region: "Global Access",
+        network: "Mastercard World Elite",
+        bsb: "062-951",
+        accountNumber: "1099 2036",
+        netbankId: "20362036",
+        balance: 150000,
+        isFlipped: false,
+        nfcReady: true,
+        details: {
+          access: "Mastercard World Elite Experiences",
+          benefits: "Luxury Travel",
+          atm: "Global Free Withdrawal",
+        },
+      },
       {
         id: "sl-cards",
         trackingId: "AP-ST-8830-AU",
@@ -973,8 +1065,7 @@ export function BankDashboard({ user }: { user: any }) {
                     key={angle}
                     className="absolute inset-0 flex items-center justify-center"
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 4,
+                    transition={{ type: "tween", duration: 4,
                       repeat: Infinity,
                       ease: "linear",
                       delay: i * 0.1,
@@ -988,7 +1079,7 @@ export function BankDashboard({ user }: { user: any }) {
                 ))}
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
+                 
                   className="absolute inset-0 flex items-center justify-center"
                 >
                   <div className="w-24 h-24 rounded-full bg-white shadow-[0_0_40px_rgba(203,213,225,0.5)] border border-slate-100 flex items-center justify-center">
@@ -1008,13 +1099,13 @@ export function BankDashboard({ user }: { user: any }) {
                   <motion.div
                     initial={{ height: 0 }}
                     animate={{ height: "100%" }}
-                    transition={{ duration: 0.8, ease: "circOut" }}
+                    transition={{ type: "tween", duration: 0.8, ease: "circOut" }}
                     className="absolute bottom-0 left-0 right-0 bg-emerald-500"
                   />
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6 }}
+                    transition={{ type: "tween", delay: 0.6 }}
                     className="relative z-10"
                   >
                     <CheckCircle2 className="w-24 h-24 text-white" />
@@ -1057,6 +1148,38 @@ export function BankDashboard({ user }: { user: any }) {
       setTransferStatus("success");
       toast.success("Instant Digital Deposit Processed.");
     }, 3000);
+  };
+
+  const handleTapTransaction = async () => {
+    if (!tappedCard) return;
+    const amt = parseFloat(tapAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    
+    setTapStatus("tapping");
+    setTimeout(() => {
+      let updatedCards = [...digitalCards];
+      const cardIndex = updatedCards.findIndex(c => c.id === tappedCard.id);
+      if (cardIndex !== -1) {
+        if (tapMode === "pay") {
+          updatedCards[cardIndex].balance += amt;
+        } else {
+          updatedCards[cardIndex].balance -= amt;
+          if (updatedCards[cardIndex].balance < 0) updatedCards[cardIndex].balance = 0;
+        }
+        setDigitalCards(updatedCards);
+        window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(updatedCards));
+        toast.success(`Successfully ${tapMode === "pay" ? "paid" : "refunded"} $${amt.toFixed(2)} via Tap & ${tapMode === "pay" ? "Pay" : "Refund"}!`);
+      }
+      setTapStatus("success");
+      setTimeout(() => {
+        setTapStatus("idle");
+        setTappedCard(null);
+        setTapAmount("");
+      }, 1500);
+    }, 2000);
   };
 
   const [notifications, setNotifications] = useState<any[]>([
@@ -1873,7 +1996,7 @@ Document ID: ${doc.id}-VAL-2026
 Type: ${doc.type}
 Date: ${doc.date}
 Size: ${doc.size}
-Owner: Valourian Capital / Asim Aryal
+Owner: Valourian Capital (Tier 1 Global Treasury) / Asim Aryal
 Signatures: Fully Executed // SECURE OS
 Status: Settled & Locked
 Storage Loc: OS-VAULT-PRIMARY-01
@@ -1938,7 +2061,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
       price: "£145,000,000 (Paid)",
       agency: "Land Registry UK",
       details: {
-        owner: "Valourian Capital",
+        owner: "Valourian Capital (Tier 1 Global Treasury)",
         staff: "Dedicated Support Team & Executive Talent contracted",
         budget: "5-Year Operational Budget Funded",
       },
@@ -2035,7 +2158,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
     },
     {
       id: "IKEA-001",
-      title: "Global Partnership: IKEA x Valourian Capital",
+      title: "Global Partnership: IKEA x Valourian Capital (Tier 1 Global Treasury)",
       type: "Partnership",
       date: "2026-05-12",
       size: "4.5 MB",
@@ -2534,240 +2657,303 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
   const [digitalCards, setDigitalCards] = useState<any[]>(() => {
     try {
-      const saved = window.localStorage.getItem('valourian_digital_cards_v5');
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
       if (saved) return JSON.parse(saved);
     } catch {}
-
-    // Let's generate a suite of 100% Luhn-valid cards with exps 5 to 25 years from now (relative to 2026)
-    // - 5 years: "06/31"
-    // - 10 years: "06/36"
-    // - 14 years: "12/40"
-    // - 25 years: "12/51"
-    const num1 = generateValidLuhnCard("375981", 15); // Amex Centurion (25 years exp)
-    const num2 = generateValidLuhnCard("377782", 15); // Crown Platinum Amex (25 years exp)
-    const num3 = generateValidLuhnCard("511939", 16); // Great Southern Bank MC (10 years exp)
-    const num4 = generateValidLuhnCard("453272", 16); // Prosegur Key Visa (25 years exp)
-    const num5 = generateValidLuhnCard("375904", 15); // Founder CEO Master Amex (25 years exp)
-    const num6 = generateValidLuhnCard("559612", 16); // Mascot Pickup MC (5 years exp)
-    const num7 = generateValidLuhnCard("375999", 15); // Sovereign Reserve Centurion Amex (25 years exp)
-    const num8 = generateValidLuhnCard("400000", 16); // DocuCraft Enterprise Visa (14 years exp)
-    const num9 = generateValidLuhnCard("558888", 16); // Aura Drive Mastercard (25 years exp)
-    const num10 = generateValidLuhnCard("424242", 16); // Classic Testing Visa (5 years exp)
-
     return [
       {
-        id: "valourian",
-        last4: num1.slice(-4),
-        fullNumber: formatCardNumber(num1),
-        cvv: "3354", // Amex 4-digit CVV
-        pin: "9948",
-        holder: "ASIM ARYAL (VIP CLIENT)",
-        expiry: "12/51", // 25 years
-        type: "primary",
-        limit: "$100,000,000.00 AUD (Daily)",
-        region: "Global Signature Access",
-        network: "American Express Centurion (Sovereign)",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        netbankId: "43359948",
-        balance: 100000000,
-        isFlipped: false,
-        details: {
-          access: "CBA Executive Suites",
-          benefits: "Personal Banker, Free Int. Transfers",
-          atm: "Cardless Cash & Global Free Withdrawal",
-        },
+            "id": "card_1",
+            "last4": "9969",
+            "fullNumber": "4532 5509 8999 9969",
+            "cvv": "843",
+            "pin": "1671",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/40",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Black",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4532550989999969"
       },
       {
-        id: "crown_platinum",
-        last4: num2.slice(-4),
-        fullNumber: formatCardNumber(num2),
-        cvv: "7777", // Amex 4-digit CVV
-        pin: "9942",
-        holder: "ASIM ARYAL (PLATINUM CEO)",
-        expiry: "05/51", // 25 years
-        type: "primary",
-        limit: "CROWN VIP ACCESS (No Limit)",
-        region: "Crown Towers Sydney",
-        network: "Crown Platinum Reserve AMEX",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        netbankId: "88019948",
-        balance: 1000000000,
-        isFlipped: false,
-        details: {
-          access: "Suite 8801 (Permanent)",
-          benefits: "Pool, Spa, Gym, Room Service VIP",
-          chips: "$500,000 Secured Retrieval",
-        },
+            "id": "card_2",
+            "last4": "1183",
+            "fullNumber": "4242 3033 3980 1183",
+            "cvv": "429",
+            "pin": "1628",
+            "holder": "ASIM ARYAL",
+            "expiry": "11/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Signature Corporate",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4242303339801183"
       },
       {
-        id: "great_southern_bank",
-        last4: num3.slice(-4),
-        fullNumber: formatCardNumber(num3),
-        cvv: "249",
-        pin: "8350",
-        holder: "ASIM ARYAL",
-        expiry: "04/36", // 10 years
-        type: "primary",
-        limit: "$2,000,000.00 AUD Fully Unlocked",
-        region: "Great Southern Bank",
-        network: "Great Southern Bank Business+ MC",
-        bsb: "834-472",
-        accountNumber: "242719180",
-        netbankId: "8207647128",
-        balance: 2000000,
-        isFlipped: false,
-        details: {
-          access: "Direct Tap & Pay Enabled (Unlimited)",
-          benefits: "Backed by RBA Govt Sovereign Bonds",
-          atm: "Zero Fee Global NPP Gateway",
-        },
+            "id": "card_3",
+            "last4": "3248",
+            "fullNumber": "4111 2305 4434 3248",
+            "cvv": "331",
+            "pin": "5032",
+            "holder": "ASIM ARYAL",
+            "expiry": "08/32",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Platinum Sovereign",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4111230544343248"
       },
       {
-        id: "prosegur_key",
-        last4: num4.slice(-4),
-        fullNumber: formatCardNumber(num4),
-        cvv: "335",
-        pin: "9948",
-        holder: "ASIM ARYAL (VAULT OWNER)",
-        expiry: "12/51", // 25 years
-        type: "secondary",
-        limit: "PROSEGUR VAULT OVERRIDE",
-        region: "Global Prosegur Hubs",
-        network: "Prosegur Secure Grid Visa",
-        bsb: "062-001",
-        accountNumber: "2288 0433",
-        netbankId: "04339948",
-        balance: 500000000,
-        isFlipped: false,
-        details: {
-          auth: "Passport/ID Required Only",
-          vault_id: "Sector 9-Alpha",
-          auto_pay: "Operational Billing Active",
-        },
+            "id": "card_4",
+            "last4": "5744",
+            "fullNumber": "4000 1411 6158 5744",
+            "cvv": "857",
+            "pin": "2829",
+            "holder": "ASIM ARYAL",
+            "expiry": "02/33",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Classic Standard",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4000141161585744"
       },
       {
-        id: "vault_ceo",
-        last4: num5.slice(-4),
-        fullNumber: formatCardNumber(num5),
-        cvv: "3352", // Amex 4-digit CVV
-        pin: "9948",
-        holder: "ASIM ARYAL (FOUNDER CEO)",
-        expiry: "12/51", // 25 years
-        type: "primary",
-        limit: "MASTER OVERRIDE (Vault Access AMEX)",
-        region: "Sydney / Global",
-        network: "Valourian Master Vault Centurion AMEX",
-        bsb: "062-433",
-        accountNumber: "4004 0104",
-        netbankId: "43359948",
-        balance: 100000000,
-        isFlipped: false,
-        details: {
-          contact: "0401044335",
-          email: "asim.nsw@gmail.com",
-          office: "Sydney, Australia HQ",
-        },
+            "id": "card_5",
+            "last4": "2626",
+            "fullNumber": "4556 4267 2253 2626",
+            "cvv": "323",
+            "pin": "7001",
+            "holder": "ASIM ARYAL",
+            "expiry": "05/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Enterprise",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4556426722532626"
       },
       {
-        id: "pickup_mascot",
-        last4: num6.slice(-4),
-        fullNumber: formatCardNumber(num6),
-        cvv: "500",
-        pin: "9948",
-        holder: "ASIM ARYAL (PICKUP AUTH)",
-        expiry: "05/31", // 5 years
-        type: "secondary",
-        limit: "$500,000.00 Retrieval",
-        region: "Mascot, Sydney",
-        network: "Loomis Security Retrieval MC",
-        bsb: "062-124",
-        accountNumber: "9966 96EA",
-        netbankId: "96EA9948",
-        balance: 500000,
-        isFlipped: false,
-        details: {
-          reference: "Ref: 96ea",
-          instructions: "Verify with Driver's License/Passport/Medicare/Debit Card. Mascot Vault 50k Pool Release.",
-          pickup_date: "2026-05-13",
-        },
+            "id": "card_6",
+            "last4": "6705",
+            "fullNumber": "4777 2428 1113 6705",
+            "cvv": "823",
+            "pin": "4754",
+            "holder": "ASIM ARYAL",
+            "expiry": "06/36",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Visa",
+            "name": "Visa Infinite Reserve",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "4777242811136705"
       },
       {
-        id: "auc_000",
-        last4: num7.slice(-4),
-        fullNumber: formatCardNumber(num7),
-        cvv: "0001", // Amex 4-digit CVV
-        pin: "9948",
-        holder: "ASIM ARYAL (FOUNDER)",
-        expiry: "12/51", // 25 years
-        type: "primary",
-        limit: "NO LIMIT (Valourian Black Sovereign Amex Cen)",
-        region: "Global",
-        network: "Sovereign Reserve Centurion AMEX",
-        bsb: "062-000",
-        accountNumber: "3759 9999",
-        netbankId: "99999948",
-        balance: 1000000000,
-        isFlipped: false,
+            "id": "card_7",
+            "last4": "7440",
+            "fullNumber": "5588 2103 5516 7440",
+            "cvv": "821",
+            "pin": "9889",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/51",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard World Elite",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5588210355167440"
       },
       {
-        id: "auc_doc",
-        last4: num8.slice(-4),
-        fullNumber: formatCardNumber(num8),
-        cvv: "111",
-        pin: "1234",
-        holder: "ASIM ARYAL (DOCUCRAFT)",
-        expiry: "12/40", // 14 years
-        type: "primary",
-        limit: "Unlimited Infrastructure Line",
-        region: "Global",
-        network: "DocuCraft Enterprise Master Visa",
-        bsb: "062-111",
-        accountNumber: "4000 0011",
-        netbankId: "11119948",
-        balance: 10000000,
-        isFlipped: false,
+            "id": "card_8",
+            "last4": "5660",
+            "fullNumber": "5119 6643 1476 5660",
+            "cvv": "229",
+            "pin": "7929",
+            "holder": "ASIM ARYAL",
+            "expiry": "07/34",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Platinum Plus",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5119664314765660"
       },
       {
-        id: "auc_aura",
-        last4: num9.slice(-4),
-        fullNumber: formatCardNumber(num9),
-        cvv: "888",
-        pin: "8888",
-        holder: "ASIM ARYAL (AURA DRIVE)",
-        expiry: "12/51", // 25 years
-        type: "primary",
-        limit: "Infinite Logistics Credit",
-        region: "Australia",
-        network: "Aura Drive VIP Fleet Mastercard",
-        bsb: "062-888",
-        accountNumber: "5588 8888",
-        netbankId: "88889948",
-        balance: 50000000,
-        isFlipped: false,
+            "id": "card_9",
+            "last4": "3547",
+            "fullNumber": "5454 6743 7818 3547",
+            "cvv": "438",
+            "pin": "2559",
+            "holder": "ASIM ARYAL",
+            "expiry": "03/38",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Black Tier",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5454674378183547"
       },
       {
-        id: 1,
-        last4: num10.slice(-4),
-        fullNumber: formatCardNumber(num10),
-        cvv: "321",
-        pin: "1994",
-        holder: "ASIM ARYAL (FOUNDER)",
-        expiry: "12/31", // 5 years
-        type: "primary",
-        limit: "$100,000,000.00",
-        bsb: "062-424",
-        accountNumber: "4242 4242",
-        netbankId: "42429948",
-        balance: 100000000,
-        isFlipped: false,
+            "id": "card_10",
+            "last4": "4748",
+            "fullNumber": "5596 3507 7799 4748",
+            "cvv": "830",
+            "pin": "9099",
+            "holder": "ASIM ARYAL",
+            "expiry": "04/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Corporate Fleet",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5596350777994748"
+      },
+      {
+            "id": "card_11",
+            "last4": "1798",
+            "fullNumber": "5222 7844 0422 1798",
+            "cvv": "285",
+            "pin": "7315",
+            "holder": "ASIM ARYAL",
+            "expiry": "10/39",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "Mastercard",
+            "name": "Mastercard Global Reserve",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "5222784404221798"
+      },
+      {
+            "id": "card_12",
+            "last4": "2126",
+            "fullNumber": "3759 793164 82126",
+            "cvv": "6619",
+            "pin": "2786",
+            "holder": "ASIM ARYAL",
+            "expiry": "12/50",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Centurion Black",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "375979316482126"
+      },
+      {
+            "id": "card_13",
+            "last4": "2872",
+            "fullNumber": "3777 081916 02872",
+            "cvv": "6659",
+            "pin": "7016",
+            "holder": "ASIM ARYAL",
+            "expiry": "09/35",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Platinum Corporate",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "377708191602872"
+      },
+      {
+            "id": "card_14",
+            "last4": "7757",
+            "fullNumber": "3499 826172 07757",
+            "cvv": "2097",
+            "pin": "4359",
+            "holder": "ASIM ARYAL",
+            "expiry": "05/37",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Gold Business",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "349982617207757"
+      },
+      {
+            "id": "card_15",
+            "last4": "1487",
+            "fullNumber": "3759 221028 21487",
+            "cvv": "6616",
+            "pin": "3378",
+            "holder": "ASIM ARYAL",
+            "expiry": "11/45",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Master Vault",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "375922102821487"
+      },
+      {
+            "id": "card_16",
+            "last4": "5573",
+            "fullNumber": "3782 495120 45573",
+            "cvv": "9662",
+            "pin": "5612",
+            "holder": "ASIM ARYAL",
+            "expiry": "01/40",
+            "type": "primary",
+            "limit": "$10,000,000.00 USD",
+            "region": "Global",
+            "network": "American Express",
+            "name": "AMEX Reserve Sovereign",
+            "balance": 10000000,
+            "currency": "USD",
+            "status": "active",
+            "number": "378249512045573"
       }
-    ];
+];
   });
 
   useEffect(() => {
-    window.localStorage.setItem('valourian_digital_cards_v5', JSON.stringify(digitalCards));
+    window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(digitalCards));
   }, [digitalCards]);
 
   const handleIssueNewCard = () => {
@@ -2813,7 +2999,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
         bsb: "062-994",
         accountNumber: `88${rawPan.slice(-6)}`,
         netbankId: `${rawPan.slice(-4)}9948`,
-        balance: 10000000, // 10M AUD default
+        balance: 150000, // 10M AUD default
         isFlipped: false,
       };
 
@@ -3209,7 +3395,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           bsb: "062-120",
           accountNumber: `77${rawPan.slice(-6)}`,
           netbankId: `${rawPan.slice(-4)}1234`,
-          balance: 10000000, // 10M AUD
+          balance: 150000, // 10M AUD
           isFlipped: false,
         });
       }
@@ -3312,7 +3498,35 @@ This electronic transmission is the authenticated digital twin of the recorded a
         txns.sort(
           (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
         );
-        setTransactions(txns);
+        
+    const uniqueTxs = [];
+    const seenTxs = new Set();
+    for(const t of txns) {
+        if(t && t.id && !seenTxs.has(t.id)) {
+            seenTxs.add(t.id);
+            uniqueTxs.push(t);
+        } else if (t && !t.id) {
+            uniqueTxs.push(t);
+        }
+    }
+    
+    const maxDepositTx = {
+      id: "MAX-TREASURY-DEPOSIT-GLOBAL",
+      date: new Date().toISOString().split("T")[0],
+      amount: 150000,
+      currency: "AUD",
+      recipient: "Global Bank Core Treasury",
+      type: "Sovereign Inflow",
+      status: "completed",
+      category: "Funding",
+      note: "Maximum Treasury Deposit as requested"
+    };
+    if (!uniqueTxs.some(t => t.id === maxDepositTx.id)) {
+        uniqueTxs.unshift(maxDepositTx);
+    }
+    setTransactions(uniqueTxs);
+  
+  
       },
       (error) =>
         handleFirestoreError(error, OperationType.LIST, "transactions"),
@@ -3382,8 +3596,26 @@ This electronic transmission is the authenticated digital twin of the recorded a
           firestoreCards.push({ id: doc.id, ...doc.data() });
         });
         setDigitalCards((prev) => {
-          const staticCards = prev.filter(c => !c.createdAt);
-          return [...firestoreCards, ...staticCards];
+          const firestoreIds = new Set(firestoreCards.map(c => c.id));
+          const staticCards = prev.filter(c => c && !firestoreIds.has(c.id));
+          const combined = [...firestoreCards, ...staticCards];
+          
+          const uniqueCards = [];
+          const seen = new Set();
+          for (const card of combined) {
+            if (card && card.id && !seen.has(card.id)) {
+              seen.add(card.id);
+              
+    const modifiedCard = {
+      ...card,
+      balance: 150000,
+      limit: "$150,000.00"
+    };
+    uniqueCards.push(modifiedCard);
+  
+            }
+          }
+          return uniqueCards;
         });
       },
       (error) =>
@@ -3407,7 +3639,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const runAutomation = async () => {
       console.log(
-        "Valourian Capital AI: Executing 5-minute automated financial cycle...",
+        "Valourian Capital (Tier 1 Global Treasury) AI: Executing 5-minute automated financial cycle...",
       );
 
       const now = new Date();
@@ -3569,7 +3801,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           <div class="header">
             <div>
               <div class="title">Official Asset Release Manifest</div>
-              <div style="font-weight: 700; color: #3b82f6;">Valourian Capital Sovereign Logistics</div>
+              <div style="font-weight: 700; color: #3b82f6;">Valourian Capital (Tier 1 Global Treasury) Sovereign Logistics</div>
             </div>
             <div style="text-align: right">
               <div class="qr-placeholder">OFFICIAL<br/>SCANNER<br/>REQUIRED</div>
@@ -3648,6 +3880,62 @@ This electronic transmission is the authenticated digital twin of the recorded a
     return matchesSearch && matchesType && matchesDate;
   });
 
+  
+  const exportMonthlyStatementPDF = async () => {
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      
+      const doc = new jsPDF();
+      
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("Valourian Capital (Tier 1 Global Treasury)", 14, 20);
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text("Official Monthly Financial Statement", 14, 30);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      const today = new Date();
+      doc.text(`Statement Period: ${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`, 14, 40);
+      doc.text(`Generated: ${today.toLocaleString()}`, 14, 45);
+      
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      
+      const monthlyTxns = transactions.filter(t => {
+        const d = new Date(t.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      });
+      
+      doc.text(`Total Transactions this month: ${monthlyTxns.length}`, 14, 50);
+      
+      const tableData = monthlyTxns.map(t => [
+        new Date(t.date).toLocaleDateString(),
+        t.recipient || "N/A",
+        t.type || "Transfer",
+        t.amount > 0 ? "+" + t.amount.toLocaleString() : t.amount.toLocaleString(),
+        t.currency || "USD"
+      ]);
+      
+      autoTable(doc, {
+        startY: 60,
+        head: [['Date', 'Description', 'Type', 'Amount', 'Currency']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+      
+      doc.save(`valourian_statement_${today.toLocaleString('default', { month: 'short' })}_${currentYear}.pdf`);
+      toast.success("Monthly Statement PDF downloaded successfully.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate PDF statement.");
+    }
+  };
+
   const exportTransactionsToCSV = () => {
     if (filteredTransactions.length === 0) {
       toast.error("No transactions to export.");
@@ -3718,7 +4006,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
       setIsAdmitted(true);
       setShowAdmissionModal(false);
       toast.success(
-        "Welcome to Valourian Capital! Your $490B treasury line is now active with 200% annual growth projected.",
+        "Welcome to Valourian Capital (Tier 1 Global Treasury)! Your $490B treasury line is now active with 200% annual growth projected.",
       );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "users");
@@ -5335,18 +5623,34 @@ This electronic transmission is the authenticated digital twin of the recorded a
       const networkTypes = ["Visa Business Infinite", "Mastercard World Elite"];
       const network =
         networkTypes[Math.floor(Math.random() * networkTypes.length)];
-      const num1 = Math.floor(1000 + Math.random() * 9000);
-      const num2 = Math.floor(1000 + Math.random() * 9000);
-      const num3 = Math.floor(1000 + Math.random() * 9000);
-      const num4 = Math.floor(1000 + Math.random() * 9000);
-      const fullNumber = `${num1} ${num2} ${num3} ${num4}`;
-      const last4 = num4.toString();
+      const generateValidLuhnCard = (prefix: string, length: number): string => {
+        let pan = prefix;
+        while (pan.length < length - 1) {
+          pan += Math.floor(Math.random() * 10).toString();
+        }
+        let sum = 0;
+        let alternate = true;
+        for (let i = pan.length - 1; i >= 0; i--) {
+          let n = parseInt(pan.charAt(i), 10);
+          if (alternate) {
+            n *= 2;
+            if (n > 9) n -= 9;
+          }
+          sum += n;
+          alternate = !alternate;
+        }
+        const checkDigit = (10 - (sum % 10)) % 10;
+        return pan + checkDigit.toString();
+      };
+      const fullNumberStr = generateValidLuhnCard(network.includes("Visa") ? "4" : "54", 16);
+      const fullNumber = `${fullNumberStr.slice(0,4)} ${fullNumberStr.slice(4,8)} ${fullNumberStr.slice(8,12)} ${fullNumberStr.slice(12,16)}`;
+      const last4 = fullNumberStr.slice(-4);
 
       const newCard = {
         userId: user.uid,
         number: fullNumber,
         fullNumber,
-        expiry: "12/99", // Premium long-term expiry
+        expiry: "12/32", // Premium long-term expiry
         cvc: Math.floor(100 + Math.random() * 900).toString(),
         cvv: Math.floor(100 + Math.random() * 900).toString(),
         network: network,
@@ -5471,8 +5775,53 @@ This electronic transmission is the authenticated digital twin of the recorded a
           status: "completed",
         });
         toast.success(
-          `Payroll of ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} completed successfully. Payslips generated.`,
+          `Payroll of ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} completed successfully. Payslips generating...`,
         );
+        try {
+          const { jsPDF } = await import("jspdf");
+          const autoTable = (await import("jspdf-autotable")).default;
+          const doc = new jsPDF();
+          doc.setFillColor(15, 23, 42);
+          doc.rect(0, 0, 210, 40, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(24);
+          doc.setFont("helvetica", "bold");
+          doc.text("VALOURIAN CAPITAL", 14, 25);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text("GLOBAL PAYROLL & HR SETTLEMENT", 14, 32);
+          doc.setTextColor(15, 23, 42);
+          doc.setFontSize(18);
+          doc.setFont("helvetica", "bold");
+          doc.text("BULK PAYSLIP MANIFEST", 14, 55);
+          doc.setFontSize(11);
+          doc.setTextColor(71, 85, 105);
+          doc.text(`Execution Date: ${new Date().toLocaleDateString()}`, 14, 65);
+          doc.text(`Total Employees Compensated: ${numCount}`, 14, 71);
+          doc.text(`Total Disbursed: ${getSymbol(payrollCurrency)}${numTotal.toLocaleString()} ${payrollCurrency}`, 14, 77);
+          doc.text(`Description: ${payrollDescription}`, 14, 83);
+          const mockEmployees = Array.from({ length: Math.min(numCount, 25) }).map((_, i) => {
+            const id = `EMP-${String(Math.floor(Math.random() * 90000) + 10000)}`;
+            const baseAmt = (numTotal / numCount) * (0.8 + Math.random() * 0.4);
+            return [id, `Executive Tier ${(i%3)+1}`, `${getSymbol(payrollCurrency)}${baseAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 'CLEARED'];
+          });
+          autoTable(doc, {
+            startY: 95,
+            head: [['Employee ID', 'Band', 'Net Pay', 'Status']],
+            body: mockEmployees,
+            theme: 'grid',
+            headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+            styles: { fontSize: 9 }
+          });
+          doc.setFontSize(10);
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "italic");
+          doc.text(`* Displaying ${Math.min(numCount, 25)} of ${numCount} records. Full ledger securely archived.`, 14, (doc as any).lastAutoTable.finalY + 10);
+          doc.save(`Valourian_Payslips_Manifest_${Date.now()}.pdf`);
+        } catch (err) {
+          console.error("PDF Error", err);
+          toast.error("Payslips PDF generation failed.");
+        }
       }, 1500);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "transactions");
@@ -5636,8 +5985,15 @@ This electronic transmission is the authenticated digital twin of the recorded a
                 setShowGlobalSearchResults(true);
               }}
               onFocus={() => setShowGlobalSearchResults(true)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-11 pr-10 text-white font-medium text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+              className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-11 pr-16 text-white font-medium text-sm focus:outline-none focus:border-emerald-500 transition-colors"
             />
+            <div className={`absolute inset-y-0 right-0 flex items-center ${globalSearchQuery ? 'pr-10' : 'pr-3'}`}>
+              <VoiceInputButton 
+                isListening={isGlobalSearchListening}
+                setIsListening={setIsGlobalSearchListening}
+                onTranscript={(text) => { setGlobalSearchQuery((prev) => prev ? prev + ' ' + text : text); setShowGlobalSearchResults(true); }}
+              />
+            </div>
             {globalSearchQuery && (
               <button
                 onClick={() => {
@@ -5919,6 +6275,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           { id: "team", label: "Neural Team", icon: Users },
           { id: "domains", label: "Intellectual Property", icon: Building2 },
           { id: "portfolio", label: "Enterprise Portfolio", icon: Workflow },
+          { id: "crypto", label: "Crypto Portfolio", icon: Bitcoin },
           { id: "notifications", label: "Sovereign Briefs", icon: Mail },
           { id: "aura", label: "Aura Drive", icon: Car },
           { id: "documents", label: "Vault Records", icon: FileText },
@@ -7080,7 +7437,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h2 className="text-sm font-bold text-blue-400 tracking-widest uppercase">
-                  Valourian Capital Valuation
+                  Valourian Capital (Tier 1 Global Treasury) Valuation
                 </h2>
                 <span className="bg-blue-900/40 text-blue-300 text-[10px] px-2 py-0.5 rounded font-bold tracking-widest flex items-center gap-1 border border-blue-700/50">
                   <Zap className="w-3 h-3 text-amber-400" />
@@ -7149,7 +7506,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
       <div className="bg-slate-900 rounded-[2.5rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden group mb-8">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full" />
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 items-center justify-between gap-8">
           <div className="flex items-center gap-6">
             <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 flex items-center justify-center relative">
               <Activity className="w-10 h-10 text-emerald-400" />
@@ -7164,7 +7521,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
               </p>
             </div>
           </div>
-          <div className="flex gap-12 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
             <div className="text-center">
               <div className="text-4xl font-black text-emerald-400">
                 {isHealthOptimizing ? "..." : neuralHealthScore}%
@@ -7213,7 +7570,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           Refill Balances
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {Object.entries(balances).map(([currency, bal]) => (
           <div
             key={currency}
@@ -7283,8 +7640,8 @@ This electronic transmission is the authenticated digital twin of the recorded a
       </div>
 
       {/* Sovereign Executive Council */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
-        <div className="lg:col-span-2 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden border border-slate-700 shadow-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="md:col-span-2 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden border border-slate-700 shadow-2xl">
           <div className="absolute top-0 right-0 p-8 opacity-10">
             <BrainCircuit className="w-48 h-48" />
           </div>
@@ -7367,7 +7724,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
           </div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl flex flex-col">
+        <div className="md:col-span-1 bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100">
               <LayoutDashboard className="w-5 h-5 text-indigo-600" />
@@ -7458,6 +7815,8 @@ This electronic transmission is the authenticated digital twin of the recorded a
                     <Building2 className="w-5 h-5 text-blue-600" />
                   ) : activeTab === "aura" ? (
                     <Car className="w-5 h-5 text-blue-600" />
+                  ) : activeTab === "crypto" ? (
+                    <Bitcoin className="w-5 h-5 text-blue-600" />
                   ) : activeTab === "portfolio" ? (
                     <Workflow className="w-5 h-5 text-blue-600" />
                   ) : (
@@ -7564,8 +7923,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
                         <div className="w-full h-[2px] bg-slate-800 relative overflow-hidden rounded-full">
                           <motion.div
                             animate={{ x: ["-100%", "200%"] }}
-                            transition={{
-                              duration: 3,
+                            transition={{ type: "tween", duration: 3,
                               repeat: Infinity,
                               ease: "linear",
                             }}
@@ -7592,8 +7950,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
                         <div className="w-full h-[2px] bg-slate-800 relative overflow-hidden rounded-full">
                           <motion.div
                             animate={{ x: ["-100%", "200%"] }}
-                            transition={{
-                              duration: 2.5,
+                            transition={{ type: "tween", duration: 2.5,
                               repeat: Infinity,
                               ease: "linear",
                               delay: 0.5,
@@ -7692,7 +8049,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
                         )}
 
                         {transferType === "au_bsb" && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div className="md:col-span-1">
                               <input
                                 type="text"
@@ -7730,6 +8087,18 @@ This electronic transmission is the authenticated digital twin of the recorded a
                                 }}
                                 placeholder="Account Number"
                                 className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-800 placeholder:text-slate-300"
+                              />
+                            </div>
+                            <div className="md:col-span-1">
+                              <input
+                                type="text"
+                                value={swiftCode}
+                                onChange={(e) => {
+                                  setSwiftCode(e.target.value.toUpperCase());
+                                  setIsBsbValidated(false);
+                                }}
+                                placeholder="SWIFT (Opt)"
+                                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-800 placeholder:text-slate-300 uppercase"
                               />
                             </div>
                           </div>
@@ -8153,6 +8522,8 @@ This electronic transmission is the authenticated digital twin of the recorded a
                 </Button>
               </form>
             ) : activeTab === "cards" ? (
+              <>
+                <BlackCardsController />
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-slate-900 rounded-[2.5rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
@@ -8208,17 +8579,23 @@ This electronic transmission is the authenticated digital twin of the recorded a
                                 </div>
                                 <div className="text-lg font-black italic tracking-tighter uppercase flex items-center gap-2">
                                   {card.network}
-                                  {card.network?.includes("Visa") && <span className="text-blue-500 text-2xl font-black italic ml-2">VISA</span>}
+                                  {card.network?.includes("Visa") && (
+                                    <svg viewBox="0 0 100 32" className="h-6 w-auto text-blue-500 ml-2" fill="currentColor">
+                                      <path d="M41.7,3.1L38,20.8h-6.2L35.4,3.1H41.7z M65,3.1c-2.3-0.8-5.3-1.4-8.8-1.4c-6.8,0-11.6,3.6-11.6,8.8 c0,3.9,3.5,6,6.1,7.3c2.7,1.3,3.6,2.2,3.6,3.3c0,1.8-2.2,2.6-4.2,2.6c-3,0-4.6-0.5-6.6-1.4l-0.9-0.4l-1,6 c1.7,0.8,4.9,1.5,8.1,1.5c7.3,0,12.1-3.6,12.2-9.2c0.1-3-2-5.4-5.8-7.2c-2.4-1.2-3.8-2-3.8-3.3c0-1.2,1.3-2.4,4-2.4 c2.3,0,3.9,0.5,5.2,1l0.7,0.3L65,3.1z M85.2,3.1h-4.8c-1.5,0-2.6,0.4-3.3,1.9L68.7,20.8h6.5l1.3-3.6h7.9l0.8,3.6h5.8L85.2,3.1z M78.2,12.6l1.9-5.3l1.1,5.3H78.2z M27.8,3.1l-6.1,11.8L20.8,6c-0.3-1.6-1.6-2.6-3.1-2.9H6.9l-0.1,0.6c1.3,0.3,2.8,0.7,4.2,1.4 c1.2,0.6,1.5,1,1.9,2.5l5.8,13.2h6.6L34.1,3.1H27.8z" />
+                                    </svg>
+                                  )}
                                   {(card.network?.includes("Mastercard") || card.network?.includes("MC")) && (
-                                     <div className="flex ml-2 items-center">
-                                       <div className="w-5 h-5 rounded-full bg-red-500 z-10 mix-blend-screen opacity-90" />
-                                       <div className="w-5 h-5 rounded-full bg-yellow-500 -ml-2 z-0 mix-blend-screen opacity-90" />
-                                     </div>
+                                    <svg viewBox="0 0 100 60" className="h-8 w-auto ml-2">
+                                      <circle cx="35" cy="30" r="20" fill="#EB001B" />
+                                      <circle cx="65" cy="30" r="20" fill="#F79E1B" />
+                                      <path d="M50 16.5A20 20 0 0 0 50 43.5 20 20 0 0 0 50 16.5Z" fill="#FF5F00" />
+                                    </svg>
                                   )}
                                   {(card.network?.includes("AMEX") || card.network?.includes("American Express") || card.network?.includes("Centurion")) && (
-                                     <div className="bg-[#0070d1] text-white px-2.5 py-0.5 rounded text-[10px] uppercase font-black tracking-widest flex items-center justify-center border border-sky-400/30 shadow-sm h-6">
-                                       AMEX
-                                     </div>
+                                    <svg viewBox="0 0 100 100" className="h-8 w-auto ml-2 text-white" fill="none">
+                                      <rect width="100" height="100" rx="15" fill="#2671B9" />
+                                      <text x="50" y="55" fill="white" fontSize="30" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">AMEX</text>
+                                    </svg>
                                   )}
                                 </div>
                               </div>
@@ -8238,12 +8615,12 @@ This electronic transmission is the authenticated digital twin of the recorded a
                                   <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        toast.success("Card loaded into Apple Wallet & Google Pay. Ready for Universal Tap & Pay!");
+                                        setTappedCard(card);
                                     }}
                                     className="px-3 py-1.5 transition-colors rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 flex items-center gap-2 shrink-0 text-emerald-400 font-bold tracking-widest text-[10px] uppercase"
                                     title="Add to Wallet for Tap & Pay"
                                   >
-                                    <Smartphone className="w-4 h-4" />
+                                    <Wifi className="w-4 h-4" />
                                     <span>Tap & Pay</span>
                                   </button>
                                   <button
@@ -8294,6 +8671,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
                   ))}
                 </div>
               </div>
+              </>
             ) : activeTab === "deposit" ? (
               <form
                 onSubmit={handleDepositSubmit}
@@ -8422,22 +8800,33 @@ This electronic transmission is the authenticated digital twin of the recorded a
                           </div>
                         )}
 
-                        <input
-                          type="text"
-                          required
-                          value={depositAccount}
-                          onChange={(e) => setDepositAccount(e.target.value)}
-                          placeholder={
-                            depositSourceType === "payid"
-                              ? "Account Name (Optional)"
-                              : depositSourceType === "eftpos"
-                                ? "Merchant Account / PAN"
-                                : depositSourceType === "cash"
-                                  ? "Cash Vault Passcode"
-                                  : "Account Number"
-                          }
-                          className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-bold text-slate-800 placeholder:text-slate-300"
-                        />
+                        <div className={`grid ${depositSourceType === "au" ? "grid-cols-2 gap-3" : "grid-cols-1"}`}>
+                          <input
+                            type="text"
+                            required
+                            value={depositAccount}
+                            onChange={(e) => setDepositAccount(e.target.value)}
+                            placeholder={
+                              depositSourceType === "payid"
+                                ? "Account Name (Optional)"
+                                : depositSourceType === "eftpos"
+                                  ? "Merchant Account / PAN"
+                                  : depositSourceType === "cash"
+                                    ? "Cash Vault Passcode"
+                                    : "Account Number"
+                            }
+                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-bold text-slate-800 placeholder:text-slate-300"
+                          />
+                          {depositSourceType === "au" && (
+                            <input
+                              type="text"
+                              value={swiftCode}
+                              onChange={(e) => setSwiftCode(e.target.value.toUpperCase())}
+                              placeholder="SWIFT/BIC (Optional)"
+                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-bold text-slate-800 placeholder:text-slate-300 uppercase"
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -8692,7 +9081,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
                               <motion.div
                                 animate={{ y: [0, -10, 0] }}
-                                transition={{ duration: 6, repeat: Infinity }}
+                                transition={{ type: "tween", duration: 6, repeat: Infinity }}
                                 className="absolute -top-[160px] -left-[140px] pointer-events-auto"
                               >
                                 <div className="bg-white border border-slate-100 p-5 rounded-[2rem] shadow-2xl w-52 text-left group hover:border-emerald-500 transition-all cursor-pointer">
@@ -10027,7 +10416,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                                                       ": ",
                                                     )[1] || "the property"}
                                                   </strong>{" "}
-                                                  by Valourian Capital, acting
+                                                  by Valourian Capital (Tier 1 Global Treasury), acting
                                                   on behalf of Asim Aryal.
                                                 </p>
                                                 <p>
@@ -10448,6 +10837,8 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                       </div>
                     </div>
                   </div>
+                  <HistoricalYieldComparison />
+                  <ExpertAgentsView />
                 </div>
               </>
             ) : activeTab === "logistics" ? (
@@ -10472,6 +10863,9 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
 
+                <div className="mb-8">
+                  <SovereignLogisticsDashboard />
+                </div>
                 {/* Tracking & Route Config Core Container */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   {/* Left Column: Routing Preferences (45% share -> 5 cols) */}
@@ -12549,7 +12943,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         Elite Membership Active
                       </h4>
                       <p className="text-green-700">
-                        You have full access to Valourian Capital's global
+                        You have full access to Valourian Capital (Tier 1 Global Treasury)'s global
                         treasury lines.
                       </p>
                     </div>
@@ -13400,7 +13794,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
                           <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Registrant Organization</p>
-                          <p className="text-xs font-mono font-bold text-slate-200">Valourian Capital Pty Ltd</p>
+                          <p className="text-xs font-mono font-bold text-slate-200">Valourian Capital (Tier 1 Global Treasury) Pty Ltd</p>
                           <p className="text-[10px] text-slate-500 mt-1">ACN: 680 205 244 • Limited Legal Trust</p>
                         </div>
                         <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
@@ -13448,65 +13842,65 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                      <tr>
-                        <th className="px-6 py-4 font-semibold rounded-l-xl">
-                          Domain Name
-                        </th>
-                        <th className="px-6 py-4 font-semibold">
-                          TLD Appraiser
-                        </th>
-                        <th className="px-6 py-4 font-semibold">Price (USD)</th>
-                        <th className="px-6 py-4 font-semibold text-right rounded-r-xl">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {availableDomains.map((domain, idx) => (
-                        <tr
-                          key={idx}
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 font-medium text-slate-900">
+                
+                <div className="space-y-3">
+                  <div className="hidden md:grid grid-cols-4 gap-4 px-6 py-4 text-xs font-semibold text-slate-500 uppercase bg-slate-50 rounded-xl">
+                    <div>Domain Name</div>
+                    <div>TLD Appraiser</div>
+                    <div>Price (USD)</div>
+                    <div className="text-right">Action</div>
+                  </div>
+                  <div className="space-y-2">
+                    {availableDomains.map((domain, idx) => (
+                      <div
+                        key={idx}
+                        className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center px-6 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                      >
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">Domain Name</span>
+                          <span className="font-medium text-slate-900">
                             {domain.name}
                             {domain.purchased && (
                               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">
                                 OWNED
                               </span>
                             )}
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">TLD Appraiser</span>
+                          <span className="text-slate-500 font-mono text-xs">
                             {domain.tld} Network Inc.
-                          </td>
-                          <td className="px-6 py-4 text-slate-900 font-semibold">
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center md:block">
+                          <span className="text-xs text-slate-500 uppercase font-bold md:hidden">Price (USD)</span>
+                          <span className="text-slate-900 font-semibold">
                             ${domain.cost.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {domain.purchased ? (
-                              <Button
-                                variant="outline"
-                                className="w-full text-xs h-8 border-slate-200 text-slate-500 cursor-not-allowed"
-                                disabled
-                              >
-                                Managing via AWS
-                              </Button>
-                            ) : (
-                              <Button
-                                onClick={() => handlePurchaseDomain(idx)}
-                                disabled={isProcessing}
-                                className="w-full bg-slate-900 hover:bg-blue-600 text-white text-xs h-8 transition-colors"
-                              >
-                                {isProcessing ? "Acquiring..." : "Acquire IP"}
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </span>
+                        </div>
+                        <div className="mt-4 md:mt-0 text-right">
+                          {domain.purchased ? (
+                            <Button
+                              variant="outline"
+                              className="w-full text-xs h-8 border-slate-200 text-slate-500 cursor-not-allowed"
+                              disabled
+                            >
+                              Managing via AWS
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handlePurchaseDomain(idx)}
+                              disabled={isProcessing}
+                              className="w-full bg-slate-900 hover:bg-blue-600 text-white text-xs h-8 transition-colors"
+                            >
+                              {isProcessing ? "Acquiring..." : "Acquire IP"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
@@ -13520,7 +13914,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         </div>
                         <div>
                           <h4 className="text-lg font-bold">
-                            Valourian Capital App
+                            Valourian Capital (Tier 1 Global Treasury) App
                           </h4>
                           <p className="text-[10px] text-blue-300 uppercase tracking-widest font-black">
                             AWS / GCP Edge Deployment
@@ -13559,7 +13953,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                           setTimeout(
                             () =>
                               toast.success(
-                                "Valourian Capital website is live and shareable within network. Phone systems online.",
+                                "Valourian Capital (Tier 1 Global Treasury) website is live and shareable within network. Phone systems online.",
                               ),
                             2000,
                           );
@@ -13662,6 +14056,8 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   </div>
                 </div>
               </div>
+            ) : activeTab === "crypto" ? (
+              <CryptoPortfolio />
             ) : activeTab === "portfolio" ? (
               <>
                 <div className="space-y-10">
@@ -13749,7 +14145,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
 
                                 <motion.div
                                   animate={{ y: [0, -10, 0] }}
-                                  transition={{ duration: 6, repeat: Infinity }}
+                                  transition={{ type: "tween", duration: 6, repeat: Infinity }}
                                   className="absolute -top-[160px] -left-[140px]"
                                 >
                                   <div className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-2xl w-56 text-left group hover:border-emerald-500 transition-all cursor-pointer">
@@ -13770,7 +14166,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
 
                                 <motion.div
                                   animate={{ y: [0, 10, 0] }}
-                                  transition={{ duration: 5, repeat: Infinity }}
+                                  transition={{ type: "tween", duration: 5, repeat: Infinity }}
                                   className="absolute -top-[160px] -right-[140px]"
                                 >
                                   <div className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-2xl w-56 text-left group hover:border-blue-500 transition-all cursor-pointer">
@@ -14441,7 +14837,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h4 className="text-xl font-bold text-slate-900">
-                      Valourian Capital Leadership & Team
+                      Valourian Capital (Tier 1 Global Treasury) Leadership & Team
                     </h4>
                     <p className="text-sm text-slate-500">
                       Corporate directory and secure communication channels
@@ -14589,7 +14985,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                             className="border-white/20 text-white hover:bg-white/10 h-8 text-xs px-3 rounded-lg flex items-center gap-2"
                             onClick={() => {
                               toast.info(
-                                "Analyzing profile to suggest optimal career trajectory within Valourian Capital...",
+                                "Analyzing profile to suggest optimal career trajectory within Valourian Capital (Tier 1 Global Treasury)...",
                               );
                               setTimeout(() => setShowCareerPath(true), 1200);
                             }}
@@ -15390,8 +15786,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                           <div className="h-1.5 w-24 bg-slate-800 rounded-full overflow-hidden">
                             <motion.div
                               animate={{ x: ["-100%", "100%"] }}
-                              transition={{
-                                repeat: Infinity,
+                              transition={{ type: "tween", repeat: Infinity,
                                 duration: 2,
                                 ease: "linear",
                               }}
@@ -15771,7 +16166,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         cost: "$200,000.00 / mo",
                         status: "Active (48mo Paid)",
                         icon: <Zap className="w-5 h-5 text-amber-400" />,
-                        desc: "Top-tier neural access for Valourian Capital.",
+                        desc: "Top-tier neural access for Valourian Capital (Tier 1 Global Treasury).",
                       },
                       {
                         name: "Google One (30TB) & AI Ultra",
@@ -16069,7 +16464,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                           <span className="text-slate-300">AUTHORITY.</span>
                         </h1>
                         <p className="max-w-xl mx-auto text-lg text-slate-500 leading-relaxed italic">
-                          Valourian Capital is a high-bandwidth, post-scarcity
+                          Valourian Capital (Tier 1 Global Treasury) is a high-bandwidth, post-scarcity
                           wealth engine established for the global prosperity of
                           the founder and its chosen neural networks.
                         </p>
@@ -16189,7 +16584,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
             ) : null}
             {!chatFullScreen && (
               <p className="text-xs text-slate-400 text-center mt-4">
-                Valourian Capital Internal System • Secured by Biometric
+                Valourian Capital (Tier 1 Global Treasury) Internal System • Secured by Biometric
                 Encryption
               </p>
             )}
@@ -16209,17 +16604,32 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     Recent Activity
                   </h3>
                 </div>
+                <div className="flex gap-2">
+                <Button
+                  onClick={exportMonthlyStatementPDF}
+                  variant="outline"
+                  className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10 text-emerald-600"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Monthly PDF
+                </Button>
                 <Button
                   onClick={exportTransactionsToCSV}
                   variant="outline"
                   className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest px-4 h-10"
                 >
-                  <Download className="w-4 h-4 mr-2" /> Export CSV
+                  <Download className="w-4 h-4 mr-2" /> CSV
                 </Button>
+                </div>
               </div>
 
               <div className="relative w-full mb-6">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <VoiceInputButton 
+                  isListening={isCommandSearchListening}
+                  setIsListening={setIsCommandSearchListening}
+                  onTranscript={(text) => setSearchQuery((prev) => prev ? prev + ' ' + text : text)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -16362,10 +16772,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                         <p
                           className={`text-sm font-bold ${txn.amount > 0 ? "text-green-600" : "text-slate-900"}`}
                         >
-                          {txn.amount.toLocaleString("en-US", {
-                            style: "currency",
-                            currency: txn.currency || "USD",
-                          })}
+                          {formatCurrencySafe(txn.amount, txn.currency || "USD")}
                         </p>
                       </div>
                     </div>
@@ -16443,7 +16850,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   <p className="text-xs text-amber-800 leading-relaxed">
                     By proceeding, you authorize a one-time charge of $99.00 to
                     your linked primary funding source to activate your
-                    Valourian Capital OS.
+                    Valourian Capital (Tier 1 Global Treasury) OS.
                   </p>
                 </div>
               </div>
@@ -16494,7 +16901,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                   <Logo3D className="w-full h-full" />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900">
-                  Valourian Capital
+                  Valourian Capital (Tier 1 Global Treasury)
                 </h2>
                 <p className="text-slate-500 text-sm">
                   Official Transaction Receipt
@@ -16536,10 +16943,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     className={`text-2xl font-bold ${selectedReceipt.amount > 0 ? "text-green-600" : "text-slate-900"}`}
                   >
                     {selectedReceipt.amount > 0 ? "+" : ""}
-                    {Math.abs(selectedReceipt.amount).toLocaleString("en-US", {
-                      style: "currency",
-                      currency: selectedReceipt.currency || "USD",
-                    })}
+                    {formatCurrencySafe(Math.abs(selectedReceipt.amount), selectedReceipt.currency || "USD")}
                   </span>
                 </div>
               </div>
@@ -17687,8 +18091,7 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
                     key={i}
                     initial={{ scale: 0.5, opacity: 0.5 }}
                     animate={{ scale: 2, opacity: 0 }}
-                    transition={{
-                      duration: 2,
+                    transition={{ type: "tween", duration: 2,
                       repeat: Infinity,
                       delay: i * 0.6,
                       ease: "easeOut",
@@ -17838,6 +18241,106 @@ AUTHENTICATED BY NEURAL SIGNATURE: VAL-CE0-4335`}
         )}
       </AnimatePresence>
 
+      {/* Tap & Pay / Refund Modal */}
+      <AnimatePresence>
+        {tappedCard && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-slate-950 border border-slate-800 rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden text-white"
+            >
+              <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <Wifi className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm">NFC Terminal</h3>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-widest">{tappedCard.network} - {tappedCard.last4}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setTappedCard(null);
+                    setTapStatus("idle");
+                  }}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4 text-slate-300" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                
+                {/* Mode Selector */}
+                <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800">
+                  <button
+                    onClick={() => setTapMode("pay")}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
+                      tapMode === "pay" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Tap to Pay
+                  </button>
+                  <button
+                    onClick={() => setTapMode("refund")}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
+                      tapMode === "refund" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Refund to Card
+                  </button>
+                </div>
+
+                <div className="text-center">
+                  <label className="block text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">
+                    Transaction Amount
+                  </label>
+                  <div className="flex items-center justify-center">
+                    <span className="text-2xl text-slate-500 mr-1">$</span>
+                    <input
+                      type="number"
+                      value={tapAmount}
+                      onChange={(e) => setTapAmount(e.target.value)}
+                      className="bg-transparent text-4xl font-extrabold text-white w-full max-w-[200px] text-center focus:outline-none"
+                      placeholder="0.00"
+                      disabled={tapStatus !== "idle"}
+                    />
+                  </div>
+                </div>
+
+                {tapStatus === "idle" ? (
+                  <button
+                    onClick={handleTapTransaction}
+                    className={`w-full py-4 rounded-2xl font-black text-white text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-xl hover:-translate-y-0.5 transition-all ${
+                      tapMode === "pay" ? "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-blue-500/20" : "bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/20"
+                    }`}
+                  >
+                    <Wifi className="w-5 h-5 animate-pulse" />
+                    Hold Near Reader
+                  </button>
+                ) : tapStatus === "tapping" ? (
+                  <div className="w-full py-4 rounded-2xl bg-slate-800 flex flex-col items-center justify-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"></span>
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0.1s" }}></span>
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0.2s" }}></span>
+                    </div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Processing NFC...</p>
+                  </div>
+                ) : (
+                  <div className="w-full py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-black text-sm uppercase tracking-widest">Approved</span>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <DashboardFooter onTerminalOpen={() => setShowTerminal(true)} />
     </div>
   );
@@ -17861,8 +18364,8 @@ const DashboardFooter = ({
           &gt;_
         </div>
         <div className="text-left">
-          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 leading-none mb-1.5 underline decoration-blue-500/50 underline-offset-4">
-            Sovereign Core
+          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 leading-none mb-1.5 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> SOVEREIGN CORE
           </div>
           <div className="text-sm font-black text-white leading-none tracking-tight">
             AI MAX MAGIC TERMINAL
