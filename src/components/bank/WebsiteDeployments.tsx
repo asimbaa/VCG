@@ -5,6 +5,9 @@ import { DocuCraftAI } from "./DocuCraftAI";
 
 export function WebsiteDeployments() {
   const [selectedSite, setSelectedSite] = useState<string | null>(null);
+  const [dnsConfig, setDnsConfig] = useState(false);
+  const [sslVerify, setSslVerify] = useState(false);
+  const [prodSanitize, setProdSanitize] = useState(false);
 
   if (selectedSite === "valourian.com.au") {
     return (
@@ -34,6 +37,15 @@ export function WebsiteDeployments() {
 
   const websites = [
     {
+      domain: "valouriancapital.io",
+      name: "Valourian Capital IO",
+      status: "PENDING_DEPLOYMENT",
+      type: "Global Sovereign Applet",
+      encryption: "Pending TLS 1.3",
+      visitors: "0/hr",
+      server: "Global Edge Network"
+    },
+    {
       domain: "valourian.com.au",
       name: "Valourian Capital AU",
       status: "ACTIVE",
@@ -48,151 +60,95 @@ export function WebsiteDeployments() {
       status: "ACTIVE",
       type: "SaaS Utility - Sovereign Engine",
       encryption: "TLS 1.3 Quantum-Safe",
-      visitors: "Neural Sync",
+      visitors: "5.1k/hr",
       server: "Global Edge Network"
-    },
-    {
-      domain: "valourian.capital",
-      name: "Valourian Global Citadel",
-      status: "ACTIVE",
-      type: "Global Treasury",
-      encryption: "TLS 1.3 Quantum-Safe",
-      visitors: "42.8k/hr",
-      server: "us-east-1 (N. Virginia)"
-    },
-    {
-      domain: "aura.valourian.com.au",
-      name: "Aura Neural Fleet",
-      status: "ACTIVE",
-      type: "Internal API Gateway",
-      encryption: "TLS 1.3 Quantum-Safe",
-      visitors: "System Sync",
-      server: "ap-southeast-2 (Sydney)"
     }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-50 flex items-center justify-between p-4 rounded-[2rem] border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                <Globe className="w-5 h-5 text-blue-600" />
+      <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <Server className="w-32 h-32 text-emerald-400" />
+        </div>
+        <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
+          <Globe className="w-5 h-5 text-emerald-400" />
+          valouriancapital.io Deployment Readiness
+        </h2>
+        <div className="space-y-3 relative z-10 max-w-2xl">
+          <label className="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-emerald-500/50 transition-colors">
+            <input type="checkbox" checked={dnsConfig} onChange={(e) => setDnsConfig(e.target.checked)} className="w-5 h-5 accent-emerald-500" />
+            <div className="flex-1">
+              <div className="text-sm font-bold text-white">Domain DNS Configuration</div>
+              <div className="text-xs text-slate-400">Map A/AAAA and CNAME records to Sovereign Cluster.</div>
             </div>
-            <div>
-                <h2 className="font-black text-slate-800 uppercase tracking-widest text-sm">WEBSITE DEPLOYMENTS</h2>
-                <p className="text-xs text-slate-500 font-mono">Global Domain & Hosting Matrix</p>
+          </label>
+          <label className="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-emerald-500/50 transition-colors">
+            <input type="checkbox" checked={sslVerify} onChange={(e) => setSslVerify(e.target.checked)} className="w-5 h-5 accent-emerald-500" />
+            <div className="flex-1">
+              <div className="text-sm font-bold text-white">SSL Certificate Verification</div>
+              <div className="text-xs text-slate-400">Deploy TLS 1.3 Quantum-Safe certs via Global Edge.</div>
             </div>
+          </label>
+          <label className="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-emerald-500/50 transition-colors">
+            <input type="checkbox" checked={prodSanitize} onChange={(e) => setProdSanitize(e.target.checked)} className="w-5 h-5 accent-emerald-500" />
+            <div className="flex-1">
+              <div className="text-sm font-bold text-white">Production Environment Sanitization</div>
+              <div className="text-xs text-slate-400">Clear test tokens, isolate prod database, enforce security rules.</div>
+            </div>
+          </label>
+          
+          <button 
+            disabled={!(dnsConfig && sslVerify && prodSanitize)}
+            className="mt-4 w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-colors border disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500"
+          >
+            Execute Final Deployment Pipeline
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-         {/* Stats */}
-         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-            <div className="text-slate-400 font-mono text-[10px] uppercase font-bold tracking-widest flex items-center gap-2">
-               <Globe className="w-3.5 h-3.5" /> Total Active Domains
+      <div className="grid sm:grid-cols-2 gap-4">
+        {websites.map(site => (
+          <div key={site.domain} className="bg-slate-950 border border-slate-800 p-6 rounded-2xl hover:border-indigo-500/50 transition-all flex flex-col justify-between group">
+            <div>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-black text-white group-hover:text-indigo-400 transition-colors">{site.name}</h3>
+                  <div className="text-xs text-indigo-400 font-mono mt-1">{site.domain}</div>
+                </div>
+                <div className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded border ${site.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
+                  {site.status}
+                </div>
+              </div>
+              <div className="space-y-2 mb-6">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Type</span>
+                  <span className="text-slate-300 font-medium">{site.type}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Encryption</span>
+                  <span className="text-slate-300 font-medium flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-400"/> {site.encryption}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Server</span>
+                  <span className="text-slate-300 font-medium flex items-center gap-1"><Server className="w-3 h-3 text-indigo-400"/> {site.server}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800">
+                  <span className="text-slate-500">Live Traffic</span>
+                  <span className="text-slate-300 font-mono font-bold flex items-center gap-1"><Activity className="w-3 h-3 text-emerald-400 animate-pulse"/> {site.visitors}</span>
+                </div>
+              </div>
             </div>
-            <div className="text-3xl font-black text-slate-900">12</div>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-            <div className="text-emerald-500 font-mono text-[10px] uppercase font-bold tracking-widest flex items-center gap-2">
-               <Activity className="w-3.5 h-3.5" /> Matrix Uptime
-            </div>
-            <div className="text-3xl font-black text-slate-900">99.999%</div>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-            <div className="text-blue-500 font-mono text-[10px] uppercase font-bold tracking-widest flex items-center gap-2">
-               <ShieldCheck className="w-3.5 h-3.5" /> Protected Routing
-            </div>
-            <div className="text-3xl font-black text-slate-900">100%</div>
-         </div>
-         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-            <div className="text-amber-500 font-mono text-[10px] uppercase font-bold tracking-widest flex items-center gap-2">
-               <Server className="w-3.5 h-3.5" /> Global Nodes
-            </div>
-            <div className="text-3xl font-black text-slate-900">8</div>
-         </div>
-      </div>
-
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden min-h-[600px]">
-         <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50">
-            <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
-              <Server className="w-5 h-5 text-slate-400" /> Network Assets
-            </h3>
-            <div className="relative w-full md:w-64">
-               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-               <input 
-                 type="text" 
-                 placeholder="Search domains..." 
-                 className="w-full bg-white border border-slate-200 rounded-full pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-               />
-            </div>
-         </div>
-
-         <div className="p-0">
-           <table className="w-full text-left border-collapse">
-             <thead>
-               <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] uppercase font-black tracking-widest text-slate-400">
-                 <th className="px-8 py-4 font-bold">Domain Identity</th>
-                 <th className="px-8 py-4 font-bold">Status</th>
-                 <th className="px-8 py-4 font-bold">Encryption Protocol</th>
-                 <th className="px-8 py-4 font-bold">Node Location</th>
-                 <th className="px-8 py-4 font-bold text-right">Actions</th>
-               </tr>
-             </thead>
-             <tbody>
-                {websites.map((site, i) => (
-                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => { if(site.domain === "valourian.com.au" || site.domain === "docucraft.ai") setSelectedSite(site.domain) }}>
-                     <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                           <div className={`p-2.5 rounded-xl border ${site.status === 'ACTIVE' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
-                              <Globe className="w-5 h-5" />
-                           </div>
-                           <div>
-                              <p className="font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">{site.domain}</p>
-                              <p className="text-xs text-slate-500 font-medium">{site.name} • {site.type}</p>
-                           </div>
-                        </div>
-                     </td>
-                     <td className="px-8 py-6">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                           site.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' : 'bg-amber-500/10 text-amber-700 border-amber-500/20 animate-pulse'
-                        }`}>
-                           {site.status === 'ACTIVE' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
-                           {site.status}
-                        </span>
-                     </td>
-                     <td className="px-8 py-6">
-                        <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-600">
-                           <ShieldCheck className={`w-3.5 h-3.5 ${site.encryption.includes('Quantum') ? 'text-blue-500' : 'text-slate-400'}`} />
-                           {site.encryption}
-                        </div>
-                     </td>
-                     <td className="px-8 py-6">
-                        <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-500">
-                           <Cpu className="w-3.5 h-3.5 text-slate-400" /> {site.server}
-                        </div>
-                     </td>
-                     <td className="px-8 py-6 text-right">
-                        <button 
-                          className={`inline-flex items-center justify-center p-2.5 rounded-full border bg-white transition-all ${
-                            site.domain === "valourian.com.au" 
-                              ? "border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm" 
-                              : "border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                          }`}
-                          onClick={(e) => {
-                             if (site.domain !== "valourian.com.au") {
-                               e.stopPropagation();
-                             }
-                          }}
-                        >
-                           <ExternalLink className="w-4 h-4" />
-                        </button>
-                     </td>
-                  </tr>
-                ))}
-             </tbody>
-           </table>
-         </div>
+            
+            <button 
+              onClick={() => setSelectedSite(site.domain)}
+              disabled={site.status !== 'ACTIVE'}
+              className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Open Environment <ExternalLink className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

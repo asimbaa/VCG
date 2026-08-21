@@ -1,3 +1,7 @@
+import { User } from "firebase/auth";
+import { collection, query, orderBy, getDocs, limit } from "firebase/firestore";
+import { db } from "../../firebase";
+import { Car, FileText, Home, ShieldCheck } from "lucide-react";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Package, Clock, Navigation, CheckCircle2, Phone, MessageSquare, Star, Truck } from 'lucide-react';
@@ -17,187 +21,172 @@ interface TrackingData {
   longitude: number;
 }
 
-export function OrderTrackingDashboard() {
-  const [showRerouteModal, setShowRerouteModal] = useState(false);
-  const [newAddress, setNewAddress] = useState("");
-  
-  const handleReroute = () => {
-    if(newAddress.trim()) {
-      setTrackingData(prev => ({...prev, deliveryAddress: newAddress}));
-      setShowRerouteModal(false);
-    }
-  };
 
-  const [trackingData, setTrackingData] = useState<TrackingData>({
-    orderId: "VAL-STORE-9901-AUS",
-    status: 'in_transit',
-    estimatedDeliveryTime: "8:45 PM",
-    courierName: "Valourian VIP Fleet (Alex V.)",
-    courierVehicle: "Black Mercedes-Benz Sprinter (V-Class)",
-    courierRating: 5.0,
-    restaurantName: "Valourian Sovereign Storefront (Chatswood)",
-    deliveryAddress: "Unit 712 15 Barton Rd Artarmon NSW 2064 Australia",
-    progress: 45,
-    latitude: -33.7969, // near Chatswood
-    longitude: 151.1834,
-  });
+export function OrderTrackingDashboard({ user }: { user?: User | null }) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate real-time progress
-    if (trackingData.status === 'delivered') return;
-
-    const interval = setInterval(() => {
-      setTrackingData(prev => {
-        let nextProgress = prev.progress + Math.floor(Math.random() * 5);
-        let nextStatus = prev.status;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const fetchOrders = async () => {
+      try {
+        const q = query(collection(db, "users", user.uid, "receipts"), orderBy("timestamp", "desc"), limit(10));
+        const snap = await getDocs(q);
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        if (nextProgress >= 100) {
-          nextProgress = 100;
-          nextStatus = 'delivered';
-        } else if (nextProgress > 80) {
-          nextStatus = 'arriving';
-        }
+        // Add fake tracking status to each order
+        const mapped = data.map((order: any, idx) => {
+           const timeDiff = new Date().getTime() - new Date(order.timestamp).getTime();
+           const mins = Math.floor(timeDiff / 60000);
+           let status = 'in_transit';
+           let progress = 45;
+           if (mins > 60) {
+             status = 'delivered';
+             progress = 100;
+           } else if (mins > 30) {
+             status = 'arriving';
+             progress = 85;
+           } else if (mins > 10) {
+             status = 'picked_up';
+             progress = 60;
+           } else {
+             status = 'in_transit';
+             progress = 45;
+           }
+           
+           return {
+             ...order,
+             status,
+             progress,
+             estimatedDeliveryTime: new Date(new Date(order.timestamp).getTime() + 60*60*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+           };
+        });
+        setOrders(mapped);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, [user]);
 
-        return {
-          ...prev,
-          progress: nextProgress,
-          status: nextStatus,
-          // Slightly jitter latitude/longitude for simulation
-          latitude: prev.latitude + (Math.random() - 0.5) * 0.001,
-          longitude: prev.longitude + (Math.random() - 0.5) * 0.001,
-        };
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [trackingData.status]);
-
-  const getStatusText = (status: TrackingData['status']) => {
+  const getStatusText = (status: string) => {
     switch (status) {
-      case 'preparing': return 'Kitchen is preparing your order';
-      case 'picked_up': return 'Courier has picked up your order';
-      case 'in_transit': return 'Order is on the way';
-      case 'arriving': return 'Courier is arriving soon';
-      case 'delivered': return 'Order delivered';
+      case 'preparing': return 'Preparing Assets';
+      case 'picked_up': return 'Courier En Route';
+      case 'in_transit': return 'In Transit';
+      case 'arriving': return 'Arriving Soon';
+      case 'delivered': return 'Delivered Safely';
+      default: return 'In Transit';
     }
   };
 
+  const getIconForOrder = (items: any[]) => {
+    const names = items.map(i => i.name.toLowerCase() + " " + (i.tag || "").toLowerCase());
+    const text = names.join(" ");
+    if (text.includes("real estate") || text.includes("sky residence") || text.includes("island") || text.includes("estate")) return <Home className="w-5 h-5 text-emerald-500" />;
+    if (text.includes("tesla") || text.includes("vehicle") || text.includes("gulfstream") || text.includes("car")) return <Car className="w-5 h-5 text-blue-500" />;
+    return <Package className="w-5 h-5 text-slate-500" />;
+  };
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-500 font-bold uppercase tracking-widest text-xs">Loading Active Deliveries...</div>;
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="w-full max-w-4xl mx-auto bg-slate-50 min-h-[500px] rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-xl border border-slate-200">
+        <Package className="w-12 h-12 text-slate-300 mb-4" />
+        <h3 className="text-xl font-black text-slate-800">No Active Deliveries</h3>
+        <p className="text-slate-500 mt-2 text-sm max-w-md">Your secure vault and physical delivery manifests are currently empty. Visit the Sovereign Store to acquire new assets.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-md mx-auto bg-slate-50 min-h-[800px] rounded-3xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col relative font-sans">
-      {/* Header */}
-      <div className="bg-white px-6 py-4 border-b border-slate-100 flex justify-between items-center z-10 relative shadow-sm">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 tracking-tight">Order Tracking</h2>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{trackingData.orderId}</p>
-        </div>
-        <div className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border border-emerald-100">
-          <Clock className="w-3.5 h-3.5" />
-          {trackingData.estimatedDeliveryTime}
-        </div>
+    <div className="w-full max-w-4xl mx-auto space-y-8 font-sans">
+      <div className="flex items-center justify-between bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-800">
+         <div>
+            <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+               <ShieldCheck className="w-6 h-6 text-emerald-400" /> Sovereign Logistics Network
+            </h2>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Real-Time Title Deeds & Physical Asset Tracking</p>
+         </div>
       </div>
-
-      {/* Map Area */}
-      <div className="relative h-72 w-full bg-slate-200 z-0">
-        <DeliveryMap 
-          progress={trackingData.progress}
-          latitude={trackingData.latitude}
-          longitude={trackingData.longitude}
-          restaurantName={trackingData.restaurantName}
-        />
-        
-        {/* Map Overlay Status */}
-        <div className="absolute top-4 left-4 right-4 flex justify-center pointer-events-none z-50">
-          <motion.div 
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="bg-slate-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-3 border border-white/10"
-          >
-            <div className="bg-emerald-500/20 p-1.5 rounded-full border border-emerald-500/30">
-              <Truck className="w-4 h-4 text-emerald-400" />
-            </div>
-            <span className="text-xs font-black tracking-wider uppercase text-slate-100">
-              {getStatusText(trackingData.status)}
-            </span>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* Content Area */}
-      <div className="flex-1 bg-white rounded-t-3xl -mt-6 z-20 relative p-6 space-y-6 shadow-[0_-8px_30px_rgba(0,0,0,0.05)] overflow-y-auto">
-        
-        {/* Progress Bar */}
-        <div className="space-y-3">
-          <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-            <span>Prepared</span>
-            <span>Picked Up</span>
-            <span>Delivered</span>
-          </div>
-          <div className="relative h-2 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div 
-              className="absolute top-0 left-0 h-full bg-[#06C167] rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${trackingData.progress}%` }}
-              transition={{ type: "spring", stiffness: 50, damping: 15 }}
-            />
-          </div>
-        </div>
-
-        {/* Courier Details */}
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 bg-slate-200 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                 <img src="https://i.pravatar.cc/150?u=alex" alt="Courier" className="w-full h-full object-cover" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                <div className="bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                  <Star className="w-2.5 h-2.5 fill-current" /> {trackingData.courierRating}
-                </div>
-              </div>
-            </div>
+      
+      {orders.map((order, i) => (
+        <div key={order.id || i} className="bg-white rounded-3xl overflow-hidden shadow-xl border border-slate-200 flex flex-col md:flex-row relative">
+          <div className="md:w-1/3 bg-slate-100 p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200">
             <div>
-              <h3 className="text-sm font-black text-slate-900">{trackingData.courierName}</h3>
-              <p className="text-xs font-semibold text-slate-500">{trackingData.courierVehicle}</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-slate-200 text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
-              <MessageSquare className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 bg-[#06C167] rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/20 hover:bg-[#05a155] transition-colors">
-              <Phone className="w-4 h-4 fill-current" />
-            </button>
-          </div>
-        </div>
-
-        {/* Order Details */}
-        <div className="space-y-4 pt-2">
-          <div className="flex items-start gap-4">
-            <div className="mt-0.5">
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
-                <Package className="w-4 h-4 text-slate-500" />
+              <div className="flex items-center justify-between mb-4">
+                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{order.orderId || "SOV-DISPATCH"}</span>
+                 <div className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border border-emerald-100">
+                    <Clock className="w-3 h-3" /> {order.estimatedDeliveryTime}
+                 </div>
               </div>
+              <h3 className="text-sm font-black text-slate-900 mb-1 line-clamp-2">
+                {order.items?.map((item: any) => item.name).join(", ")}
+              </h3>
+              <p className="text-xs font-bold text-slate-500 mb-6">
+                Total: ${order.amount?.toLocaleString()} AUD
+              </p>
             </div>
-            <div className="flex-1 pb-4 border-b border-slate-100">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Pickup From</h4>
-              <p className="text-sm font-bold text-slate-900">{trackingData.restaurantName}</p>
+            
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+               <h4 className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Courier Network</h4>
+               <div className="flex items-center gap-3">
+                 <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center">
+                    <Truck className="w-4 h-4 text-white" />
+                 </div>
+                 <div>
+                    <div className="text-xs font-bold text-slate-900">{order.logisticsProvider || "Valourian Escort"}</div>
+                    <div className="text-[10px] text-slate-500 font-medium">Secured Transit</div>
+                 </div>
+               </div>
             </div>
           </div>
           
-          <div className="flex items-start gap-4">
-            <div className="mt-0.5">
-              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                <MapPin className="w-4 h-4 text-emerald-500" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Delivering To</h4>
-              <p className="text-sm font-bold text-slate-900">{trackingData.deliveryAddress}</p>
-            </div>
+          <div className="md:w-2/3 p-6 flex flex-col justify-between relative bg-slate-50/50">
+             <div className="absolute top-4 right-4 bg-slate-900 text-white px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase flex items-center gap-2 shadow-lg">
+                <div className={`w-2 h-2 rounded-full ${order.progress === 100 ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></div>
+                {getStatusText(order.status)}
+             </div>
+             
+             <div className="flex gap-4 mb-8 mt-2">
+                <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center shrink-0">
+                   {getIconForOrder(order.items || [])}
+                </div>
+                <div>
+                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Destination</h4>
+                   <p className="text-sm font-bold text-slate-800 line-clamp-2 pr-24">{order.deliveryAddress}</p>
+                   {order.authorityToLeave && (
+                     <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-2 border border-emerald-200 bg-emerald-50 inline-block px-2 py-0.5 rounded">Authority to Leave Safely</p>
+                   )}
+                </div>
+             </div>
+             
+             <div className="space-y-2 mt-auto">
+                <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                  <span>Dispatched</span>
+                  <span>In Transit</span>
+                  <span>Delivered</span>
+                </div>
+                <div className="relative h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                  <motion.div 
+                    className={`absolute top-0 left-0 h-full ${order.progress === 100 ? 'bg-emerald-500' : 'bg-slate-900'} rounded-full`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${order.progress}%` }}
+                    transition={{ type: "spring", stiffness: 40, damping: 15 }}
+                  />
+                </div>
+             </div>
           </div>
         </div>
-
-      </div>
+      ))}
     </div>
   );
 }

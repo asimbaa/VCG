@@ -25,13 +25,21 @@ import {
   FileText,
   Car,
   Sparkles,
-  PhoneCall
+  PhoneCall,
+  Share,
+  Map,
+
+
+
+  LocateFixed
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { HotelMapViewer } from './HotelMapViewer';
 import { db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { sendEmailViaService, EmailPreviewModal, EmailData } from './EmailService';
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function BookingApp({ user, balances, setBalances }: {
   user: any;
@@ -39,6 +47,7 @@ export function BookingApp({ user, balances, setBalances }: {
   setBalances: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }) {
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
+  const [activeService, setActiveService] = useState<"stays" | "flights" | "cars" | "dining">("stays");
   // Booking Search Criteria States
   const [destination, setDestination] = useState('Melbourne, Australia');
   const [checkInDate, setCheckInDate] = useState('2026-10-15');
@@ -50,14 +59,16 @@ export function BookingApp({ user, balances, setBalances }: {
   const [roomsCount, setRoomsCount] = useState(1);
   const [showGuestsDropdown, setShowGuestsDropdown] = useState(false);
 
-  const [confirmationEmail, setConfirmationEmail] = useState('asim.nsw@gmail.com');
-  const [contactPhone, setContactPhone] = useState('+61 491 570 156');
+  const [confirmationEmail, setConfirmationEmail] = useState('Mr. Asim Aryal');
+  const [contactPhone, setContactPhone] = useState('+61-401044335');
   const [confirmedBookingData, setConfirmedBookingData] = useState<any | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedHotel, setSelectedHotel] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewEmail, setPreviewEmail] = useState<EmailData | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [minRatingFilter, setMinRatingFilter] = useState<number>(0);
+  const [showMap, setShowMap] = useState(false);
   const [bookingHistory, setBookingHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -183,7 +194,7 @@ export function BookingApp({ user, balances, setBalances }: {
       const doc = new jsPDF();
       const hotelName = b.recipient?.replace("Booking.com - ", "") || b.hotelName || "Sovereign Hotel";
       const guest = b.guestName || "Mr. Asim Aryal";
-      const phone = b.phone || "+61 491 570 156";
+      const phone = b.phone || "+61-401044335";
       const checkIn = b.checkInDate || "2026-06-16";
       const checkOut = b.checkOutDate || "2026-09-02";
       const stayNights = b.nights || 78;
@@ -316,7 +327,7 @@ export function BookingApp({ user, balances, setBalances }: {
         description: "VIP Executive Residency: 78 Nights at Crown Towers Sydney. Suite 8801 Ultra-Premium Opera Deck Penthouse. Included Meal packages: VIP All-Inclusive Butler Dining Board, Private Caviar Trolley Service, and French Vintage Champagne Cellar Key. Priority airport helicopter shuttle & private chauffeur transit arranged.",
         isSeeded: true,
         guestName: "Mr. Asim Aryal",
-        phone: "+61 491 570 156",
+        phone: "+61-401044335",
         checkInDate: "2026-06-16",
         checkOutDate: "2026-09-02",
         nights: 78,
@@ -377,7 +388,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "An extraordinary skyscraper complex standing tall on the Southbank Promenade. Features ultra-exclusive VIP casinos, premium designer shopping arcades, and massive dynamic indoor swimming pools.",
           stars: 5,
-          amenities: ["VIP Casino", "Indoor Pool", "Luxury Spa", "Five-Star Dining", "Valet Parking"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "VIP Casino", "Indoor Pool", "Luxury Spa", "Five-Star Dining", "Valet Parking", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Luxury Sauna", "Panoramic Views", "Heated Pool"]
         },
         {
           id: 102,
@@ -390,7 +401,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "Stunning state-of-the-art skyscraper hotel. Registration lobby sits on Level 80, offering uninterrupted, breath-taking panoramic views across the entire Melbourne CBD sky horizon.",
           stars: 5,
-          amenities: ["Sky Lobby L80", "Indoor Infinity Pool", "Gymnasium", "Free High-Speed WiFi"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Sky Lobby L80", "Indoor Infinity Pool", "Gymnasium", "Free High-Speed WiFi", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 103,
@@ -403,7 +414,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=60",
           description: "Timeless classic refinement overlooking the scenic Yarra River. Features the legendary Chuan Spa, high tea salons, and hand-woven premium carpets.",
           stars: 5,
-          amenities: ["Chuan Spa", "Classic High Tea", "Bar & Lounge", "Yarra River Views"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Chuan Spa", "Classic High Tea", "Bar & Lounge", "Yarra River Views", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         }
       ];
     }
@@ -422,7 +433,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=60",
           description: "Sydney's spectacular twisting landmark luxury hotel at Barangaroo. Offers breathtaking open harbor views, private heated infinity pool cabanas, and elite celebrity chef restaurants.",
           stars: 5,
-          amenities: ["Infinity Pool Cabanas", "Harbor Views", "Tennis Courts", "Sovereign Lounge", "Spa Portal"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Infinity Pool Cabanas", "Harbor Views", "Tennis Courts", "Sovereign Lounge", "Spa Portal", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Luxury Sauna", "Panoramic Views", "Heated Pool"]
         },
         {
           id: 12,
@@ -435,7 +446,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "Perfect premium location right at the water's edge of Sydney Harbour. Flawlessly frames direct, majestic sights of the iconic Opera House and Harbour Bridge with floor-to-ceiling glass.",
           stars: 5,
-          amenities: ["Opera House Views", "24/7 Butler Service", "Rooftop Heated Pool", "Waterfront Dining"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Opera House Views", "24/7 Butler Service", "Rooftop Heated Pool", "Waterfront Dining", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 13,
@@ -448,7 +459,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "Stately residential style in Kent Street. Features a legendary day-spa with a star-studded subterranean pool with celestial ceiling panels.",
           stars: 5,
-          amenities: ["Celestial Star Pool", "Chuan Day Spa", "Pet-Friendly Luxury", "Premium Cellar Vault"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Celestial Star Pool", "Chuan Day Spa", "Pet-Friendly Luxury", "Premium Cellar Vault", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         }
       ];
     }
@@ -467,7 +478,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "The thrilling core of the brand-new riverfront Queen's Wharf lifestyle precinct. Spectacular dining platforms and VIP rooftop views.",
           stars: 5,
-          amenities: ["River Arena", "Sky Deck Access", "Casino Club", "Rooftop Pool"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "River Arena", "Sky Deck Access", "Casino Club", "Rooftop Pool", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 202,
@@ -480,7 +491,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "Australia's top-tier award-winning chic boutique resort. Features iconic retro-modern pastel architecture, award-winning restaurant Hellenika, and private poolside cabanas.",
           stars: 5,
-          amenities: ["Iconic Pool Arena", "Hellenika Restaurant", "Art Deco Styling", "Premium Gym"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Iconic Pool Arena", "Hellenika Restaurant", "Art Deco Styling", "Premium Gym", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
          {
           id: 203,
@@ -493,7 +504,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=60",
           description: "Formerly the legendary Palazzo Versace. Offers grand palace columns, Romanesque mosaic spa tiles, and stunning beach canal access.",
           stars: 5,
-          amenities: ["Lagoon Pools", "Versace Mosaic Styling", "Beach Canal Jetty", "Premium Day Spa"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Lagoon Pools", "Versace Mosaic Styling", "Beach Canal Jetty", "Premium Day Spa", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         }
       ];
     }
@@ -512,7 +523,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "The peak of British high-society hospitality located along the beautiful River Thames. Historic suites combined with Edwardian elegance.",
           stars: 5,
-          amenities: ["River Thames Views", "Edwardian Styling", "Savoy Grill by Gordon Ramsay", "Butler Service"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "River Thames Views", "Edwardian Styling", "Savoy Grill by Gordon Ramsay", "Butler Service", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 22,
@@ -525,7 +536,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "An legendary Mayfair crown jewel embodying effortless luxury. Regarded as 'the annex to Buckingham Palace'.",
           stars: 5,
-          amenities: ["Art Deco Lounge", "Royal Desk Access", "Bespoke Wellness Spa"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Art Deco Lounge", "Royal Desk Access", "Bespoke Wellness Spa"]
         }
       ];
     }
@@ -544,7 +555,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "A legendary monument where custom royal design pairs with French Haute Gastronomie and Coco Chanel history.",
           stars: 5,
-          amenities: ["Private Gardens", "L'Espadon Michelin", "Chanel Spa Center", "Gold-Plated Fixtures"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Private Gardens", "L'Espadon Michelin", "Chanel Spa Center", "Gold-Plated Fixtures", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 32,
@@ -557,7 +568,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "Fashion-district elite jewel featuring iconic red geranium-adorned balconies overlooking the Eiffel Tower.",
           stars: 5,
-          amenities: ["Red Balconies", "Eiffel Tower Sights", "Dior Spa", "Ice-skating Court (Winter)"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Red Balconies", "Eiffel Tower Sights", "Dior Spa", "Ice-skating Court (Winter)", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         }
       ];
     }
@@ -576,7 +587,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
           description: "World-famous Fifth Avenue icon standing right at the south-east edge of glorious Central Park.",
           stars: 5,
-          amenities: ["Central Park Border", "Palm Court Tea Salon", "Gilded Ballroom", "Grand Butler Desk"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Central Park Border", "Palm Court Tea Salon", "Gilded Ballroom", "Grand Butler Desk", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
         },
         {
           id: 42,
@@ -589,7 +600,7 @@ export function BookingApp({ user, balances, setBalances }: {
           image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
           description: "Parisian luxury meets Midtown Manhattan momentum. Dominated by trillions of custom radiant crystal fixtures and crimson roses.",
           stars: 5,
-          amenities: ["Custom Crystal Salons", "Heated Pool with Cabanas", "Baccarat Bar Lounge"]
+          amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Custom Crystal Salons", "Heated Pool with Cabanas", "Baccarat Bar Lounge"]
         }
       ];
     }
@@ -607,7 +618,7 @@ export function BookingApp({ user, balances, setBalances }: {
         image: "https://images.unsplash.com/photo-1542314831-c53cd4b85ca4?w=800&auto=format&fit=crop&q=60",
         description: "Elegant mountain resort located in the prestigious top floors of the Otemachi Tower. Impeccable Japanese Zen design, vast rock gardens, and traditional onsen spas.",
         stars: 5,
-        amenities: ["Zen Rock Gardens", "Penthouse Onsen Pool", "Mount Fuji Sightings", "Premium Cigar Lounge"]
+        amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Zen Rock Gardens", "Penthouse Onsen Pool", "Mount Fuji Sightings", "Premium Cigar Lounge", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
       },
       {
         id: 2,
@@ -620,12 +631,72 @@ export function BookingApp({ user, balances, setBalances }: {
         image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=60",
         description: "Occupies the upper stories of Tokyo Midtown, providing stunning birds-eye views of Roppongi and direct Michelin Star cuisine access.",
         stars: 5,
-        amenities: ["Michelin 1-Star Dining", "Skyline Views", "Indoor Pool & Wellness", "Traditional tea room"]
+        amenities: ["24Hr Room Service (Breakfast, Lunch, Dinner)", "Luxury Sauna", "Premium Views", "Infinity Pool", "Michelin 1-Star Dining", "Skyline Views", "Indoor Pool & Wellness", "Traditional tea room", "24Hr Room Service (Breakfast/Lunch/Dinner)", "Sauna & Spa", "Harbour/City Views", "Infinity Pool"]
       }
     ];
   };
 
+  const getFlightsForDestination = (queryStr: string) => {
+    return [
+      { id: "f1", name: "Qantas Airways - First Class", location: `Sydney to ${queryStr}`, price: 12500, rating: 4.9, reviews: 345, image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=60", description: "Luxury private suite in the sky with priority boarding, bespoke dining, and flat-bed." },
+      { id: "f2", name: "Emirates - Business Class", location: `Dubai to ${queryStr}`, price: 8900, rating: 4.8, reviews: 892, image: "https://images.unsplash.com/photo-1540339832862-4745ea9842af?w=800&q=60", description: "Premium flat-bed seating, onboard lounge access, and world-class in-flight entertainment." },
+      { id: "f3", name: "Singapore Airlines - Suites", location: `Singapore to ${queryStr}`, price: 15400, rating: 5.0, reviews: 512, image: "https://images.unsplash.com/photo-1560945958-3d120a10dfab?w=800&q=60", description: "Unparalleled luxury with a private cabin, double bed option, and Dom Pérignon." }
+    ];
+  };
+
+  const getCarsForDestination = (queryStr: string) => {
+    return [
+      { id: "c1", name: "Rolls-Royce Phantom - Chauffeur", location: queryStr, price: 2500, rating: 5.0, reviews: 120, image: "https://images.unsplash.com/photo-1633507026771-3cb7217db848?w=800&q=60", description: "Ultimate chauffeur-driven luxury vehicle for executive transport." },
+      { id: "c2", name: "Mercedes-Benz S-Class", location: queryStr, price: 1200, rating: 4.9, reviews: 450, image: "https://images.unsplash.com/photo-1616422285623-13ff0162193c?w=800&q=60", description: "Premium luxury sedan with executive seating and professional driver." },
+      { id: "c3", name: "Range Rover Autobiography", location: queryStr, price: 1500, rating: 4.8, reviews: 320, image: "https://images.unsplash.com/photo-1606016159991-d17b67472920?w=800&q=60", description: "Luxury SUV offering comfort, space, and prestige for your journey." }
+    ];
+  };
+
+  const getDiningForDestination = (queryStr: string) => {
+    return [
+      { id: "d1", name: "Chef's Table - 3 Michelin Stars", location: queryStr, price: 850, rating: 5.0, reviews: 85, image: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&q=60", description: "Exclusive 15-course tasting menu with premium wine pairing in a private dining room." },
+      { id: "d2", name: "Omakase Experience", location: queryStr, price: 600, rating: 4.9, reviews: 142, image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=60", description: "Authentic Edo-style sushi prepared by a master chef right before your eyes." },
+      { id: "d3", name: "Skyline Dining - VIP Booth", location: queryStr, price: 450, rating: 4.7, reviews: 310, image: "https://images.unsplash.com/photo-1544148103-0773bf10d330?w=800&q=60", description: "Modern fusion cuisine with panoramic city views and dedicated butler service." }
+    ];
+  };
+
   const hotels = getHotelsForDestination(destination);
+  const flights = getFlightsForDestination(destination);
+  const cars = getCarsForDestination(destination);
+  const dining = getDiningForDestination(destination);
+
+  const activeDataList = activeService === "stays" ? hotels : activeService === "flights" ? flights : activeService === "cars" ? cars : dining;
+
+  const handleCheckInChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value;
+    const today = new Date().toISOString().split('T')[0];
+    
+    let validDate = newDate;
+    if (newDate < today) {
+      toast.warning("Check-in date cannot be in the past.");
+      validDate = today;
+    }
+    
+    setCheckInDate(validDate);
+    
+    if (checkOutDate <= validDate) {
+      const nextDay = new Date(validDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      setCheckOutDate(nextDay.toISOString().split('T')[0]);
+    }
+  };
+
+  const handleCheckOutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value;
+    if (newDate <= checkInDate) {
+      toast.warning("Check-out date must be after check-in date.");
+      const nextDay = new Date(checkInDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      setCheckOutDate(nextDay.toISOString().split('T')[0]);
+    } else {
+      setCheckOutDate(newDate);
+    }
+  };
 
   const handleSearch = () => {
     // Dynamic Validation check on nights
@@ -659,8 +730,9 @@ export function BookingApp({ user, balances, setBalances }: {
   };
 
   const calculatedNights = getSecuredNightsCount();
-  const roomRatesSubtotal = selectedHotel ? (selectedHotel.price * calculatedNights * roomsCount) : 0;
-  const foodPackagesSubtotal = selectedHotel ? (getPackagesPricePerGuestPerNight() * totalGuests * calculatedNights) : 0;
+  const baseUnits = activeService === "stays" ? calculatedNights * roomsCount : activeService === "cars" ? calculatedNights : activeService === "flights" || activeService === "dining" ? totalGuests : 1;
+  const roomRatesSubtotal = selectedHotel ? (selectedHotel.price * baseUnits) : 0;
+  const foodPackagesSubtotal = selectedHotel && activeService === "stays" ? (getPackagesPricePerGuestPerNight() * totalGuests * calculatedNights) : 0;
   const rawSubtotal = roomRatesSubtotal + foodPackagesSubtotal;
   const taxAddition = Math.round(rawSubtotal * 0.10); // 10% Hotel Levy & local taxes
   const bookingGrandTotal = rawSubtotal + taxAddition;
@@ -727,6 +799,11 @@ export function BookingApp({ user, balances, setBalances }: {
       }
       setBalances(updatedBalances);
 
+      const isStays = activeService === "stays";
+      const descText = isStays 
+        ? `Premium reservation: ${calculatedNights} nights (${roomsCount} room/s) at ${selectedHotel.name}. Included Meal packages: ${includeAllInclusive ? "VIP All-Inclusive Butler Dining Board" : [includeBreakfast && "Buffet Breakfast", includeLunch && "Executive Lunch", includeDinner && "Fine Degustation Dinner"].filter(Boolean).join(", ") || "Room Only"}`
+        : `${activeService.toUpperCase()} Booking: ${selectedHotel.name}. ${baseUnits} units selected.`;
+
       // Book transaction receipt
       await addDoc(collection(db, "transactions"), {
         userId: user?.uid || "anonymous",
@@ -736,11 +813,15 @@ export function BookingApp({ user, balances, setBalances }: {
         recipient: `Booking.com - ${selectedHotel.name}`,
         type: "card",
         status: "completed",
-        description: `Premium reservation: ${nights} nights (${roomsCount} room/s) at ${selectedHotel.name}. Included Meal packages: ${includeAllInclusive ? "VIP All-Inclusive Butler Dining Board" : [includeBreakfast && "Buffet Breakfast", includeLunch && "Executive Lunch", includeDinner && "Fine Degustation Dinner"].filter(Boolean).join(", ") || "Room Only"}`
+        description: descText
       });
 
-      const datesLabel = `Check-In ${new Date(checkInDate).toLocaleDateString("en-AU")} — Check-Out ${new Date(checkOutDate).toLocaleDateString("en-AU")}`;
-      const guestsLabel = `${adultsCount} Adults, ${childrenCount} Children (${roomsCount} Room${roomsCount > 1 ? 's' : ''})`;
+      const datesLabel = isStays 
+        ? `Check-In ${new Date(checkInDate).toLocaleDateString("en-AU")} — Check-Out ${new Date(checkOutDate).toLocaleDateString("en-AU")}`
+        : `Date: ${new Date(checkInDate).toLocaleDateString("en-AU")}`;
+      const guestsLabel = isStays 
+        ? `${adultsCount} Adults, ${childrenCount} Children (${roomsCount} Room${roomsCount > 1 ? 's' : ''})`
+        : `${totalGuests} Guests`;
 
       // Dispatch verified invoice directly to Workspace Mail platform
       if (user && user.uid) {
@@ -791,26 +872,65 @@ export function BookingApp({ user, balances, setBalances }: {
   return (
     <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden min-h-[600px] flex flex-col font-sans text-slate-900">
       {/* Dynamic Booking.com header bar */}
-      <div className="bg-[#003580] p-4 flex items-center justify-between text-white">
-        <div className="flex items-center gap-2">
-          <Building className="w-6 h-6 text-amber-400" />
-          <h2 className="text-xl font-bold tracking-tight">Booking.com</h2>
-          <span className="text-[9px] bg-amber-400 text-[#003580] font-black px-1.5 py-0.5 rounded uppercase leading-none">VIP CORP</span>
-        </div>
-        <div className="flex items-center gap-4 text-sm font-medium">
-          <button 
-            id="booking-history-trips-btn"
-            onClick={() => setShowHistory(true)} 
-            className="hover:bg-blue-800 p-2 rounded-lg transition-colors flex items-center gap-2 cursor-pointer font-semibold"
-          >
-            <History className="w-4 h-4 text-amber-400" /> 
-            <span>My Trips</span>
-          </button>
-          <span className="hidden sm:inline font-bold font-mono bg-blue-900 px-2 py-0.5 rounded border border-blue-800 text-[11px]">AUD BALANCED</span>
-          <div className="w-8 h-8 bg-blue-700 rounded-full flex items-center justify-center">
-             <User className="w-5 h-5 text-white" />
+      <div className="bg-[#003580] pt-4 px-4 pb-0 flex flex-col text-white">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold tracking-tight">Booking.com</h2>
+            <span className="text-[9px] bg-amber-400 text-[#003580] font-black px-1.5 py-0.5 rounded uppercase leading-none">VIP CORP</span>
+          </div>
+          <div className="flex items-center gap-4 text-sm font-medium">
+            <button 
+              id="booking-history-trips-btn"
+              onClick={() => setShowHistory(true)} 
+              className="hover:bg-blue-800 p-2 rounded-lg transition-colors flex items-center gap-2 cursor-pointer font-semibold"
+            >
+              <History className="w-4 h-4 text-amber-400" /> 
+              <span>My Trips</span>
+            </button>
+            <span className="hidden sm:inline font-bold font-mono bg-blue-900 px-2 py-0.5 rounded border border-blue-800 text-[11px]">AUD BALANCED</span>
+            <div className="w-8 h-8 bg-blue-700 rounded-full flex items-center justify-center">
+               <User className="w-5 h-5 text-white" />
+            </div>
           </div>
         </div>
+
+        {/* Navigation Tabs */}
+        {!showHistory && !selectedHotel && !confirmedBookingData && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-4 hide-scrollbar">
+            <button
+              onClick={() => setActiveService("stays")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                activeService === "stays" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              }`}
+            >
+              <Building className="w-4 h-4" /> Stays
+            </button>
+            <button
+              onClick={() => setActiveService("flights")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                activeService === "flights" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              }`}
+            >
+              <Compass className="w-4 h-4" /> Flights
+            </button>
+            <button
+              onClick={() => setActiveService("cars")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                activeService === "cars" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              }`}
+            >
+              <Car className="w-4 h-4" /> Car rentals
+            </button>
+            <button
+              onClick={() => setActiveService("dining")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                activeService === "dining" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              }`}
+            >
+              <Utensils className="w-4 h-4" /> Dining
+            </button>
+          </div>
+        )}
       </div>
       
       {showHistory ? (
@@ -915,12 +1035,11 @@ export function BookingApp({ user, balances, setBalances }: {
                                 <span className="text-[10px] text-slate-800 font-black uppercase font-sans">Direct helipad lift to Hotel</span>
                               </div>
                             </div>
-                          </div>
-
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-indigo-100/60">
                             <div className="flex items-center gap-1.5">
                               <PhoneCall className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-                              <span className="text-[10px] text-slate-600 font-bold font-mono">VIP Verification line: {b.phone || "+61 491 570 156"}</span>
+                              <span className="text-[10px] text-slate-600 font-bold font-mono">VIP Verification line: {b.phone || "+61-401044335"}</span>
+                            </div>
                             </div>
                             <button
                               type="button"
@@ -982,6 +1101,25 @@ export function BookingApp({ user, balances, setBalances }: {
                               Show & Verify
                             </button>
 
+                            {/* Share Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const receiptText = `Here is the booking confirmation for ${hotelNameClean}. Check-In: ${b.checkInDate || "2026-06-16"} to Check-Out: ${b.checkOutDate || "2026-09-02"}.`;
+                                if (navigator.share) {
+                                  navigator.share({
+                                    title: 'Booking Receipt',
+                                    text: receiptText,
+                                    url: window.location.href,
+                                  }).catch(console.error);
+                                } else {
+                                  window.location.href = `mailto:?subject=Booking Receipt: ${hotelNameClean}&body=${encodeURIComponent(receiptText)}`;
+                                }
+                              }}
+                              className="px-3 py-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heavy text-[9px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer font-sans hover:border-slate-400"
+                            >
+                              <Share className="w-3.5 h-3.5 inline mr-1" /> Share
+                            </button>
                             {/* Download Button */}
                             <button
                               type="button"
@@ -1036,7 +1174,7 @@ export function BookingApp({ user, balances, setBalances }: {
                     type="date" 
                     id="booking-checkin-date"
                     value={checkInDate}
-                    onChange={(e) => setCheckInDate(e.target.value)}
+                    onChange={handleCheckInChange}
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full text-slate-900 focus:outline-none font-bold text-xs mt-0.5 font-mono cursor-pointer"
                   />
@@ -1052,7 +1190,7 @@ export function BookingApp({ user, balances, setBalances }: {
                     type="date" 
                     id="booking-checkout-date"
                     value={checkOutDate}
-                    onChange={(e) => setCheckOutDate(e.target.value)}
+                    onChange={handleCheckOutChange}
                     min={checkInDate || new Date().toISOString().split('T')[0]}
                     className="w-full text-slate-900 focus:outline-none font-bold text-xs mt-0.5 font-mono cursor-pointer"
                   />
@@ -1172,19 +1310,28 @@ export function BookingApp({ user, balances, setBalances }: {
                 onClick={handleSearch}
                 className="bg-[#006ce4] hover:bg-[#0052ad] text-white font-black px-8 py-3.5 lg:py-0 rounded-lg text-sm transition-colors cursor-pointer select-none active:scale-98"
               >
-                Search Stay
+                Search {activeService === "stays" ? "Stays" : activeService === "flights" ? "Flights" : activeService === "cars" ? "Cars" : "Dining"}
               </button>
             </div>
             
-            {/* Stay Days Status badge display */}
+            {/* Status badge display */}
             <div className="mt-3 flex flex-wrap gap-2 items-center">
-              <span className="text-[10px] bg-blue-900 border border-blue-800 px-2.5 py-1 rounded text-blue-200 font-sans font-bold flex items-center gap-1 leading-none uppercase tracking-wider">
-                <Calendar className="w-3 h-3 text-amber-400" />
-                Stay Duration: {nightsCount} Night{nightsCount > 1 ? 's' : ''}
-              </span>
-              {nightsCount > 14 && (
-                <span className="text-[9px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-black uppercase tracking-widest animate-pulse leading-none">
-                  Extended Long Stay Rate Applied
+              {activeService === "stays" || activeService === "cars" ? (
+                <>
+                  <span className="text-[10px] bg-blue-900 border border-blue-800 px-2.5 py-1 rounded text-blue-200 font-sans font-bold flex items-center gap-1 leading-none uppercase tracking-wider">
+                    <Calendar className="w-3 h-3 text-amber-400" />
+                    {activeService === "stays" ? "Stay" : "Rental"} Duration: {calculatedNights} Day{calculatedNights > 1 ? 's' : ''}
+                  </span>
+                  {calculatedNights > 14 && activeService === "stays" && (
+                    <span className="text-[9px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-black uppercase tracking-widest animate-pulse leading-none">
+                      Extended Long Stay Rate Applied
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-[10px] bg-blue-900 border border-blue-800 px-2.5 py-1 rounded text-blue-200 font-sans font-bold flex items-center gap-1 leading-none uppercase tracking-wider">
+                  <Calendar className="w-3 h-3 text-amber-400" />
+                  Date Selected: {new Date(checkInDate).toLocaleDateString("en-AU")}
                 </span>
               )}
             </div>
@@ -1437,6 +1584,30 @@ export function BookingApp({ user, balances, setBalances }: {
                         </div>
                       </div>
 
+                      {/* Local Area Map */}
+                      {/* Local Area Map */}
+                      <div className="pt-2">
+                        <button 
+                          onClick={() => setShowMap(!showMap)} 
+                          className="px-4 py-2 bg-[#003580] text-white rounded-lg font-bold text-xs flex items-center gap-2 mb-2 w-full justify-center transition-colors hover:bg-blue-800"
+                        >
+                          <Map className="w-4 h-4" /> {showMap ? 'Hide Local Area & Attractions Map' : 'Explore Local Area & Attractions Map'}
+                        </button>
+                        <AnimatePresence>
+                          {showMap && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <HotelMapViewer hotelName={selectedHotel.name} hotelLocation={selectedHotel.location} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                      
                       {/* Interactive Ledger billing calculation break-down */}
                       <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-5 mb-2">
                         <h3 className="font-extrabold text-slate-900 text-sm mb-3.5 flex items-center justify-between">
@@ -1489,7 +1660,7 @@ export function BookingApp({ user, balances, setBalances }: {
                               value={contactPhone}
                               onChange={(e) => setContactPhone(e.target.value)}
                               className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:border-[#003580] focus:outline-none font-semibold text-slate-800 font-mono"
-                              placeholder="e.g. +61 491 570 156"
+                              placeholder="e.g. +61-401044335"
                             />
                           </div>
                           <div>
@@ -1544,40 +1715,59 @@ export function BookingApp({ user, balances, setBalances }: {
                   </div>
                 ) : (
                   
-                  /* Stays search list grid displaying real descriptions and star indexes */
+                  /* Search list grid displaying results */
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                       <h3 className="text-base font-black uppercase text-slate-700 tracking-wider">
-                        Luxury Properties found in {destination}
+                        Luxury {activeService} found in {destination}
                       </h3>
-                      <span className="text-xs text-slate-500 font-medium">Filtered by: ★★★★★ Sovereign Grade</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider mr-1">Filter:</span>
+                        <button 
+                          onClick={() => setMinRatingFilter(0)} 
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 0 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          All
+                        </button>
+                        <button 
+                          onClick={() => setMinRatingFilter(4.8)} 
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 4.8 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          4.8+ Stars
+                        </button>
+                        <button 
+                          onClick={() => setMinRatingFilter(5)} 
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 5 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          ★ 5 Star Only
+                        </button>
+                      </div>
                     </div>
-
-                    {hotels.map(hotel => (
-                      <div key={hotel.id} className="bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300">
+                    {activeDataList.filter((item: any) => (item.stars || item.rating || 0) >= minRatingFilter).map((item: any) => (
+                      <motion.div whileHover={{ scale: 1.02, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }} key={item.id} className="bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300">
                         <div className="w-full sm:w-64 h-48 bg-slate-100 relative overflow-hidden shrink-0">
-                          <img src={hotel.image} alt={hotel.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
                           <div className="absolute top-3 left-3 bg-[#003580] text-amber-400 font-extrabold px-2 py-0.5 rounded text-[8px] tracking-wider uppercase">
                             VIP CHOICE
                           </div>
                         </div>
                         <div className="flex-1 p-5 flex flex-col justify-between relative">
                           <div className="absolute top-4 right-4 flex items-center gap-0.5 bg-blue-50 text-[#003580] px-2 py-0.5 rounded border border-blue-100 text-xs font-black">
-                            <span>{hotel.rating}</span>
+                            <span>{item.rating}</span>
                             <span className="text-amber-500">★</span>
                           </div>
 
                           <div className="space-y-1.5 pr-12">
                             <div className="flex items-center gap-1 flex-wrap">
-                              <h4 className="text-base font-black text-[#003580] leading-none">{hotel.name}</h4>
+                              <h4 className="text-base font-black text-[#003580] leading-none">{item.name}</h4>
                               <div className="flex shrink-0">
-                                {[...Array(hotel.stars || 5)].map((_, i) => (
+                                {[...Array(item.stars || 5)].map((_, i) => (
                                   <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                                 ))}
                               </div>
                             </div>
-                            <span className="text-[10px] text-slate-400 underline block font-semibold hover:text-blue-700 cursor-pointer">{hotel.location}</span>
-                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed font-medium">{hotel.description}</p>
+                            <span className="text-[10px] text-slate-400 underline block font-semibold hover:text-blue-700 cursor-pointer">{item.location}</span>
+                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed font-medium">{item.description}</p>
                           </div>
                           
                           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
@@ -1591,13 +1781,13 @@ export function BookingApp({ user, balances, setBalances }: {
                                </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-[9px] text-slate-400 leading-none">1 Night Rate Base Offer</p>
-                              <p className="text-xl font-black text-slate-900 leading-none mt-1 font-mono">{hotel.currency} {hotel.price.toLocaleString()}</p>
-                              <p className="text-[8px] text-slate-400 leading-none mt-1">Includes luxury cleaning premium levies</p>
+                              <p className="text-[9px] text-slate-400 leading-none">Base Offer</p>
+                              <p className="text-xl font-black text-slate-900 leading-none mt-1 font-mono">{globalCur} {formatConverted(item.price)}</p>
+                              <p className="text-[8px] text-slate-400 leading-none mt-1">Includes luxury premium levies</p>
                               <button 
-                                id={`see-avail-hotel-${hotel.id}`}
+                                id={`see-avail-hotel-${item.id}`}
                                 onClick={() => {
-                                  setSelectedHotel(hotel);
+                                  setSelectedHotel(item); setShowMap(false);
                                   // Clean up sub meals selections before viewing
                                   setIncludeBreakfast(false);
                                   setIncludeLunch(false);
@@ -1611,7 +1801,7 @@ export function BookingApp({ user, balances, setBalances }: {
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                 )}

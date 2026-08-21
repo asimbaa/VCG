@@ -1,7 +1,8 @@
+import { MapErrorBoundary } from "./MapErrorBoundary";
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Compass, Shield, Gauge, MapPin, Navigation, Activity, ZoomIn, ZoomOut, Layers, Box, Rotate3d, ChevronDown, Info, Flame, Bell, BellOff, AlertTriangle, Maximize, Minimize } from 'lucide-react';
+import { Compass, Shield, Gauge, Landmark, MapPin, Navigation, Activity, ZoomIn, ZoomOut, Layers, Box, Rotate3d, ChevronDown, Info, Flame, Bell, BellOff, AlertTriangle, Maximize, Minimize } from 'lucide-react';
 import { motion, AnimatePresence, animate } from 'framer-motion';
-import { GoogleMap, useJsApiLoader, DirectionsRenderer, Marker, TrafficLayer, Polyline, HeatmapLayer, OverlayView, Polygon, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, DirectionsRenderer, Marker, TrafficLayer, Polyline, HeatmapLayer, OverlayViewF, OverlayView, Polygon, InfoWindow } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
 import { db } from '../../firebase';
 import { collection, getDocs, query } from 'firebase/firestore';
@@ -35,6 +36,13 @@ const RESTAURANT_LOCATIONS: Record<string, { lat: number, lng: number }> = {
   "Maisy's 24 Hour Diner": { lat: -33.8340, lng: 151.2175 },
   "Golden Century Midnight": { lat: -33.8785, lng: 151.2032 }
 };
+
+
+const SOVEREIGN_LANDMARKS = [
+  { id: 'sov-1', name: 'Valourian Central Treasury', lat: -33.8688, lng: 151.2093, type: 'hq' },
+  { id: 'sov-2', name: 'AURA-9 Data Center (Sector 4)', lat: -33.8568, lng: 151.2153, type: 'data' },
+  { id: 'sov-3', name: 'Valourian Sovereign Vault', lat: -33.8720, lng: 151.2030, type: 'vault' }
+];
 
 const DESTINATION_COORD = { lat: -33.8675, lng: 151.2070 };
 
@@ -188,6 +196,8 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
   const [etaNotificationEnabled, setEtaNotificationEnabled] = useState(false);
   const [hasSentNotification, setHasSentNotification] = useState(false);
   const [showRestrictedZones, setShowRestrictedZones] = useState(true);
+  const [routingAlgorithm, setRoutingAlgorithm] = useState<"fastest" | "secure">("fastest");
+  const [showSovereignLandmarks, setShowSovereignLandmarks] = useState(true);
   const [selectedZone, setSelectedZone] = useState<typeof RESTRICTED_ZONES[0] | null>(null);
   const [activeRestrictedZoneId, setActiveRestrictedZoneId] = useState<string | null>(null);
   
@@ -350,12 +360,20 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
     }
   };
   
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: process.env.GOOGLE_MAPS_PLATFORM_KEY || (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY || '',
+    googleMapsApiKey: (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY || '',
     libraries: LIBRARIES
   });
 
+  
+  React.useEffect(() => {
+    if (loadError) {
+      console.warn("Google Maps loadError:", loadError);
+      window.dispatchEvent(new Event("gm_authFailure"));
+    }
+  }, [loadError]);
+  
   const originCoord = useMemo(() => {
     if (type === 'retail') return { lat: -33.8688, lng: 151.2093 };
     if (type === 'ride') return { lat: -33.8568, lng: 151.2153 };
@@ -413,13 +431,33 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
       headingVal = calculateBearing(originCoord.lat, originCoord.lng, DESTINATION_COORD.lat, DESTINATION_COORD.lng);
     }
 
-    setTelemetry((prev) => ({
-      lat: latitude !== undefined ? latitude : prev.lat,
-      lng: longitude !== undefined ? longitude : prev.lng,
-      heading: headingVal || (latitude ? 12 : 0), 
-      speed: currentSpeed,
-      distanceRem: distanceRem
-    }));
+    
+    
+
+    setTelemetry((prev) => {
+      // Smooth transition using Framer Motion animate
+      if (latitude !== undefined && longitude !== undefined) {
+        animate(prev.lat || latitude, latitude, {
+          duration: 1.2,
+          ease: "linear",
+          onUpdate: (val) => setTelemetry(t => ({ ...t, lat: val }))
+        });
+        animate(prev.lng || longitude, longitude, {
+          duration: 1.2,
+          ease: "linear",
+          onUpdate: (val) => setTelemetry(t => ({ ...t, lng: val }))
+        });
+      }
+
+      return {
+        lat: prev.lat, 
+        lng: prev.lng, 
+        heading: headingVal || (latitude ? 12 : 0), 
+        speed: currentSpeed,
+        distanceRem: distanceRem
+      };
+    });
+
   }, [progress, latitude, longitude, originCoord]);
 
   // Subtle Map Camera "Pan-Along" tracking effect following the courier coordinate
@@ -513,18 +551,38 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
         </div>
 
         {/* Floating 'Navigate to Delivery' action button */}
-        <a
-          id="navigate-delivery-gps-anchor"
-          href={`https://www.google.com/maps/dir/?api=1&destination=${DESTINATION_COORD.lat},${DESTINATION_COORD.lng}&travelmode=bicycling`}
-          target="_blank"
-          referrerPolicy="no-referrer"
-          rel="noopener noreferrer"
-          className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-xs hover:bg-slate-50 text-slate-900 border border-slate-200 p-2 px-3 rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 text-[9px] font-black tracking-widest uppercase cursor-pointer no-underline select-none"
-          aria-label="Open external GPS navigation in Google Maps"
-        >
-          <Navigation className="w-3 h-3 text-emerald-600 animate-bounce" aria-hidden="true" />
-          Navigate to Delivery
-        </a>
+        <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2">
+          <a
+            id="navigate-delivery-gps-anchor"
+            href={`https://www.google.com/maps/dir/?api=1&destination=${DESTINATION_COORD.lat},${DESTINATION_COORD.lng}&travelmode=bicycling`}
+            target="_blank"
+            referrerPolicy="no-referrer"
+            rel="noopener noreferrer"
+            className="bg-white/95 backdrop-blur-xs hover:bg-slate-50 text-slate-900 border border-slate-200 p-2 px-3 rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 text-[9px] font-black tracking-widest uppercase cursor-pointer no-underline select-none"
+            aria-label="Open external GPS navigation in Google Maps"
+          >
+            <Navigation className="w-3 h-3 text-emerald-600 animate-bounce" aria-hidden="true" />
+            Navigate to Delivery
+          </a>
+          
+          <div className="bg-white/95 backdrop-blur-xs border border-slate-200 rounded-xl shadow-md overflow-hidden flex flex-col">
+            <button
+              onClick={() => setRoutingAlgorithm('fastest')}
+              className={`px-3 py-2 text-[9px] font-black tracking-widest uppercase text-left transition-colors flex items-center gap-2 ${routingAlgorithm === 'fastest' ? 'bg-emerald-50 text-emerald-700 border-b border-emerald-100' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <Activity className={`w-3 h-3 ${routingAlgorithm === 'fastest' ? 'text-emerald-500' : ''}`} />
+              Fastest Route
+            </button>
+            <button
+              onClick={() => setRoutingAlgorithm('secure')}
+              className={`px-3 py-2 text-[9px] font-black tracking-widest uppercase text-left transition-colors flex items-center gap-2 ${routingAlgorithm === 'secure' ? 'bg-blue-50 text-blue-700 border-b border-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <Shield className={`w-3 h-3 ${routingAlgorithm === 'secure' ? 'text-blue-500' : ''}`} />
+              Most Secure
+            </button>
+          </div>
+        </div>
+          
 
         {/* Live ETA Badge - dynamically updates along the route */}
         <div 
@@ -544,11 +602,11 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
         <AnimatePresence>
           {progress === 100 && (
             <motion.div
-              initial={{ opacity: 0, y: -40, scale: 0.95, x: "-50%" }}
-              animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
-              exit={{ opacity: 0, y: -20, scale: 0.95, x: "-50%" }}
+              initial={{ opacity: 0, y: -40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
               transition={{ type: "tween", stiffness: 120, damping: 15 }}
-              className="absolute top-4 left-1/2 z-[1100] w-[92%] max-w-[320px] bg-slate-950/95 backdrop-blur-md border-2 border-emerald-500 text-white p-3.5 rounded-xl shadow-[0_15px_40px_rgba(16,185,129,0.35)] flex items-start gap-3"
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-[1100] w-[92%] max-w-[320px] bg-slate-950/95 backdrop-blur-md border-2 border-emerald-500 text-white p-3.5 rounded-xl shadow-[0_15px_40px_rgba(16,185,129,0.35)] flex items-start gap-3"
               role="alert"
               aria-labelledby="arrival-alert-title"
               aria-describedby="arrival-alert-desc"
@@ -958,7 +1016,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
 
         {/* The Google Map Container */}
         {isLoaded ? (
-          <GoogleMap
+          <MapErrorBoundary fallback={<div className="w-full h-full min-h-[350px] rounded-2xl bg-slate-900 border border-emerald-500/20 flex flex-col items-center justify-center space-y-4"><span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span><span className="text-emerald-400 font-mono text-xs font-bold uppercase tracking-wider">Tactical GPS Uplink Offline</span></div>}><GoogleMap
             mapContainerStyle={{
               width: '100%',
               height: isFullscreen ? '100vh' : '320px',
@@ -1015,42 +1073,75 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
             )}
 
             {showRestrictedZones && RESTRICTED_ZONES.map((zone) => (
-              <OverlayView
+              <OverlayViewF
                 key={`marker-${zone.id}`}
                 position={zone.paths[0]}
                 mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
-                <button
-                  onClick={() => setSelectedZone(zone)}
-                  className="relative -top-3 -left-3 w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center hover:scale-125 transition-transform"
-                  aria-label={`Restricted Zone: ${zone.name}`}
-                >
-                  <Shield className="w-3 h-3 text-white" />
-                </button>
-              </OverlayView>
+                <div className="relative flex items-center justify-center group" style={{ transform: 'translate(-50%, -50%)' }}>
+                  <svg className="absolute w-32 h-32 animate-[spin_10s_linear_infinite] opacity-50 pointer-events-none" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke={zone.color} strokeWidth="1" strokeDasharray="4 8" />
+                    <circle cx="50" cy="50" r="30" fill="none" stroke={zone.color} strokeWidth="0.5" className="animate-ping" style={{ animationDuration: '3s' }} />
+                  </svg>
+                  <button
+                    onClick={() => setSelectedZone(zone)}
+                    className="relative w-8 h-8 rounded-full border-2 shadow-[0_0_15px_rgba(239,68,68,0.6)] flex items-center justify-center hover:scale-110 transition-transform z-10"
+                    style={{ backgroundColor: zone.color, borderColor: '#fff' }}
+                    aria-label={`Restricted Zone: ${zone.name}`}
+                  >
+                    <Shield className="w-4 h-4 text-white" />
+                  </button>
+                  <div className="absolute top-full mt-2 whitespace-nowrap bg-slate-900/90 backdrop-blur px-2 py-1 rounded text-[9px] font-black tracking-widest text-white border border-slate-700/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {zone.name.toUpperCase()}
+                  </div>
+                </div>
+              </OverlayViewF>
             ))}
 
             {/* Start Marker (Available Courier/Origin) */}
-            <OverlayView
+            <OverlayViewF
               position={originCoord}
               mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
             >
               <div className="relative -top-4 -left-4 w-8 h-8 bg-amber-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(245,158,11,0.5)] flex items-center justify-center" aria-label={`Available Courier / Origin: ${originLabel}`}>
                 <Box className="w-4 h-4 text-white" />
               </div>
-            </OverlayView>
+            </OverlayViewF>
+
+            
+            {/* Sovereign Landmarks */}
+            {showSovereignLandmarks && SOVEREIGN_LANDMARKS.map(landmark => (
+              <OverlayViewF
+                key={landmark.id}
+                position={{ lat: landmark.lat, lng: landmark.lng }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div className="relative flex flex-col items-center justify-center group" style={{ transform: 'translate(-50%, -100%)', marginTop: '-10px' }}>
+                  <div className="bg-gradient-to-br from-amber-400 to-amber-600 p-1.5 rounded-lg border-2 border-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.5)] z-10">
+                    <Landmark className="w-4 h-4 text-slate-900" />
+                  </div>
+                  <div className="w-1 h-3 bg-slate-900 z-0"></div>
+                  <div className="w-2 h-1 bg-slate-900/50 rounded-full blur-[2px]"></div>
+                  
+                  <div className="absolute bottom-full mb-2 whitespace-nowrap bg-slate-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest text-amber-400 border border-amber-500/30 opacity-0 group-hover:opacity-100 transition-opacity shadow-xl flex items-center gap-2 z-50">
+                    <Shield className="w-3 h-3" />
+                    {landmark.name.toUpperCase()}
+                  </div>
+                </div>
+              </OverlayViewF>
+            ))}
 
             {/* End Marker (Active Order) */}
-            <OverlayView
+            <OverlayViewF
               position={DESTINATION_COORD}
               mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
             >
               <div className="relative -top-4 -left-4 w-8 h-8 bg-emerald-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(16,185,129,0.5)] flex items-center justify-center animate-bounce" aria-label="Active Order Destination">
                 <MapPin className="w-4 h-4 text-white" />
               </div>
-            </OverlayView>
+            </OverlayViewF>
             {/* Current Position Marker with dynamic bearing and state */}
-            <OverlayView
+            <OverlayViewF
               position={{ lat: telemetry.lat, lng: telemetry.lng }}
               mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
             >
@@ -1080,7 +1171,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
                   </div>
                 )}
               </div>
-            </OverlayView>
+            </OverlayViewF>
 
             {showTraffic && (
               <>
@@ -1122,13 +1213,23 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
                 }}
               />
             )}
-          </GoogleMap>
+          </GoogleMap></MapErrorBoundary>
         ) : (
           <div className="w-full h-80 z-10 flex items-center justify-center bg-slate-100 animate-pulse text-slate-400 text-xs font-bold">
             Loading Live Google Maps API...
           </div>
         )}
 
+        {/* Sleek D3-style Animated Progress Bar */}
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-900/50 z-40 overflow-hidden backdrop-blur-sm pointer-events-none">
+          <div 
+            className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,1)] transition-all duration-1000 ease-linear relative"
+            style={{ width: `${Math.max(2, progress)}%` }}
+          >
+            <div className="absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-l from-white/50 to-transparent"></div>
+          </div>
+        </div>
+        
         {/* Real-Time Glassmorphic HUD overlay (Requested coordinates overlay) */}
         <div className="absolute bottom-3 left-3 right-3 z-30 bg-slate-950/85 backdrop-blur-md rounded-xl p-3 border border-white/10 text-white flex flex-col md:flex-row justify-between items-stretch gap-3">
           <div className="flex items-center gap-3">
@@ -1262,7 +1363,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
           <div className="w-full flex justify-between text-[8px] font-black text-slate-400 uppercase tracking-widest mt-2 px-1">
             <span className="text-amber-500 flex items-center gap-1 font-mono"><MapPin className="w-2.5 h-2.5" /> START: {originLabel}</span>
             <span className="text-slate-500 font-mono">COURIER COORDS TRANSIT PHASE</span>
-            <span className="text-[#06C167] flex items-center gap-1 font-mono"><MapPin className="w-2.5 h-2.5" /> DEST: SOVEREIGN TOWER</span>
+            <span className="text-[#06C167] flex items-center gap-1 font-mono"><MapPin className="w-2.5 h-2.5" /> DEST: 15 BARTON ROAD, ARTARMON</span>
           </div>
         </div>
       </div>
@@ -1272,18 +1373,38 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
 
 
 export function DeliveryMap(props: DeliveryMapProps) {
-  const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
-  const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
+  const API_KEY = "";
+  const hasValidKey = Boolean(API_KEY) && API_KEY !== ('YOUR_API_KEY' as string);
+  const [authFailed, setAuthFailed] = React.useState(false);
+  
+  React.useEffect(() => {
+    const handleAuthFail = () => setAuthFailed(true);
+    window.addEventListener("gm_authFailure", handleAuthFail);
+    
+    // Google Maps API calls this global function on auth failure
+    (window as any).gm_authFailure = () => {
+      setAuthFailed(true);
+      window.dispatchEvent(new Event("gm_authFailure"));
+    };
+    
+    return () => {
+      window.removeEventListener("gm_authFailure", handleAuthFail);
+      delete (window as any).gm_authFailure;
+    };
+  }, []);
 
-  if (!hasValidKey) {
+  const effectiveHasValidKey = hasValidKey && !authFailed;
+
+
+  if (!effectiveHasValidKey) {
      return (
        <div className="w-full h-[350px] rounded-2xl bg-slate-900 border border-emerald-500/20 flex flex-col items-center justify-center space-y-4">
          <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
             <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
          </div>
          <div className="text-center space-y-1">
-           <h4 className="text-emerald-500 font-mono text-[10px] uppercase tracking-widest font-black">Satellite Uplink Offline</h4>
-           <p className="text-slate-400 text-[10px] max-w-[250px] mx-auto font-medium leading-relaxed">Valourian Tactical Network requires a verified Google Maps Platform Key to stream real-time courier telemetry.</p>
+           <h4 className="text-emerald-500 font-mono text-[10px] uppercase tracking-widest font-black">{authFailed ? "Satellite Uplink Rejected" : "Satellite Uplink Offline"}</h4>
+           <p className="text-slate-400 text-[10px] max-w-[250px] mx-auto font-medium leading-relaxed">{authFailed ? "Google Maps API is not activated for this key. Please enable the Maps JavaScript API." : "Valourian Tactical Network requires a verified Google Maps Platform Key to stream real-time courier telemetry."}</p>
          </div>
        </div>
      );

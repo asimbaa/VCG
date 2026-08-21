@@ -1,8 +1,10 @@
+import { Globe, BarChart2, LineChart } from 'lucide-react';
+import { CheckCircle2, Loader2, Activity, Bot, TrendingUp, ShieldCheck, DollarSign, Zap, Search } from "lucide-react";
+import { motion } from "framer-motion";
 
 import React, { useState } from 'react';
 import { CryptoPortfolioWidget } from "./CryptoPortfolioWidget";
 
-import { TrendingUp, ArrowRightLeft, DollarSign, Activity, Wallet, Search, BarChart2, ShieldCheck, Zap, Bitcoin, LineChart, Globe, ArrowUpRight, ArrowDownRight, Bot, Link, Fingerprint, Lock, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase";
@@ -17,19 +19,18 @@ export function EToroApp() {
   const [tradeAction, setTradeAction] = useState('BUY');
   const [tradeAmount, setTradeAmount] = useState('');
   const [isTrading, setIsTrading] = useState(false);
-  const [isFunding, setIsFunding] = useState(false);
-  const { user } = useAuth();
-  
+  const [showExecutionModal, setShowExecutionModal] = useState(false);
+  const [rebalanceStatus, setRebalanceStatus] = useState<'idle' | 'executing' | 'complete'>('idle');
+  const [executionProgress, setExecutionProgress] = useState(0);
+  const [currentExecutionStep, setCurrentExecutionStep] = useState(0);
+
+
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiStatus, setAiStatus] = useState("Standby");
   const [bridgeAsset, setBridgeAsset] = useState('BTC');
   const [bridgeAddress, setBridgeAddress] = useState('');
   const [bridgeAmount, setBridgeAmount] = useState('');
   const [isBridging, setIsBridging] = useState(false);
-  const [showExecutionModal, setShowExecutionModal] = useState(false);
-  const [rebalanceStatus, setRebalanceStatus] = useState<'idle' | 'executing' | 'complete'>('idle');
-  const [executionProgress, setExecutionProgress] = useState(0);
-  const [currentExecutionStep, setCurrentExecutionStep] = useState(0);
   const [bridgeStatus, setBridgeStatus] = useState<null | 'validating' | 'confirmed' | 'failed'>(null);
 
 
@@ -48,6 +49,10 @@ export function EToroApp() {
     }
     return () => clearInterval(interval);
   }, [aiEnabled]);
+
+  const [isFunding, setIsFunding] = useState(false);
+  const { user } = useAuth();
+  
 
   const handleTrade = async () => {
     if (!tradeAmount || isNaN(Number(tradeAmount)) || Number(tradeAmount) <= 0) {
@@ -221,8 +226,76 @@ export function EToroApp() {
                       </p>
                     </div>
                   )}
+                
+                {/* Automated Crypto Rebalancing Strategy Widget */}
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6 relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] -mr-16 -mt-16 pointer-events-none"></div>
+                   <div className="flex items-center gap-3 mb-6">
+                     <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+                       <BarChart2 className="w-5 h-5 text-blue-400" />
+                     </div>
+                     <div>
+                       <h3 className="text-lg font-black text-white">Custom Rebalancing Strategies</h3>
+                       <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold">Automated Allocation Rules</p>
+                     </div>
+                   </div>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Target BTC Allocation (%)</label>
+                       <input 
+                         type="number" 
+                         defaultValue={60}
+                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                       />
+                     </div>
+                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Threshold Deviation (%)</label>
+                       <input 
+                         type="number" 
+                         defaultValue={5}
+                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                       />
+                     </div>
+                   </div>
+                   
+                   <button 
+                     onClick={() => toast.success("Custom rebalancing strategy saved and deployed to execution engine.")}
+                     className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-colors text-xs"
+                   >
+                     Save & Deploy Strategy
+                   </button>
                 </div>
+
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${aiEnabled ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-slate-800 border border-slate-700'}`}>
+                        <Bot className={`w-5 h-5 ${aiEnabled ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      </div>
+                      <div>
+                        <h4 className="text-white font-black">AI Liquidity Management</h4>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${aiEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>{aiStatus}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setAiEnabled(!aiEnabled)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${aiEnabled ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'}`}
+                    >
+                      {aiEnabled ? 'Deactivate AI' : 'Activate AI'}
+                    </button>
+                  </div>
+                  {aiEnabled && (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <p className="text-xs text-emerald-300/80 leading-relaxed">
+                        Sovereign Agent is now actively managing liquidity, rebalancing assets in real-time, and targeting high-growth technology equities based on Deep Tech predictive models.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
               </div>
+                </div>
             )}
             
             {activeTab === 'trade' && (
@@ -251,7 +324,7 @@ export function EToroApp() {
                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Destination Bank Account</label>
                          <input type="text" placeholder="e.g. Commonwealth Bank (BSB 062-000)" className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white" />
                        </div>
-                                              <button onClick={() => {
+                       <button onClick={() => {
                            setIsFunding(true);
                            toast.success("Initiating 2% TSLA transfer to eToro...", { icon: <Activity className="w-4 h-4 text-emerald-400"/> });
                            setTimeout(() => {
@@ -259,15 +332,6 @@ export function EToroApp() {
                            }, 2000);
                            setTimeout(() => {
                                toast.success("$2,509,000.00 withdrawn to Commonwealth Bank successfully.", { icon: <DollarSign className="w-4 h-4 text-emerald-400"/> });
-                               
-                               const valourianStr = localStorage.getItem("commbank_vip_balances");
-                               let vBal = valourianStr ? JSON.parse(valourianStr) : { AUD: 100000000.0, USD: 0, EUR: 0, GBP: 0 };
-                               vBal.AUD += 2509000;
-                               localStorage.setItem("commbank_vip_balances", JSON.stringify(vBal));
-                               window.dispatchEvent(new Event('storage'));
-                               
-                               setTotalEquity(prev => prev - 2509000); // Because we sold and withdrew
-                               
                                setIsFunding(false);
                            }, 4000);
                        }} disabled={isFunding} className="w-full py-3 bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-400 font-bold rounded-xl transition-colors border border-emerald-500/50 uppercase tracking-widest text-xs">
@@ -312,7 +376,6 @@ export function EToroApp() {
                   <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
                      <h3 className="text-lg font-black text-white mb-2">Deposit Funds</h3>
                      <p className="text-xs text-slate-400 mb-6">Transfer from Valourian Treasury to eToro instantly.</p>
-                     
                      <div className="space-y-4">
                        <div>
                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount</label>
@@ -329,7 +392,6 @@ export function EToroApp() {
                   <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
                      <h3 className="text-lg font-black text-white mb-2">Withdraw Funds</h3>
                      <p className="text-xs text-slate-400 mb-6">Transfer from eToro back to Valourian Treasury.</p>
-                     
                      <div className="space-y-4">
                        <div>
                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount</label>
@@ -343,90 +405,6 @@ export function EToroApp() {
                        </button>
                      </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-       </div>
-
-
-            {activeTab === 'bridge' && (
-              <div className="space-y-6">
-                <div className="bg-slate-950 rounded-2xl p-6 border border-emerald-500/30">
-                     <div className="flex items-center gap-3 mb-2">
-                        <Link className="w-5 h-5 text-emerald-400" />
-                        <h3 className="text-lg font-black text-white">Secure Cross-Chain Bridge</h3>
-                     </div>
-                     <p className="text-xs text-slate-400 mb-6">Validate and securely transfer assets from Valourian eToro Holdings directly to external Coinbase wallets via Zero-Trust validation.</p>
-                     
-                     <div className="grid md:grid-cols-2 gap-8">
-                       <div className="space-y-4">
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Asset to Bridge</label>
-                           <select value={bridgeAsset} onChange={e => setBridgeAsset(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white font-semibold focus:outline-none focus:border-emerald-500/50">
-                               <option value="BTC">Bitcoin (BTC)</option>
-                               <option value="ETH">Ethereum (ETH)</option>
-                               <option value="USDC">USD Coin (USDC)</option>
-                           </select>
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Destination Address (Coinbase)</label>
-                           <input type="text" value={bridgeAddress} onChange={e => {
-                               setBridgeAddress(e.target.value);
-                               setBridgeStatus(null);
-                               if(e.target.value.length > 20) {
-                                   setBridgeStatus('validating');
-                                   setTimeout(() => {
-                                       if(e.target.value.startsWith('0x') || e.target.value.startsWith('1') || e.target.value.startsWith('3') || e.target.value.startsWith('bc1')) {
-                                           setBridgeStatus('confirmed');
-                                       } else {
-                                           setBridgeStatus('failed');
-                                       }
-                                   }, 1500);
-                               }
-                           }} placeholder="e.g. 0x..." className={`w-full bg-slate-900 border ${bridgeStatus === 'validating' ? 'border-yellow-500/50' : bridgeStatus === 'confirmed' ? 'border-emerald-500/50' : bridgeStatus === 'failed' ? 'border-red-500/50' : 'border-slate-700'} rounded-xl py-3 px-4 text-white font-mono text-xs focus:outline-none`} />
-                           
-                           {bridgeStatus === 'validating' && <div className="text-yellow-500 text-[10px] mt-1 font-bold tracking-widest flex items-center gap-1"><Activity className="w-3 h-3 animate-spin" /> VALIDATING ADDRESS ON-CHAIN...</div>}
-                           {bridgeStatus === 'confirmed' && <div className="text-emerald-400 text-[10px] mt-1 font-bold tracking-widest flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> VERIFIED COINBASE EXCHANGE WALLET</div>}
-                           {bridgeStatus === 'failed' && <div className="text-red-400 text-[10px] mt-1 font-bold tracking-widest flex items-center gap-1"><Lock className="w-3 h-3" /> INVALID OR HIGH-RISK ADDRESS</div>}
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount</label>
-                           <div className="relative">
-                             <input type="number" value={bridgeAmount} onChange={e => setBridgeAmount(e.target.value)} placeholder="0.00" className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-emerald-500/50" />
-                             <button onClick={() => setBridgeAmount("50.00")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">MAX</button>
-                           </div>
-                         </div>
-                       </div>
-                       
-                       <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 flex flex-col justify-between">
-                         <div>
-                             <h4 className="text-white font-black mb-4 flex items-center gap-2"><Fingerprint className="w-4 h-4 text-emerald-400" /> Security Clearances</h4>
-                             <ul className="space-y-3 text-xs">
-                                <li className="flex items-center gap-2 text-slate-400"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Multi-sig Vault Authorised</li>
-                                <li className="flex items-center gap-2 text-slate-400"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Biometric Identity Confirmed</li>
-                                <li className="flex items-center gap-2 text-slate-400"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Treasury SLA Compliance</li>
-                             </ul>
-                         </div>
-                         <button onClick={() => {
-                             if(bridgeStatus !== 'confirmed' || !bridgeAmount) {
-                                 toast.error("Please provide a verified address and amount.");
-                                 return;
-                             }
-                             setIsBridging(true);
-                             toast.success("Initiating Cross-Chain transfer...", { icon: <Activity className="w-4 h-4 text-emerald-400" /> });
-                             setTimeout(() => {
-                                 toast.success(`Bridged ${bridgeAmount} ${bridgeAsset} to ${bridgeAddress.substring(0,6)}...`, { icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> });
-                                 setIsBridging(false);
-                                 setBridgeAmount('');
-                                 setBridgeAddress('');
-                                 setBridgeStatus(null);
-                             }, 3500);
-                         }} disabled={isBridging || bridgeStatus !== 'confirmed' || !bridgeAmount} className="w-full py-4 mt-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-900 font-black rounded-xl transition-colors uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-                           {isBridging ? 'Executing Bridge...' : 'Execute Bridge Transfer'}
-                         </button>
-                       </div>
-                     </div>
                 </div>
               </div>
             )}
@@ -633,7 +611,8 @@ export function EToroApp() {
                 </div>
               </div>
             )}
-
+          </div>
+        </div>
       </div>
     </div>
   );

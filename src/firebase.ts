@@ -1,14 +1,12 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
+import { getFirestore, initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { toast } from 'sonner';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = (firebaseConfig as any).firestoreDatabaseId 
-  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
-  : getFirestore(app);
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true, localCache: undefined }, (firebaseConfig as any).firestoreDatabaseId);
 
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
@@ -178,18 +176,30 @@ import { addDoc as firestoreAddDoc, setDoc as firestoreSetDoc, updateDoc as fire
 
 
 
-export const addDoc = async (...args: any[]): Promise<any> => {
+
+
+
+
+export const createEmailPasswordAccount = async (email: string, pass: string) => {
+  return await createUserWithEmailAndPassword(auth, email, pass);
+};
+
+export const loginEmailPassword = async (email: string, pass: string) => {
+  return await signInWithEmailAndPassword(auth, email, pass);
+};
+
+export const addDoc = async (...args: any[]) => {
   return withRetry(() => (firestoreAddDoc as any)(...args));
 };
 
-export const setDoc = async (...args: any[]): Promise<any> => {
+export const setDoc = async (...args: any[]) => {
   return withRetry(() => (firestoreSetDoc as any)(...args));
 };
 
-export const updateDoc = async (...args: any[]): Promise<any> => {
+export const updateDoc = async (...args: any[]) => {
   return withRetry(() => (firestoreUpdateDoc as any)(...args));
 };
 
-export const deleteDoc = async (...args: any[]): Promise<any> => {
+export const deleteDoc = async (...args: any[]) => {
   return withRetry(() => (firestoreDeleteDoc as any)(...args));
 };

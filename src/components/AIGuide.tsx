@@ -45,7 +45,7 @@ export function AIGuide() {
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 z-50 p-4 bg-slate-900 border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] rounded-full text-yellow-500 hover:scale-110 active:scale-95 transition-all ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        className={`fixed bottom-28 right-6 md:right-10 z-50 p-4 bg-slate-900 border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] rounded-full text-yellow-500 hover:scale-110 active:scale-95 transition-all ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
       >
         <Bot className="w-6 h-6" />
       </button>
@@ -56,7 +56,7 @@ export function AIGuide() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-6 right-6 z-50 w-80 sm:w-96 flex flex-col bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+            className="fixed bottom-28 right-6 md:right-10 z-50 w-80 sm:w-96 flex flex-col bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
           >
             <div className="bg-slate-900 p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">

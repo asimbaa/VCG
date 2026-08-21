@@ -38,8 +38,9 @@ export function PastOrdersView({ transactions }: { transactions: any[] }) {
     return last6Months;
   }, [transactions]);
 
-  const itemsPerPage = 8;
 
+
+  const itemsPerPage = 5;
   const totalPages = Math.ceil(transactions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentTransactions = transactions.slice(startIndex, startIndex + itemsPerPage);

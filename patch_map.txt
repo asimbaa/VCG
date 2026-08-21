@@ -1,0 +1,22 @@
+                      {/* Local Area Map */}
+                      <div className="pt-2">
+                        <button 
+                          onClick={() => setShowMap(!showMap)} 
+                          className="px-4 py-2 bg-[#003580] text-white rounded-lg font-bold text-xs flex items-center gap-2 mb-2 w-full justify-center transition-colors hover:bg-blue-800"
+                        >
+                          <Map className="w-4 h-4" /> {showMap ? 'Hide Local Area & Attractions Map' : 'Explore Local Area & Attractions Map'}
+                        </button>
+                        <AnimatePresence>
+                          {showMap && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <HotelMapViewer hotelName={selectedHotel.name} hotelLocation={selectedHotel.location} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>

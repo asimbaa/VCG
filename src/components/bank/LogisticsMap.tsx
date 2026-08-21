@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { Globe, ShieldCheck } from 'lucide-react';
 
 const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  import.meta.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
@@ -18,7 +18,17 @@ interface LogisticsMapProps {
 
 export const LogisticsMap: React.FC<LogisticsMapProps> = ({ shipments, selectedShipment }) => {
   const [mapTypeId, setMapTypeId] = useState<string>('satellite');
-  if (!hasValidKey) {
+  const [authFailed, setAuthFailed] = useState(false);
+  
+  React.useEffect(() => {
+    const handleAuthFail = () => setAuthFailed(true);
+    window.addEventListener("gm_authFailure", handleAuthFail);
+    return () => window.removeEventListener("gm_authFailure", handleAuthFail);
+  }, []);
+
+  const effectiveHasValidKey = hasValidKey && !authFailed;
+
+  if (!effectiveHasValidKey) {
     return (
       <div className="bg-slate-950 h-full min-h-[400px] flex items-center justify-center border border-slate-800 relative overflow-hidden rounded-[2rem] p-8 shadow-2xl text-center group">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-700"></div>

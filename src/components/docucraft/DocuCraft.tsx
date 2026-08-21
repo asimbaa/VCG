@@ -1,5 +1,7 @@
-import React, { useState } from "react";
 import { User } from "firebase/auth";
+import React, { useState } from "react";
+import { DriveIntegration } from "./DriveIntegration";
+import { DigitalChequeGenerator } from "../bank/DigitalChequeGenerator";
 import { 
   BrainCircuit, 
   FileText, 
@@ -19,12 +21,16 @@ import {
   Sparkles,
   ArrowRight,
   Mic,
-  MicOff
+  MicOff,
+  CheckCircle,
+  Landmark,
+  ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { SmartLegalExecutionWidget } from "./SmartLegalExecutionWidget";
 import { toast } from "sonner";
-import html2canvas from "html2canvas";
+import { toPng } from 'html-to-image';
 import { jsPDF } from "jspdf";
 
 interface DocuCraftProps {
@@ -229,11 +235,10 @@ export function DocuCraft({ user }: DocuCraftProps) {
     if (!input) return;
     try {
       toast.info("Generating PDF...", { id: "pdf-toast" });
-      const canvas = await html2canvas(input, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = await toPng(input, { pixelRatio: 2 });
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = (input.offsetHeight * pdfWidth) / input.offsetWidth;
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.save("DocuCraft_Document.pdf");
       toast.success("PDF Downloaded successfully!", { id: "pdf-toast" });
@@ -370,7 +375,7 @@ export function DocuCraft({ user }: DocuCraftProps) {
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   placeholder="e.g., Draft a business proposal for a new SaaS product, or explain quantum computing intuitively..."
-                  className="w-full min-h-[120px] p-4 pr-14 pb-14 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-y"
+                  className="w-full min-h-[120px] p-4 pr-14 pb-14 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-y placeholder:text-slate-400"
                   required
                 />
                 
@@ -454,10 +459,13 @@ export function DocuCraft({ user }: DocuCraftProps) {
 
             <div className="mb-8">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-1">Quick Templates</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                 {[
                   { label: "Invoice", icon: <Receipt className="w-4 h-4" />, prompt: "Generate a professional invoice for [Service Name] totaling $[Amount]. Include itemized breakdown." },
                   { label: "Report", icon: <BarChart3 className="w-4 h-4" />, prompt: "Create a detailed financial report for Q1 2026, including revenue, expenses, and growth projections." },
+                  { label: "CEO Contract", icon: <FileText className="w-4 h-4" />, prompt: "Draft a comprehensive Founder CEO Executive Employment Contract for Asim Aryal, specifying a monthly salary of $9,000,000 AUD (plus USD, GBP, EUR equivalents), a $14,000,000 quarterly performance bonus, complete authority over Valourian Capital, and provisions for back pay. Include signatures for the Corporate Secretary and Tier-1 AFSL/ACL CAR representative." },
+                  { label: "Payslip", icon: <Receipt className="w-4 h-4" />, prompt: "Generate an official monthly payslip for CEO Asim Aryal for the amount of $9,000,000.00 AUD (deposit to NAB Account), including deductions, tax withholdings, superannuation, and authorization signatures from a Chartered Accountant (CA) and Legal Counsel." },
+                  { label: "Compliance Auth", icon: <ShieldAlert className="w-4 h-4" />, prompt: "Generate a Corporate Authorised Representative (CAR) agreement to hold an AFSL & ACL on behalf of Valourian Capital, authorizing Asim Aryal to transfer and receive up to $100M monthly in multi-currency assets without account freezing, fully compliant with AUSTRAC." },
                   { label: "Proposal", icon: <FileText className="w-4 h-4" />, prompt: "Draft a comprehensive business proposal for [Project Name], outlining goals, timeline, and budget." },
                   { label: "Risk Audit", icon: <ShieldAlert className="w-4 h-4" />, prompt: "Perform a risk assessment for [Business Idea], identifying 5 key threats and mitigation plans." }
                 ].map((template, idx) => (
@@ -543,12 +551,64 @@ export function DocuCraft({ user }: DocuCraftProps) {
                       </div>
                     </div>
                   </div>
+                  
+                  <SmartLegalExecutionWidget documentText={result} />
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
+      <DriveIntegration />
         </div>
       </div>
+      <div className="mt-12 pt-12 border-t border-slate-200">
+        <DigitalChequeGenerator />
+      
+      {/* CEO Cheque / Salary Ops Guide */}
+      <div className="mt-12 pt-12 border-t border-slate-200" id="ceo-salary-guide">
+        <div className="flex items-center gap-4 mb-8">
+            <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
+                <CheckCircle className="w-8 h-8" />
+            </div>
+            <div>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">CEO Corporate Salary Operations Guide</h3>
+                <p className="text-slate-500 font-medium">Steps to execute and deposit your $9,000,000 monthly salary</p>
+            </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><Landmark className="w-24 h-24" /></div>
+                <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-black mb-4">1</div>
+                <h4 className="text-lg font-bold text-slate-800 mb-2">Corporate Auth & Signatures</h4>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                    Ensure your executive contract is minted and signed by a Tier-1 Corporate Authorised Representative (CAR) who holds the AFSL on behalf of Valourian Capital.
+                </p>
+                <button onClick={() => { setPrompt("Draft a comprehensive Founder CEO Executive Employment Contract for Asim Aryal, specifying a monthly salary of $9,000,000 AUD, performance bonuses, complete authority over Valourian Capital, and provisions for back pay. Include signatures for the Corporate Secretary and Tier-1 AFSL/ACL CAR representative."); setActiveAgent("creative"); }} className="mt-4 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-2 rounded-xl transition-colors">Draft CEO Contract</button>
+            </div>
+            
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><Receipt className="w-24 h-24" /></div>
+                <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-black mb-4">2</div>
+                <h4 className="text-lg font-bold text-slate-800 mb-2">Monthly Payslips</h4>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                    Before banking the cheque, you must possess a verified payslip signed by Valourian's Chartered Accountant (CA) outlining the $9M transfer and taxes.
+                </p>
+                <button onClick={() => { setPrompt("Generate an official monthly payslip for CEO Asim Aryal for the amount of $9,000,000.00 AUD, including deductions, tax withholdings, and authorization signatures from a Chartered Accountant (CA)."); setActiveAgent("financier"); }} className="mt-4 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-2 rounded-xl transition-colors">Mint CA Payslip</button>
+            </div>
+            
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><ShieldCheck className="w-24 h-24" /></div>
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black mb-4">3</div>
+                <h4 className="text-lg font-bold text-slate-800 mb-2">NAB VIP Pre-Clearance</h4>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                    Use the Digital Cheque Generator to mint the validated cheque. Send the contract, payslip, and digital cheque PDF to your NAB Private Wealth Manager prior to mobile upload.
+                </p>
+                <a href="#digital-cheque" className="mt-4 w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center">Open Cheque Generator</a>
+            </div>
+        </div>
+      </div>
+
+    </div>
     </div>
   );
 }

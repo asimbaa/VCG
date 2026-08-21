@@ -1,0 +1,20 @@
+                            {/* Share Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const receiptText = `Here is the booking confirmation for ${hotelNameClean}. Check-In: ${b.checkInDate || "2026-06-16"} to Check-Out: ${b.checkOutDate || "2026-09-02"}.`;
+                                if (navigator.share) {
+                                  navigator.share({
+                                    title: 'Booking Receipt',
+                                    text: receiptText,
+                                    url: window.location.href,
+                                  }).catch(console.error);
+                                } else {
+                                  window.location.href = `mailto:?subject=Booking Receipt: ${hotelNameClean}&body=${encodeURIComponent(receiptText)}`;
+                                }
+                              }}
+                              className="px-3 py-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heavy text-[9px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer font-sans hover:border-slate-400"
+                            >
+                              <Share className="w-3.5 h-3.5 inline mr-1" /> Share
+                            </button>
+                            {/* Download Button */}

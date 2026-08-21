@@ -11,9 +11,32 @@ import { toast } from 'sonner';
 // Define the comprehensive property registry representing premium global properties (NSW, US, UK, EU)
 export const GLOBAL_PROPERTIES_DATABASE = [
   {
+    id: "LRS-NSW-HQ01",
+    address: "Valourian Global HQ, Governor Phillip Tower, 1 Farrer Pl, Sydney NSW 2000",
+    type: "Ultra-Luxury Corporate Nexus (Levels 35-45)",
+    hash: "a4c28f1b3e94589d8f6d7e6c4b2a1f0d3e5c9b7a4f2d1e8c6b3a9f0d7e5c4b2",
+    mintDate: "2026-08-20T18:45:00Z",
+    folio: "88/DP10403",
+    value: "$4,500,000,000 AUD (25-Year Pre-Paid Sovereign Fitout)",
+    purchaseDate: "2026-08-20",
+    proprietor: "VALOURIAN CAPITAL (ASIM ARYAL)",
+    zoning: "B8 Metropolitan Centre - Executive Elite",
+    lot: "Full Penthouse & Sub-Penthouse Corporate Tier",
+    lrsReference: "NSW-LRS-VOL-10403-HQ",
+    deedNumber: "NSW-DEED-HQ998124X",
+    stampDutyPaid: "$320,000,000 AUD",
+    fundingSource: "Valourian Master Trust",
+    tenureType: "25-Year Sovereign Corporate Lease",
+    country: "Australia",
+    amenities: "On-site Michelin-grade chefs, premium wellness gyms, heated pools, nootropic bars, Apple M-Series maxed fleet for all staff, high-bandwidth dedicated fiber optic rings, 24/7 dedicated supportive building staff & courier concierges."
+  },,
+
+  {
     id: "LRS-NSW-003",
     address: "1/163 Prospect Hwy, Seven Hills, 2147 NSW Australia",
     type: "Sovereign Logistics Warehouse",
+    hash: "f8d3c2b1a0e9d8c7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4",
+    mintDate: "2026-07-24T10:00:00Z",
     folio: "1/DP16377",
     value: "$4,500,000 AUD",
     purchaseDate: "2026-07-24",
@@ -163,6 +186,57 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     tenureType: "Torrens Title / Freehold",
     country: "Australia"
   },
+  {
+    id: "LRS-NSW-007",
+    address: "21-25 Albany Street, Crows Nest, NSW 2065, Australia",
+    type: "Luxury Penthouse Estate (Fully Furnished, Smart Home, Gym, Pool, Sauna)",
+    folio: "A/DP827361",
+    value: "$14,500,000 AUD",
+    purchaseDate: "2026-08-20",
+    proprietor: "ASIM ARYAL",
+    zoning: "R4 High Density Residential (Luxury)",
+    lot: "Lot 5 in Deposited Plan 827361",
+    lrsReference: "NSW-LRS-VOL-827361-A",
+    deedNumber: "NSW-DEED-P716298C",
+    stampDutyPaid: "$840,000 AUD",
+    fundingSource: "Valourian Treasury Reserve",
+    tenureType: "Torrens Title / Freehold",
+    country: "Australia"
+  },
+  {
+    id: "LRS-NSW-008",
+    address: "18-20 Christie Street, St Leonards, NSW 2065, Australia",
+    type: "Executive Multi-Level Smart Home (Solar, Central Heating, Full Amenities)",
+    folio: "B/DP918273",
+    value: "$19,250,000 AUD",
+    purchaseDate: "2026-08-20",
+    proprietor: "ASIM ARYAL",
+    zoning: "R4 High Density Residential",
+    lot: "Lot 12 in Deposited Plan 918273",
+    lrsReference: "NSW-LRS-VOL-918273-B",
+    deedNumber: "NSW-DEED-X827165L",
+    stampDutyPaid: "$1,150,000 AUD",
+    fundingSource: "Valourian Treasury Reserve",
+    tenureType: "Torrens Title / Freehold",
+    country: "Australia"
+  },
+  {
+    id: "VEH-TESLA-001",
+    address: "Tesla Lidcombe Delivery Centre, B1/29 Birnie Ave Lidcombe, NSW 2141",
+    type: "Tesla Model Y Performance Dual Motor All-Wheel Drive",
+    folio: "RN119834827",
+    value: "$114,500 AUD",
+    purchaseDate: "2026-08-20",
+    proprietor: "ASIM ARYAL",
+    zoning: "Electric Vehicle (Performance)",
+    lot: "VIN: LRWY232_a43d726b25932adabcf11bff2f15c070",
+    lrsReference: "RMS-NSW-REG-84729",
+    deedNumber: "TESLA-INV-AU-991283",
+    stampDutyPaid: "$3,435 AUD",
+    fundingSource: "Valourian Sovereign Fleet Reserve",
+    tenureType: "Outright Corporate Ownership",
+    country: "Australia"
+  },
   // Programmatically generate remaining properties to reach 40+ global properties
   ...Array.from({ length: 35 }, (_, index) => {
     const propNum = index + 11;
@@ -213,6 +287,20 @@ export const GLOBAL_PROPERTIES_DATABASE = [
 // Comprehensive database of regulatory documents representing proof of purchases,
 // proof of ownership (properties, businesses, assets), government grants, and paid tax history.
 export const REGULATORY_DOCUMENTS = [
+  {
+    id: "REG-PROP-SYDHQ01",
+    name: "Governor Phillip Tower (Levels 35-45), Sydney NSW 2000",
+    type: "Sovereign 25-Year Corporate Lease",
+    category: "Property",
+    financialValue: "$4,500,000,000 AUD",
+    purchaseDate: "2026-08-20",
+    documentRef: "NSW-LRS-VOL-HQ01",
+    status: "Active - Fully Staffed & Furnished",
+    legalProof: "Valourian Capital Master Trust - CEO Asim Aryal",
+    purchaser: "Asim Aryal",
+    taxStatus: "Fully Paid ($320,000,000 NSW Stamp Duty)"
+  },
+
   {
     id: "REG-PROP-NSW01",
     name: "Unit 712, 15 Barton Road, Artarmon NSW 2064",
@@ -290,6 +378,45 @@ export const REGULATORY_DOCUMENTS = [
     legalProof: "DGFIP French Republic Notarial Decree",
     purchaser: "Asim Aryal",
     taxStatus: "Fully Paid (€5,117,000 EUR Tax)"
+  },
+  {
+    id: "REG-PROP-CROWSNEST-01",
+    name: "21-25 Albany Street, Crows Nest",
+    type: "Torrens Title Deed",
+    category: "Property",
+    financialValue: "$14,500,000 AUD",
+    purchaseDate: "2026-08-20",
+    documentRef: "NSW-DEED-P716298C",
+    status: "Settlement Complete & Keys Available",
+    legalProof: "NSW LRS Title Transfer, fully furnished",
+    purchaser: "Asim Aryal",
+    taxStatus: "Fully Paid ($840,000 AUD Stamp)"
+  },
+  {
+    id: "REG-PROP-STLEONARDS-01",
+    name: "18-20 Christie Street, St Leonards",
+    type: "Torrens Title Deed",
+    category: "Property",
+    financialValue: "$19,250,000 AUD",
+    purchaseDate: "2026-08-20",
+    documentRef: "NSW-DEED-X827165L",
+    status: "Settlement Complete & Keys Available",
+    legalProof: "NSW LRS Title Transfer, complete smart home setup",
+    purchaser: "Asim Aryal",
+    taxStatus: "Fully Paid ($1,150,000 AUD Stamp)"
+  },
+  {
+    id: "REG-VEH-TESLA-01",
+    name: "Tesla Model Y Performance (LRWY232_a43d726b25932adabcf11bff2f15c070)",
+    type: "Vehicle Ownership Registration",
+    category: "Vehicle",
+    financialValue: "$114,500 AUD",
+    purchaseDate: "2026-08-20",
+    documentRef: "TESLA-INV-AU-991283",
+    status: "Ready for Pickup (Lidcombe Centre)",
+    legalProof: "RMS NSW Registration (RN119834827), Paid Outright",
+    purchaser: "Asim Aryal",
+    taxStatus: "Stamp Duty & Registration Settled"
   },
   {
     id: "REG-BIZ-VAL01",
@@ -1721,7 +1848,66 @@ export function VaultRecords() {
                    <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
                    <div>
                      <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
-                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to secure location via Aura Drive Tesla Fleet.</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to Asim Aryal, Unit 712, 15 BARTON Rd Artarmon NSW 2064 Australia</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'cash'} onChange={() => setOpsType('cash')} className="w-4 h-4 text-emerald-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Cash Treasury Delivery</p>
+                     <p className="text-xs text-slate-500">Secure armed transport of physical cash reserves to property.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'post'} onChange={() => setOpsType('post')} className="w-4 h-4 text-amber-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Post Office Pickup Notice</p>
+                     <p className="text-xs text-slate-500">Generate secure PIN for post office collection of sensitive packages.</p>
+                   </div>
+                 </label>
+               </div>
+               
+               <div className="flex gap-2">
+                 <button 
+                   onClick={() => setShowOpsModal(false)}
+                   className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={() => {
+                     if (opsType === 'keys') {
+                       toast.success(`Key delivery dispatched via Tesla Fleet for ${selectedPreviewProperty.id}. ETA 45m.`);
+                     } else if (opsType === 'cash') {
+                       toast.success(`Armored cash transport initiated to ${selectedPreviewProperty.address}.`);
+                     } else {
+                       toast.success(`Pickup notification and secure PIN sent to your Comm channels for ${selectedPreviewProperty.id}.`);
+                     }
+                     setShowOpsModal(false);
+                   }}
+                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Confirm Dispatch
+                 </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {showOpsModal && selectedPreviewProperty && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm pointer-events-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200">
+               <h3 className="text-xl font-bold text-slate-900 mb-2">Operations Dispatch</h3>
+               <p className="text-sm text-slate-500 mb-6">Schedule physical deliveries or pickups for {selectedPreviewProperty.id}.</p>
+               
+               <div className="space-y-4 mb-6">
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to Asim Aryal, Unit 712, 15 BARTON Rd Artarmon NSW 2064 Australia</p>
                    </div>
                  </label>
                  
@@ -1769,6 +1955,7 @@ export function VaultRecords() {
           </div>
         )}
       </AnimatePresence>
+
 
 
       {/* High Fidelity un-censored Certificate preview modal */}
@@ -1887,7 +2074,66 @@ export function VaultRecords() {
                    <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
                    <div>
                      <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
-                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to secure location via Aura Drive Tesla Fleet.</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to Asim Aryal, Unit 712, 15 BARTON Rd Artarmon NSW 2064 Australia</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'cash'} onChange={() => setOpsType('cash')} className="w-4 h-4 text-emerald-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Cash Treasury Delivery</p>
+                     <p className="text-xs text-slate-500">Secure armed transport of physical cash reserves to property.</p>
+                   </div>
+                 </label>
+                 
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'post'} onChange={() => setOpsType('post')} className="w-4 h-4 text-amber-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Post Office Pickup Notice</p>
+                     <p className="text-xs text-slate-500">Generate secure PIN for post office collection of sensitive packages.</p>
+                   </div>
+                 </label>
+               </div>
+               
+               <div className="flex gap-2">
+                 <button 
+                   onClick={() => setShowOpsModal(false)}
+                   className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={() => {
+                     if (opsType === 'keys') {
+                       toast.success(`Key delivery dispatched via Tesla Fleet for ${selectedPreviewProperty.id}. ETA 45m.`);
+                     } else if (opsType === 'cash') {
+                       toast.success(`Armored cash transport initiated to ${selectedPreviewProperty.address}.`);
+                     } else {
+                       toast.success(`Pickup notification and secure PIN sent to your Comm channels for ${selectedPreviewProperty.id}.`);
+                     }
+                     setShowOpsModal(false);
+                   }}
+                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                 >
+                   Confirm Dispatch
+                 </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {showOpsModal && selectedPreviewProperty && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm pointer-events-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200">
+               <h3 className="text-xl font-bold text-slate-900 mb-2">Operations Dispatch</h3>
+               <p className="text-sm text-slate-500 mb-6">Schedule physical deliveries or pickups for {selectedPreviewProperty.id}.</p>
+               
+               <div className="space-y-4 mb-6">
+                 <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                   <input type="radio" name="opsType" checked={opsType === 'keys'} onChange={() => setOpsType('keys')} className="w-4 h-4 text-blue-600" />
+                   <div>
+                     <p className="text-sm font-bold text-slate-900">Physical Key Delivery</p>
+                     <p className="text-xs text-slate-500">Dispatch keys and title deeds to Asim Aryal, Unit 712, 15 BARTON Rd Artarmon NSW 2064 Australia</p>
                    </div>
                  </label>
                  
@@ -1935,6 +2181,7 @@ export function VaultRecords() {
           </div>
         )}
       </AnimatePresence>
+
 
     </div>
   );

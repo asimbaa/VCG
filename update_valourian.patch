@@ -1,0 +1,46 @@
+--- src/components/bank/ValourianDashboard.tsx
++++ src/components/bank/ValourianDashboard.tsx
+@@ -620,6 +620,44 @@
+       }).catch(err => console.error("Auto emails failed:", err));
+     }
++
++    // Daily $20k funding sweep logic
++    const lastFundingDate = localStorage.getItem("last_daily_funding_date");
++    const today = new Date().toDateString();
++    
++    if (lastFundingDate !== today) {
++      const fundId = Date.now() + 4;
++      const dailyFundMail = {
++        id: fundId,
++        sender: "Valourian Treasury Automation",
++        email: "treasury@valourian.com",
++        subject: "TREASURY SWEEP: Daily $20,000.00 AUD Funding Settled",
++        preview: "Your automated daily treasury sweep of $20,000.00 AUD has been successfully distributed...",
++        body: `Founder (Asim Aryal),\n\nThe automated daily treasury sweep has successfully distributed $20,000.00 AUD across your active PayTo operational accounts.\n\nFUNDS ROUTING:\n- Great Southern Bank (Business+ BSB 834472): Funded\n- CBA Smart Access (BSB 062140): Funded\n- NAB (BSB 082001): Funded\n- uBank (BSB 283120): Funded\n\nAll tap-to-pay and merchant delivery limits have been refreshed.\n\nDate: ${new Date().toLocaleDateString()}\nStatus: CLEARED & AVAILABLE\n\nRegards,\nValourian Treasury Automation`,
++        date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
++        read: false,
++        starred: true,
++        attachments: []
++      };
++
++      // Update local storage balances by adding 20000 to AUD
++      let localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
++      let localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
++      const newVipAud = (parseFloat(localVip.AUD) || 940000000) + 20000;
++      const newValAud = (parseFloat(localVal.AUD) || 940000000) + 20000;
++      
++      localVip.AUD = newVipAud;
++      localVal.AUD = newValAud;
++      window.localStorage.setItem('commbank_vip_balances', JSON.stringify(localVip));
++      window.localStorage.setItem('valourian_balances', JSON.stringify(localVal));
++
++      setDoc(doc(collection(db, "users", user.uid, "emails"), String(fundId)), dailyFundMail)
++        .then(() => {
++          localStorage.setItem("last_daily_funding_date", today);
++          toast.success("Daily automated treasury funding of $20,000.00 AUD completed successfully.");
++        })
++        .catch(console.error);
++    }
+   }, [user]);
+ 
+   

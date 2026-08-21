@@ -1,0 +1,35 @@
+--- src/components/pay/RapidPay.tsx
++++ src/components/pay/RapidPay.tsx
+@@ -428,7 +428,12 @@
+     if (!newCardholder.trim()) {
+       toast.error("Please enter the Cardholder Name");
+       return;
+     }
++    
++    // Extract just numbers for processing, remove spaces or dashes.
++    const numericBsb = newBsb.replace(/\D/g, '');
++    const numericAcc = newAccNo.replace(/\D/g, '');
++    const numericLimit = parseFloat(newCardLimit) || 940000000;
+ 
+     setIsGeneratingDigitalCard(true);
+     // Generate secure randomized digital card details
+@@ -449,15 +454,15 @@
+         holder: newCardholder.toUpperCase(),
+         expiry: "09/31",
+         cvv: randomCvv,
+-        bsb: newBsb.trim(),
+-        accountNumber: newAccNo.trim(),
++        bsb: numericBsb,
++        accountNumber: numericAcc,
+         swiftCode: newSwiftCode.trim().toUpperCase(),
+-        limit: parseFloat(newCardLimit) || 940000000,
+-        currentBalance: 0,
++        limit: numericLimit,
++        currentBalance: numericLimit, // FILL ACCNT
+         status: "active",
+         network: "Visa",
+         createdAt: new Date().toISOString(),
+         tapIdEnabled: true,
+         payIdEnabled: true,
+         oskoEnabled: true
+       });

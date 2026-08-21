@@ -1,0 +1,4 @@
+                      {/* Local Area Map */}
+                      <HotelMapViewer hotelName={selectedHotel.name} hotelLocation={selectedHotel.location} />
+                      
+                      {/* Interactive Ledger billing calculation break-down */}

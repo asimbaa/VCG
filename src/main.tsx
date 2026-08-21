@@ -1,6 +1,7 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx'
+import App from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { CurrencyProvider } from './contexts/CurrencyContext';;
 import './index.css';
 
@@ -25,7 +26,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <CurrencyProvider><App /></CurrencyProvider>
+    <CurrencyProvider><ErrorBoundary><App /></ErrorBoundary></CurrencyProvider>
   </StrictMode>,
 );
 

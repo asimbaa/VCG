@@ -56,7 +56,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
       doc.text("ASIM ARYAL", 15, 62);
       doc.setTextColor(71, 85, 105);
       doc.text("Valourian Capital OS", 15, 67);
-      doc.text("Unit 712, 15 Barton Rd", 15, 72);
+      doc.text("Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia", 15, 72);
       doc.text("Artarmon NSW 2064", 15, 77);
 
       // Supplier Details
@@ -81,16 +81,25 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
       doc.line(15, 94, 195, 94);
 
       doc.setFont("Helvetica", "normal");
-      doc.setFontSize(8.5);
+      doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
-      doc.text("Account A: CBA Business Trans Acct (AUD)", 15, 100);
+      
+      // GSbusiness+
+      doc.text("GSbusiness+ Acct", 15, 100);
       doc.setFont("Courier", "bold");
-      doc.text("BSB: 062-151  |  Account Number: 10559938  |  SWIFT: CTBAAU2S", 15, 104);
+      doc.text("BSB: 834-472  |  ACC: 242719180", 15, 104);
 
+      // CBA 1
       doc.setFont("Helvetica", "normal");
-      doc.text("Account B: CBA Business Foreign Currency Acct (USD FCA)", 15, 110);
+      doc.text("CBA Smart Access / CDIA / Bus Trans", 100, 100);
       doc.setFont("Courier", "bold");
-      doc.text("BSB: 062-151  |  Account Number: 10559946  |  SWIFT: CTBAAU2S", 15, 114);
+      doc.text("BSB: 062-140  |  ACC: 11680690", 100, 104);
+      
+      // NAB & uBank
+      doc.setFont("Helvetica", "normal");
+      doc.text("NAB #9296 / #5930 & uBank Accts", 15, 110);
+      doc.setFont("Courier", "bold");
+      doc.text("BSB: 082-254 / 670-864  |  ACC: 755979296 / 43104756", 15, 114);
 
       // Item description
       doc.setFillColor(248, 250, 252);
@@ -197,7 +206,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
                 <strong style="color: #475569; text-transform: uppercase; font-size: 10px; display: block; margin-bottom: 5px; letter-spacing: 0.1em;">Billed To:</strong>
                 <strong>ASIM ARYAL</strong><br/>
                 Valourian Capital OS<br/>
-                Unit 712, 15 Barton Rd<br/>
+                Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia<br/>
                 Artarmon NSW 2064<br/>
               </td>
               <td style="width: 50%; vertical-align: top; font-size: 13px; line-height: 1.6;">
@@ -397,7 +406,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
                       <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Billed To (Director)</h4>
                       <p className="font-black text-slate-900">ASIM ARYAL</p>
                       <p className="text-slate-600">Valourian Capital OS</p>
-                      <p className="text-slate-600">Unit 712, 15 Barton Rd</p>
+                      <p className="text-slate-600">Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia</p>
                       <p className="text-slate-600">Artarmon NSW 2064</p>
                     </div>
                     <div>
@@ -544,7 +553,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
                   <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider mb-2">BILLED TRUSTEE / CLIENT</span>
                   <p className="font-black text-slate-900 text-sm">ASIM ARYAL</p>
                   <p className="mt-1">Valourian Capital OS</p>
-                  <p>Unit 712, 15 Barton Rd</p>
+                  <p>Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia</p>
                   <p>Artarmon NSW 2064</p>
                   <p className="text-[10px] text-slate-400 mt-2">Personal Email: asim.nsw@gmail.com</p>
                 </div>

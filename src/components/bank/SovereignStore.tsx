@@ -1,3 +1,4 @@
+import { jsPDF } from 'jspdf';
 import React, { useState, useEffect } from "react";
 const DeliveryMap = React.lazy(() => import("./DeliveryMap").then(m => ({ default: m.DeliveryMap })));
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +31,7 @@ import {
   Mail
 , Box , Truck, History, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
+import { sendWorkspaceEmail, generateProfessionalReceipt } from '../../utils/email';
 import { db } from "../../firebase";
 import { collection, addDoc, doc, updateDoc, getDocs, query } from "firebase/firestore";
 import { sendEmailViaService, EmailPreviewModal, EmailData } from "./EmailService";
@@ -38,14 +40,32 @@ interface Product {
   id: string;
   name: string;
   brand: string;
-  category: string;
+  category?: string;
+  tag?: string;
   price: number;
   image: string;
-  specs: string[];
+  specs?: string[];
   description?: string;
+  instantDelivery?: boolean;
 }
 
 const STORE_PRODUCTS: Product[] = [
+  { id: "gl1", name: "Valcambi 1kg Gold Cast Bar", brand: "Valourian Reserve", price: 110000, image: "https://images.unsplash.com/photo-1610375461246-83ff852e5313?w=800&q=80", tag: "Commodities", instantDelivery: false },
+  { id: "crypto1", name: "100 Bitcoin (BTC) Hardware Wallet", brand: "Valourian Crypto", price: 9500000, image: "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=800&q=80", tag: "Crypto", instantDelivery: true },
+  { id: "share1", name: "10,000 Apple (AAPL) Common Stock Shares", brand: "Valourian Equities", price: 1750000, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80", tag: "Equities", instantDelivery: true },
+  { id: "card1", name: "Valourian Master Line Black Card (Physical)", brand: "Financial Services", price: 250000, image: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80", tag: "Credit", instantDelivery: false },
+  { id: "hotel1", name: "Four Seasons Sydney (Penthouse Annual Lease)", brand: "Valourian Estates", price: 1200000, image: "https://images.unsplash.com/photo-1542314831-c6a420828f42?w=800&q=80", tag: "Real Estate", instantDelivery: false },
+  { id: 'p6', name: 'MacBook Pro M3 Max', brand: 'Apple', price: 5499, image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80', tag: 'Electronics', instantDelivery: true },
+  { id: 'p7', name: 'DJI Mavic 3 Pro Cine', brand: 'Apple', price: 6899, image: 'https://images.unsplash.com/photo-1579822606822-0d65b1c5cd70?w=800&q=80', tag: 'Electronics', instantDelivery: true },
+  { id: 'p8', name: 'Hermès Birkin 30', brand: 'Valourian Reserve', price: 29500, image: 'https://images.unsplash.com/photo-1584916201218-f4242ceb4809?w=800&q=80', tag: 'Luxury', instantDelivery: false },
+  { id: 'p9', name: 'Rolex Daytona Platinum', brand: 'Valourian Reserve', price: 112000, image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=800&q=80', tag: 'Jewelry', instantDelivery: false },
+  { id: 'p10', name: 'Tesla Model S Plaid', brand: 'Tesla', price: 199990, image: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&q=80', tag: 'Automotive', instantDelivery: false },
+  { id: 'p11', name: 'Gulfstream G650', brand: 'Gulfstream', price: 65000000, image: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800&q=80', tag: 'Aviation', instantDelivery: false },
+  { id: 'p12', name: 'Kobe A5 Wagyu (10kg)', brand: 'Fine Foods', price: 4500, image: 'https://images.unsplash.com/photo-1603048297172-c92544798d5e?w=800&q=80', tag: 'Groceries', instantDelivery: true },
+  { id: 'p13', name: 'Dom Perignon Vintage 2008 (Case)', brand: 'Fine Foods', price: 3200, image: 'https://images.unsplash.com/photo-1599427303058-f04cb21cce5d?w=800&q=80', tag: 'Beverages', instantDelivery: true },
+  { id: 'p14', name: 'Sony A1 Mirrorless Camera', brand: 'Electronics', price: 9800, image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&q=80', tag: 'Electronics', instantDelivery: true },
+  { id: 'p15', name: 'La Marzocco Linea Mini', brand: 'Home', price: 7990, image: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800&q=80', tag: 'Appliances', instantDelivery: true },
+
   {
     id: "item-winter-pajamas",
     name: "Premium Winter Pajamas Set",
@@ -109,7 +129,36 @@ const STORE_PRODUCTS: Product[] = [
     image: "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?auto=format&fit=crop&q=80&w=800",
     specs: ["Smart Thermostats", "Premium Blankets", "Ambient Lighting"]
   },
-
+  {
+    id: "apple-vision-pro",
+    name: "Apple Vision Pro (1TB)",
+    brand: "Apple Certified",
+    category: "Electronics",
+    tag: "Apple Store",
+    price: 3899,
+    image: "https://images.unsplash.com/photo-1707010534947-66a9b51fa168?w=800&q=80",
+    specs: ["M2 Chip", "R1 Spatial Co-processor", "1TB Storage"]
+  },
+  {
+    id: "amazon-groceries-bulk",
+    name: "Amazon Prime Whole Foods Bulk Supply",
+    brand: "Amazon Prime Sovereign",
+    category: "Groceries",
+    tag: "Amazon Fresh",
+    price: 2400,
+    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
+    specs: ["Organic Produce", "Premium Meats", "Same-Day Cold Chain"]
+  },
+  {
+    id: "amazon-data-server",
+    name: "AWS Outposts Server Rack",
+    brand: "Amazon Web Services",
+    category: "Infrastructure",
+    tag: "Enterprise",
+    price: 250000,
+    image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
+    specs: ["42U Rack", "Local AWS API", "Sovereign Network"]
+  },
   {
     id: "gulfstream1",
     name: "Gulfstream G700 Private Jet",
@@ -139,6 +188,62 @@ const STORE_PRODUCTS: Product[] = [
     brand: "Valourian Real Estate",
     image: "https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?w=800&q=80",
     specs: ["120-acre private island", "Deep-water marina", "Airstrip", "Off-grid eco-villa complex"]
+  },
+
+  
+  {
+    id: "item-luxury-watch",
+    name: "Audemars Piguet Royal Oak",
+    brand: "Audemars Piguet",
+    category: "Accessories",
+    price: 85000,
+    image: "https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&q=80&w=800",
+    specs: ["Automatic Movement", "18k Rose Gold", "Sapphire Crystal"]
+  },
+  {
+    id: "item-designer-suit",
+    name: "Bespoke Italian Tailored Suit",
+    brand: "Brioni",
+    category: "Apparel",
+    price: 7500,
+    image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=800",
+    specs: ["Made to Measure", "Super 150s Wool", "Silk Lining"]
+  },
+  {
+    id: "item-supercar",
+    name: "Ferrari SF90 Stradale",
+    brand: "Ferrari",
+    category: "vehicles",
+    price: 850000,
+    image: "https://images.unsplash.com/photo-1592198084033-aade902d1aae?auto=format&fit=crop&q=80&w=800",
+    specs: ["Hybrid V8", "986 hp", "AWD"]
+  },
+  {
+    id: "item-yacht",
+    name: "Sunseeker 95 Luxury Yacht",
+    brand: "Sunseeker",
+    category: "property",
+    price: 9500000,
+    image: "https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?auto=format&fit=crop&q=80&w=800",
+    specs: ["5 Cabins", "Crew Quarters", "Twin MTU Engines"]
+  },
+  {
+    id: "app-vision-pro",
+    name: "Apple Vision Pro",
+    brand: "Apple",
+    category: "Hardware",
+    price: 3499,
+    image: "https://images.unsplash.com/photo-1707345512638-997d31a10eaa?auto=format&fit=crop&q=80&w=800",
+    specs: ["Spatial Computing", "Micro-OLED", "M2 Chip"]
+  },
+  {
+    id: "item-rolex",
+    name: "Rolex Daytona Platinum",
+    brand: "Rolex",
+    category: "Accessories",
+    price: 125000,
+    image: "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&q=80&w=800",
+    specs: ["Ice Blue Dial", "Cerachrom Bezel", "Calibre 4130"]
   },
 
   // Apple
@@ -401,10 +506,13 @@ export function SovereignStore({ user, balances, setBalances }: {
   const [orderTracking, setOrderTracking] = useState<{ active: boolean, progress: number, items: string }>({ active: false, progress: 0, items: "" });
 
   const [selectedBrand, setSelectedBrand] = useState<string>("All");
+  const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "price-asc" | "price-desc">("name-asc");
   const [cart, setCart] = useState<Product[]>([]);
   const [checkoutProcessing, setCheckoutProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'vault' | 'card'>('vault');
-  const [logisticsProvider, setLogisticsProvider] = useState<'Australia Post' | 'Amazon Logistics' | 'FedEx' | 'DHL' | 'Aura Drive Tesla Fleet' | 'Apple Store Fleet'>('Amazon Logistics');
+  // UI Guarantee text for checkout
+  const guaranteeText = "100000000000% Secure Transport & Immediate Fulfillment Guarantee via Valourian Infrastructure";
+  const [logisticsProvider, setLogisticsProvider] = useState<string>('Amazon Logistics');
   const [authorityToLeave, setAuthorityToLeave] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string>('');
   const [digitalCards, setDigitalCards] = useState<any[]>(() => {
@@ -488,7 +596,7 @@ export function SovereignStore({ user, balances, setBalances }: {
   });
   const [previewEmail, setPreviewEmail] = useState<EmailData | null>(null);
   const [activeBoardMember, setActiveBoardMember] = useState<"Asim" | "Aleks" | "Justin">("Asim");
-  const [deliveryAddress, setDeliveryAddress] = useState("Unit 712, 15 Barton Rd, Artarmon NSW 2064, Australia");
+  const [deliveryAddress, setDeliveryAddress] = useState("Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia");
   const [confirmationEmail, setConfirmationEmail] = useState(user?.email || "asim.nsw@gmail.com");
 
   // AI guide/sourcing simulation state
@@ -506,8 +614,7 @@ export function SovereignStore({ user, balances, setBalances }: {
         const orders: any[] = [];
         querySnapshot.forEach((docSnap) => {
           const d = docSnap.data();
-          // Let's grab Sovereign Omni-Store Procurement Division and Sourcing related txns
-          if (d.userId === user.uid && d.recipient && (d.recipient.includes("Sovereign Omni-Store") || d.recipient.includes("Apple"))) {
+          if (d.userId === user.uid && (d.amount < 0 || (d.recipient && (d.recipient.includes("Sovereign Omni-Store") || d.recipient.includes("Apple"))))) {
             orders.push({ id: docSnap.id, ...d });
           }
         });
@@ -525,14 +632,29 @@ export function SovereignStore({ user, balances, setBalances }: {
   }, [user, activeSegment]);
   const [foundQuotes, setFoundQuotes] = useState<any[]>([]);
 
+  const hasRealEstate = cart.some(item => item.brand === 'Valourian Real Estate' || item.tag === 'Real Estate' || item.category === 'Real Estate Property');
+
+  useEffect(() => {
+    if (hasRealEstate) {
+      setLogisticsProvider("Sotheby's International Realty");
+    } else {
+      setLogisticsProvider("Amazon Logistics");
+    }
+  }, [hasRealEstate]);
+
   const filteredProducts = STORE_PRODUCTS.filter(p => {
-    if (selectedBrand === "All") return true;
-    return p.brand === selectedBrand;
+    if (selectedBrand !== "All" && p.brand !== selectedBrand) return false;
+    return true;
+  }).sort((a, b) => {
+    if (sortBy === "price-asc") return a.price - b.price;
+    if (sortBy === "price-desc") return b.price - a.price;
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    return a.name.localeCompare(b.name);
   });
 
   const addToCart = (product: Product) => {
     setCart([...cart, product]);
-    toast.success(`Allocated ${product.name} to direct checkout cart!`, { icon: "🛒" });
+    toast.success(`Allocated ${product.name} to direct checkout cart!`, { icon: "��" });
   };
 
   const removeFromCart = (index: number) => {
@@ -568,6 +690,7 @@ export function SovereignStore({ user, balances, setBalances }: {
       }
       setBalances(updatedBalances);
 
+     
       // Log transaction to Firestore
       await addDoc(collection(db, "transactions"), {
         userId: user?.uid || "anonymous",
@@ -583,6 +706,22 @@ export function SovereignStore({ user, balances, setBalances }: {
         logisticsProvider,
         authorityToLeave
       });
+
+      // Write permanent receipt document
+      if (user && user.uid) {
+        await addDoc(collection(db, "users", user.uid, "receipts"), {
+           amount: total,
+           currency: "AUD",
+           items: cart,
+           deliveryAddress,
+           confirmationEmail,
+           logisticsProvider,
+           authorityToLeave,
+           timestamp: new Date().toISOString(),
+           orderId: "SOV-" + Math.floor(Math.random() * 1000000)
+        });
+      }
+
 
       // Send confirmation email
       const assetNamesList = cart.map(c => c.name).join(", ");
@@ -629,7 +768,7 @@ Sovereign Omni-Store Logistics`;
 
       toast.success(`${paymentMethod === "vault" ? "Vault" : "Card"} debited ${total.toLocaleString()} AUD. Confirmation email queued at ${confirmationEmail}.`, {
         duration: 5000,
-        icon: "🛡️"
+        icon: "��️"
       });
       setCart([]);
       setOrderTracking({ active: true, progress: 0, items: assetNamesList });
@@ -661,9 +800,9 @@ Sovereign Omni-Store Logistics`;
     const promptText = aiInput.toLowerCase();
     
     const logs = [
-      "📡 Swarming neural intelligence channels...",
-      "🔍 Querying global hardware arrays & Bloomberg commodities raw feed...",
-      "🔗 Correlating Namecheap DNS records & live market indices...",
+      "�� Swarming neural intelligence channels...",
+      "�� Querying global hardware arrays & Bloomberg commodities raw feed...",
+      "�� Correlating Namecheap DNS records & live market indices...",
       "⚙️ Translating local custom clearance parameters & VIP tax waivers...",
       "✅ Optimum sovereign sourcing pipeline locked in."
     ];
@@ -744,7 +883,7 @@ Sovereign Omni-Store Logistics`;
 
       toast.success(`Custom Asset "${quote.name}" secured for $${quote.cost.toLocaleString()} AUD! Confirmation email sent to ${confirmationEmail}.`, {
         duration: 5000,
-        icon: "🤖"
+        icon: "��"
       });
       // Clear sourcing and input
       setAiInput("");
@@ -797,16 +936,33 @@ CRYPTOGRAPHIC SEAL VALIDATION:
 THE CORPORATE BOARD SEAL IS DULY AFFIXED.
 ===================================================================`;
 
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Valourian_Title_Deed_${assetName.replace(/\s+/g, "_")}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success(`Title Deed Certificate for "${assetName}" successfully downloaded to your device!`, { icon: "📥" });
+    const doc = new jsPDF();
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 210, 40, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("VALOURIAN CAPITAL", 15, 25);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("SOVEREIGN TITLE DEED", 15, 32);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("CERTIFICATE OF ABSOLUTE OWNERSHIP", 15, 55);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    
+    const lines = doc.splitTextToSize(content, 180);
+    doc.text(lines, 15, 70);
+
+    const fileName = `Valourian_Title_Deed_${assetName.replace(/\s+/g, "_")}.pdf`;
+    doc.save(fileName);
+    toast.success(`Title Deed Certificate for "${assetName}" successfully downloaded as PDF!`, { icon: "📥" });
   };
 
   const forwardConfirmationToBoard = async (assetName: string, assetType: string, cost: number) => {
@@ -833,7 +989,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
         body: `Hello Justin,\n\nThis board memo confirms that Valourian Capital has successfully finalized the acquisition, checkout clearance, and custody protocol for the following asset:\n\nAsset: ${assetName}\nType: ${assetType}\nAllocated Funds: $${cost.toLocaleString()} AUD\n\nThis asset has been fully linked with our active DNS routes and resolved on valourian.com. Direct safe-sync validation is online.\n\nBest regards,\nMr. Asim Aryal\nFounder, CEO & Chairman\nValourian Capital`
       });
 
-      toast.success(`Audit notice forwarded to Board members Aleks & Justin. Received successfully in workspace.`, { icon: "📧" });
+      toast.success(`Audit notice forwarded to Board members Aleks & Justin. Received successfully in workspace.`, { icon: "��" });
     } catch (e) {
       console.error(e);
       toast.error("Error routing board notification email.");
@@ -912,6 +1068,22 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                   </button>
                 ))}
               </div>
+              
+              <div className="flex justify-end mb-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-400 font-bold uppercase tracking-widest">Sort:</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans cursor-pointer"
+                  >
+                    <option value="name-asc">Alphabetical (A-Z)</option>
+                    <option value="name-desc">Alphabetical (Z-A)</option>
+                    <option value="price-desc">Price (High to Low)</option>
+                    <option value="price-asc">Price (Low to High)</option>
+                  </select>
+                </div>
+              </div>
 
               {/* Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -932,8 +1104,8 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                       <div>
                         <h4 className="font-heavy text-base text-slate-100 mb-2 leading-snug">{p.name}</h4>
                         <div className="space-y-1 mt-3">
-                          {p.specs.map((spec, i) => (
-                            <div key={i} className="text-[10px] text-slate-400 flex items-center gap-1.5 font-sans">
+                          {p.specs?.map((spec, i) => (
+                            <div key={`spec-${i}`} className="text-[10px] text-slate-400 flex items-center gap-1.5 font-sans">
                               <span className="w-1 h-1 rounded-full bg-amber-500/50"></span>
                               {spec}
                             </div>
@@ -1020,8 +1192,8 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                       {cart.map((item, idx) => (
                         <motion.div 
                           key={`${item.id}-${idx}`}
-                          initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          initial={{ opacity: 0, x: 50, height: 0 }}
+                          animate={{ opacity: 1, x: 0, height: "auto" }}
                           exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
                           transition={{ type: "tween", stiffness: 400, damping: 25 }}
                           className="flex justify-between items-center text-xs p-3 bg-slate-950/40 border border-slate-800 rounded-xl"
@@ -1139,7 +1311,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                     className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-4 mt-2 font-mono text-xs space-y-1.5 max-h-[220px] overflow-y-auto"
                   >
                     {aiSourcingLogs.map((log, lIdx) => (
-                      <div key={lIdx} className="text-slate-300 flex items-center gap-2">
+                      <div key={`log-${lIdx}`} className="text-slate-300 flex items-center gap-2">
                         <span className="text-amber-500 inline-block animate-pulse">■</span>
                         {log}
                       </div>
@@ -1194,16 +1366,27 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                   <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">LOGISTICS PROVIDER</label>
                   <select
                     value={logisticsProvider}
-                    onChange={(e) => setLogisticsProvider(e.target.value as any)}
+                    onChange={(e) => setLogisticsProvider(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-3 text-xs text-slate-200 focus:outline-none focus:border-purple-500/50 font-sans cursor-pointer"
                   >
-                    <option value="Australia Post">Australia Post</option>
-                    <option value="Amazon Logistics">Amazon Logistics</option>
-                    <option value="FedEx">FedEx</option>
-                    <option value="Apple Store Fleet">Apple Store Fleet</option>
-                    <option value="DHL">DHL Express</option>
-                      <option value="Aura Drive Tesla Fleet">Aura Drive Tesla Fleet</option>
-                      <option value="Apple Store Fleet">Apple Store Fleet</option>
+                    {hasRealEstate ? (
+                      <>
+                        <option value="Sotheby's International Realty">Sotheby's VIP Brokerage (Keys & Deeds)</option>
+                        <option value="Knight Frank VIP Brokerage">Knight Frank Private Office</option>
+                        <option value="Agent 47 Sovereign Hand-off">Agent 47 / Sovereign Hand-off</option>
+                        <option value="Prosegur Armored Transport">Prosegur Armored Escort</option>
+                        <option value="PEXA Secure e-Conveyancing">PEXA Digital Settlement</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Australia Post">Australia Post</option>
+                        <option value="Amazon Logistics">Amazon Logistics</option>
+                        <option value="FedEx">FedEx</option>
+                        <option value="DHL">DHL Express</option>
+                        <option value="Aura Drive Tesla Fleet">Aura Drive Tesla Fleet</option>
+                        <option value="Apple Store Fleet">Apple Store Fleet</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="space-y-1 flex flex-col justify-end">
@@ -1229,7 +1412,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                 <h4 className="font-extrabold text-slate-300 text-xs uppercase tracking-wider leading-none">AI Sourced Marketplace Quotes</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {foundQuotes.map((q, idx) => (
-                    <div key={idx} className="bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-amber-500/20 transition-all">
+                    <div key={`item-${idx}`} className="bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-amber-500/20 transition-all">
                       <div>
                         <div className="flex justify-between items-start gap-2 mb-2">
                           <span className="font-extrabold text-slate-100 text-sm leading-snug">{q.name}</span>
@@ -1286,7 +1469,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {INTELLECTUAL_PROPERTIES.map((ip, idx) => (
-                <div key={idx} className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+                <div key={`item-${idx}`} className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
                   <div className="flex flex-col gap-1.5">
                     <span className="text-white font-black text-base">{ip.name}</span>
                     <span className="text-[10px] bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-md w-fit font-mono">
@@ -1382,7 +1565,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                   { name: "MacBook Pro M4 Max (Sovereign Edition)", type: "Physical Micro-Hardware Core", cost: 7299 },
                   { name: "Tesla Cybertruck Cyberbeast", type: "Direct Physical Automotive asset", cost: 189000 }
                 ].map((docItem, idx) => (
-                  <div key={idx} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/25 transition-colors flex flex-col justify-between">
+                  <div key={`item-${idx}`} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/25 transition-colors flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start">
                         <span className="font-heavy text-white text-base leading-snug">{docItem.name}</span>

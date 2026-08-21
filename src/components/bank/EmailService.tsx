@@ -97,7 +97,15 @@ export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; o
                  <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm border border-white/30 text-xs font-mono font-bold tracking-widest px-6">
                     {data.voucherCode || "UBEREATS-VCS-9942"}
                  </div>
-                 <p className="mt-4 text-xs text-green-100/80">Valid for immediate redemption.</p>
+                 <p className="mt-4 text-xs text-green-100/80 mb-4">Valid for immediate redemption.</p>
+                 <div className="flex gap-2">
+                   <a href={`uber://voucher?code=${data.voucherCode || "UBEREATS-VCS-9942"}`} className="bg-black text-white font-bold py-2 px-6 rounded-full text-xs hover:bg-slate-800 transition-colors shadow-xl">
+                     Claim in Uber
+                   </a>
+                   <a href={`ubereats://voucher?code=${data.voucherCode || "UBEREATS-VCS-9942"}`} className="bg-emerald-900 text-emerald-100 font-bold py-2 px-6 rounded-full text-xs hover:bg-emerald-800 transition-colors shadow-xl">
+                     Claim in UberEats
+                   </a>
+                 </div>
                </div>
             ) : null}
 

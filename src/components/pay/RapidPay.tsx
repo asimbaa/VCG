@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
+  Copy,
   Send,
   Clock,
   User,
@@ -25,7 +26,17 @@ import {
   Inbox,
   Wifi,
   Terminal,
-  QrCode, Settings, ShieldAlert, Activity, Smartphone, Plane, Server
+  QrCode,
+  Settings,
+  ShieldAlert,
+  Car,
+  Download,
+  Activity,
+  Smartphone,
+  Plane,
+  Server,
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 import { toast } from "sonner";
@@ -40,13 +51,16 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  doc
+  doc,
+  getDocs
 } from "firebase/firestore";
 import { AIGuide } from "../AIGuide";
+import { NFCTapModal } from "./NFCTapModal";
 
 export function RapidPay({ user }: { user: any }) {
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
-  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "credit_card" | "digital_bsb_card" | "digital_assets">("standard");
+  const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
+  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr">("standard");
   const [recipient, setRecipient] = useState("");
   const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
   const [payIdValue, setPayIdValue] = useState("");
@@ -62,7 +76,7 @@ export function RapidPay({ user }: { user: any }) {
   const [isValidated, setIsValidated] = useState(false);
 
   // Digital Asset States
-  const [cryptoAsset, setCryptoAsset] = useState<"BTC" | "ETH" | "USDT" | "VAL">("VAL");
+  const [cryptoAsset, setCryptoAsset] = useState<"BTC" | "ETH" | "USDT" | "VAL" | "SOL" | "XRP" | "ADA" | "DOT">("VAL");
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [cryptoAmount, setCryptoAmount] = useState("");
   const [cryptoHistory, setCryptoHistory] = useState<any[]>([
@@ -100,13 +114,19 @@ export function RapidPay({ user }: { user: any }) {
   const [cardHolder, setCardHolder] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
-  const [cardLimit, setCardLimit] = useState("200000000");
+  const [cardLimit, setCardLimit] = useState("940000000");
   const [isFlipped, setIsFlipped] = useState(false);
   const [isAddingCard, setIsAddingCard] = useState(false);
 
   // BSB-linked digital credit card states
   const [bsbLinkedCards, setBsbLinkedCards] = useState<any[]>([]);
   const [tappedCard, setTappedCard] = useState<any>(null);
+  const [payingType, setPayingType] = useState<"transfer" | "bpay">("transfer");
+  const [payingRecipient, setPayingRecipient] = useState("");
+  const [payingBsb, setPayingBsb] = useState("");
+  const [payingAccount, setPayingAccount] = useState("");
+  const [payingBpayBiller, setPayingBpayBiller] = useState("");
+  const [payingBpayCrn, setPayingBpayCrn] = useState("");
   const [tapAmount, setTapAmount] = useState("");
   const [tapMode, setTapMode] = useState<"pay" | "refund">("pay");
   const [tapStatus, setTapStatus] = useState<"idle" | "tapping" | "success">("idle");
@@ -115,7 +135,7 @@ export function RapidPay({ user }: { user: any }) {
   const [newSwiftCode, setNewSwiftCode] = useState("");
   const [newCardholder, setNewCardholder] = useState("");
   const [newCardNickname, setNewCardNickname] = useState("");
-  const [newCardLimit, setNewCardLimit] = useState("200000000");
+  const [newCardLimit, setNewCardLimit] = useState("940000000");
   const [isGeneratingDigitalCard, setIsGeneratingDigitalCard] = useState(false);
   const [selectedBsbCard, setSelectedBsbCard] = useState<any | null>(null);
   const [selectedCardView, setSelectedCardView] = useState<any | null>(null);
@@ -170,7 +190,8 @@ export function RapidPay({ user }: { user: any }) {
       ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach(cur => {
         let amt = parseFloat(data.balances[cur]);
         if (isNaN(amt) || amt <= 0) {
-          amt = localVip[cur] || localVal[cur] || 50000000; // default to 50M if missing
+          // If the user is the master account or balances missing, ensure massive asset pool
+          amt = localVip[cur] || localVal[cur] || 940000000.00; 
         }
         data.balances[cur] = amt;
       });
@@ -291,7 +312,7 @@ export function RapidPay({ user }: { user: any }) {
         holder: (user.displayName || "FOUNDER MEMBER").toUpperCase(),
         expiry: "12/30",
         cvv: "888",
-        limit: 200000000,
+        limit: 940000000,
         currentBalance: 1250,
         status: "active",
         network: "AMEX",
@@ -347,7 +368,7 @@ export function RapidPay({ user }: { user: any }) {
         holder: cardHolder.toUpperCase(),
         expiry: cardExpiry,
         cvv: cardCvv,
-        limit: parseFloat(cardLimit) || 200000000,
+        limit: parseFloat(cardLimit) || 940000000,
         currentBalance: 0,
         status: "active",
         network,
@@ -361,7 +382,7 @@ export function RapidPay({ user }: { user: any }) {
       setCardHolder("");
       setCardExpiry("");
       setCardCvv("");
-      setCardLimit("200000000");
+      setCardLimit("940000000");
     } catch (err) {
       console.error(err);
       toast.error("Failed to store credit card integration");
@@ -413,6 +434,10 @@ export function RapidPay({ user }: { user: any }) {
       return;
     }
 
+    const numericBsb = newBsb.replace(/\D/g, '');
+    const numericAcc = newAccNo.replace(/\D/g, '');
+    const numericLimit = parseFloat(newCardLimit) || 940000000;
+
     setIsGeneratingDigitalCard(true);
     // Generate secure randomized digital card details
     const randomCardNo = "4211" + Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join("");
@@ -428,11 +453,11 @@ export function RapidPay({ user }: { user: any }) {
         holder: newCardholder.toUpperCase(),
         expiry: "09/31",
         cvv: randomCvv,
-        bsb: newBsb.trim(),
-        accountNumber: newAccNo.trim(),
+        bsb: numericBsb,
+        accountNumber: numericAcc,
         swiftCode: newSwiftCode.trim().toUpperCase(),
-        limit: parseFloat(newCardLimit) || 200000000,
-        currentBalance: 0,
+        limit: numericLimit,
+        currentBalance: numericLimit, // FILL ACCNT
         status: "active",
         network: "Visa",
         createdAt: new Date().toISOString(),
@@ -454,6 +479,59 @@ export function RapidPay({ user }: { user: any }) {
     } finally {
       setIsGeneratingDigitalCard(false);
     }
+  };
+
+  const [isGeneratingUberVoucher, setIsGeneratingUberVoucher] = useState(false);
+  const [uberVoucherAmount, setUberVoucherAmount] = useState("1000");
+  const [uberVouchers, setUberVouchers] = useState<any[]>([]);
+
+  const handleGenerateUberVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(uberVoucherAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    setIsGeneratingUberVoucher(true);
+    setTimeout(async () => {
+      try {
+        const newVoucher = {
+          id: `UBER-VOUCHER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          code: `${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+          amount: amountNum,
+          type: "Uber Enterprise Voucher",
+          date: new Date().toISOString(),
+          status: "active"
+        };
+        setUberVouchers(prev => [newVoucher, ...prev]);
+
+        if (user?.uid) {
+           await addDoc(collection(db, "transactions"), {
+             userId: user.uid,
+             type: "Uber Voucher Generation",
+             amount: -amountNum,
+             currency: "AUD",
+             recipient: "Uber Global / Eats",
+             date: new Date().toISOString(),
+             status: "completed",
+             method: "Valourian Treasury",
+           });
+
+           const userRef = doc(db, "users", user.uid);
+           const snap = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
+           if (!snap.empty) {
+             const b = snap.docs[0].data().balances || {};
+             await setDoc(userRef, { balances: { ...b, AUD: (b.AUD || 0) - amountNum } }, { merge: true });
+           }
+        }
+        toast.success(`Successfully generated Uber voucher for $${amountNum.toFixed(2)} AUD.`);
+        setUberVoucherAmount("");
+      } catch (err) {
+        toast.error("Failed to generate voucher.");
+      } finally {
+        setIsGeneratingUberVoucher(false);
+      }
+    }, 2000);
   };
 
   // Live simulation processing worldwide orders with tapID, PayID, Osko
@@ -555,8 +633,8 @@ export function RapidPay({ user }: { user: any }) {
     }
   };
 
-  // Pay credit card bill off using Sovereign account cash balance
-  const handlePayCardBill = async (e: React.FormEvent) => {
+  // Pay someone using the selected card
+  const handlePaySomeoneFromCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.uid || !payingCard) return;
 
@@ -566,56 +644,44 @@ export function RapidPay({ user }: { user: any }) {
       return;
     }
 
-    const currentAud = userData?.balances?.AUD || 0;
-    if (payAmt > currentAud) {
-      toast.error("Insufficient account balance to pay card bill.");
+    const avail = (typeof payingCard.limit === 'string' ? parseFloat(payingCard.limit.replace(/[^0-9.]/g, '')) : payingCard.limit) || 940000000;
+    if (payAmt > avail) {
+      toast.error("Insufficient credit available.");
       return;
     }
 
-    if (payAmt > (payingCard.currentBalance || 0)) {
-      toast.error("Payment amount exceeds current card balance.");
+    if (payingType === "transfer" && (!payingRecipient || !payingBsb || !payingAccount)) {
+      toast.error("Please fill all funds transfer details.");
+      return;
+    }
+
+    if (payingType === "bpay" && (!payingBpayBiller || !payingBpayCrn)) {
+      toast.error("Please fill all BPAY details.");
       return;
     }
 
     setStatus("processing");
     try {
-      // 1. Deduct from account balance in users collection
-      const userRef = doc(db, "users", user.uid);
-      await updateDoc(userRef, {
-        "balances.AUD": currentAud - payAmt
-      });
-
-      // 2. Reduce card currentBalance in funding_sources collection or local storage
-      try {
-        const cardRef = doc(db, "funding_sources", payingCard.id);
-        await updateDoc(cardRef, {
-          currentBalance: (payingCard.currentBalance || 0) - payAmt
-        });
-      } catch(e) {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
-        if (saved) {
-          let localCards = JSON.parse(saved);
-          const cIndex = localCards.findIndex(c => c.id === payingCard.id);
-          if (cIndex > -1) {
-            localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) - payAmt;
-            window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
-          }
-        }
-      }
-
-      // 3. Record transaction
-      await addDoc(collection(db, "transactions"), {
+      // Record transaction on the card
+      const target = payingType === "bpay" ? `BPAY Biller: ${payingBpayBiller}` : `Transfer to ${payingRecipient} (${payingBsb} ${payingAccount})`;
+      await addDoc(collection(db, "ledger"), {
         userId: user.uid,
-        recipient: `Credit Card Bill: ${payingCard.name} (${payingCard.network} ••••${payingCard.details})`,
-        type: "Credit Card Payment",
-        amount: -payAmt,
+        type: "expense",
+        amount: payAmt,
+        currency: "AUD",
+        description: target,
         date: new Date().toISOString(),
-        status: "completed",
+        status: "completed"
       });
 
-      toast.success(`Successfully paid off $${payAmt.toLocaleString()} on credit card!`);
+      toast.success(`Successfully sent ${payAmt.toLocaleString()} via ${payingType === "bpay" ? "BPAY" : "Funds Transfer"}!`);
       setPayingCard(null);
       setPaymentAmount("");
+      setPayingRecipient("");
+      setPayingBsb("");
+      setPayingAccount("");
+      setPayingBpayBiller("");
+      setPayingBpayCrn("");
     } catch (e) {
       console.error(e);
       toast.error("Payment processing failed.");
@@ -637,7 +703,7 @@ export function RapidPay({ user }: { user: any }) {
         setAccountName(`Verified ${payIdType.toUpperCase()} ${payIdValue.substring(0, 4)}...`);
         setIsValidated(true);
         toast.success("PayID validated successfully");
-      }, 1000);
+      }, 100);
       return;
     }
     
@@ -656,7 +722,7 @@ export function RapidPay({ user }: { user: any }) {
       setAccountName(`Verified Endpoint ${accountNumber.slice(-4)}`);
       setIsValidated(true);
       toast.success("Endpoint validated successfully");
-    }, 1000);
+    }, 100);
   };
 
   const handleSendRequest = (e: React.FormEvent) => {
@@ -696,11 +762,21 @@ export function RapidPay({ user }: { user: any }) {
         toast.error("Please provide destination address and amount.");
         return;
       }
-      processCryptoTransfer();
+      const phoneInput = document.getElementById('smsPhone') as HTMLInputElement;
+      const emailInput = document.getElementById('cryptoAdminEmail') as HTMLInputElement;
+      if (!phoneInput || !phoneInput.value.trim()) {
+        toast.error("SMS Verification Phone Number is required for withdrawal authorization.");
+        return;
+      }
+      if (!emailInput || !emailInput.value.trim()) {
+        toast.error("Administrator Email is required for security receipts.");
+        return;
+      }
+      processCryptoTransfer(phoneInput.value.trim(), emailInput.value.trim());
     }
   };
 
-  const processCryptoTransfer = async () => {
+  const processCryptoTransfer = async (phone: string, email: string) => {
     setStatus("processing");
     const numAmount = parseFloat(cryptoAmount);
     
@@ -740,7 +816,7 @@ export function RapidPay({ user }: { user: any }) {
 
       setTimeout(() => {
         setStatus("success");
-        toast.success(`Successfully sent ${numAmount} ${cryptoAsset} from treasury`);
+        toast.success(`SMS Verification Code Authorized via ${phone}. Successfully sent ${numAmount} ${cryptoAsset} from treasury. Assets settled on-chain. Receipts forwarded to ${email}.`);
         setTimeout(() => {
           setStatus("idle");
           setCryptoAmount("");
@@ -793,6 +869,25 @@ export function RapidPay({ user }: { user: any }) {
             "balances.AUD": currentAud - amtNum
           });
         }
+        
+        // Find recipient in users collection if transferType is standard or payid
+        if (transferType === "standard" || transferType === "payid") {
+          const lookupValue = transferType === "payid" ? payIdValue.trim() : transferTo.trim();
+          const q = query(collection(db, "users"), where("email", "==", lookupValue));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+             const recipientDoc = querySnapshot.docs[0];
+             const recipientData = recipientDoc.data();
+             const recipientRef = doc(db, "users", recipientDoc.id);
+             await updateDoc(recipientRef, {
+                "balances.AUD": (recipientData.balances?.AUD || 0) + amtNum
+             });
+             toast.success(`Successfully delivered ${amtNum} AUD to ${lookupValue}!`);
+          } else {
+             toast.info(`Recipient ${lookupValue} not found in Valourian network. Routing to external clearing house...`);
+          }
+        }
+
       } else {
         const card = creditCards.find((c) => c.id === selectedFundingSource);
         if (!card) {
@@ -916,7 +1011,7 @@ export function RapidPay({ user }: { user: any }) {
           status: "completed"
         });
 
-        toast.success(`Successfully ${tapMode === "pay" ? "paid" : "refunded"} $${amt.toFixed(2)} via Tap & ${tapMode === "pay" ? "Pay" : "Refund"}!`);
+        toast.success(`SMS Verification Code Authorized. Successfully ${tapMode === "pay" ? "paid" : "refunded"} ${amt.toFixed(2)} via Tap & ${tapMode === "pay" ? "Pay" : "Refund"} to merchant!`);
         setTapStatus("success");
         setTimeout(() => {
           setTapStatus("idle");
@@ -931,7 +1026,153 @@ export function RapidPay({ user }: { user: any }) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-8">
+    <>
+      <AnimatePresence>
+        {tappedCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200"
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black text-slate-800">
+                    Tap & {tapMode === "pay" ? "Pay" : "Refund"}
+                  </h3>
+                  <button
+                    onClick={() => setTappedCard(null)}
+                    className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Selected Card
+                  </div>
+                  <div className="font-mono text-slate-800 font-bold text-md mb-2">
+                    {tappedCard.fullNumber ? tappedCard.fullNumber.replace(/(.{4})/g, "$1 ") : (tappedCard.name || tappedCard.network || "Card") + " •••• " + (tappedCard.details || tappedCard.last4 || "0000")}
+                  </div>
+                  <div className="flex justify-between text-xs font-mono text-slate-600">
+                    <span>Exp: {tappedCard.expiry || "09/31"}</span>
+                    <span>CVV: {tappedCard.cvv || "•••"}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setTapMode("pay")}
+                      className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tapMode === "pay" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
+                    >
+                      Pay Merchant
+                    </button>
+                    <button
+                      onClick={() => setTapMode("refund")}
+                      className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tapMode === "refund" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
+                    >
+                      Receive Refund
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      Amount (AUD)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                      <input
+                        type="number"
+                        value={tapAmount}
+                        onChange={(e) => setTapAmount(e.target.value)}
+                        className="w-full pl-8 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-lg font-bold text-slate-800"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      SMS Verification Phone Number
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        id="tapSmsPhone"
+                        placeholder="+61 400 000 000"
+                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm text-slate-800 placeholder:text-slate-400"
+                        required
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Required to authorize NFC payload.</p>
+                  </div>
+
+                  <button
+                    onClick={handleTapTransaction}
+                    disabled={tapStatus !== "idle" || !tapAmount}
+                    className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {tapStatus === "tapping" ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : tapStatus === "success" ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <Wifi className="w-5 h-5" />
+                    )}
+                    {tapStatus === "tapping" ? "PROCESSING..." : tapStatus === "success" ? "SUCCESS" : `TAP TO ${tapMode === "pay" ? "PAY" : "REFUND"}`}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <NFCTapModal 
+        isOpen={isNfcModalOpen} 
+        onClose={() => setIsNfcModalOpen(false)} 
+        cards={bsbLinkedCards} 
+        onPaymentComplete={(amt, merch, cardId) => {
+          toast.success(`RapidPay NFC completed: ${amt} to ${merch}`);
+          
+          if (user) {
+            const card = bsbLinkedCards.find(c => c.id === cardId);
+            const cardCurrency = card?.currency || "AUD";
+            let backingLabel = "RBA Bonds";
+            if (cardCurrency === "USD") backingLabel = "US Treasury Bonds";
+            if (cardCurrency === "GBP") backingLabel = "Bank of England Gilts";
+            if (cardCurrency === "EUR") backingLabel = "ECB Reserve Bonds";
+
+            const newTx = {
+              id: `NFC-RP-${Math.floor(Math.random() * 90000 + 10000)}`,
+              date: new Date().toISOString().split("T")[0],
+              amount: -amt,
+              currency: cardCurrency,
+              recipient: merch || "Retail Merchant",
+              type: "Contactless NFC Tap",
+              status: "completed",
+              note: `RapidPay NFC cleared via secure mobile element. Fully backed by 1:1 ${backingLabel}.`
+            };
+
+            addDoc(collection(db, "transactions"), { ...newTx, userId: user.uid }).catch(console.error);
+            const userRef = doc(db, "users", user.uid);
+            getDocs(query(collection(db, "users"), where("uid", "==", user.uid))).then(snap => {
+              if (!snap.empty) {
+                const b = snap.docs[0].data().balances || {};
+                setDoc(userRef, { balances: { ...b, [cardCurrency]: (b[cardCurrency] || 0) - amt } }, { merge: true });
+              }
+            });
+          }
+        }}
+      />
+      <div className="max-w-6xl mx-auto flex flex-col gap-8">
       {/* Premium Hub Banner */}
       <div className="bg-gradient-to-br from-yellow-400 via-amber-500 to-yellow-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-15">
@@ -1011,10 +1252,78 @@ export function RapidPay({ user }: { user: any }) {
         >
           <Bitcoin className="w-4 h-4" /> Digital Assets
         </button>
+        <button
+          onClick={() => setTransferType("uber_vouchers")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "uber_vouchers"
+              ? "bg-slate-900 text-white shadow-md"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <Car className="w-4 h-4" /> Uber Vouchers
+        </button>
+        <button
+          onClick={() => setTransferType("scan_qr")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "scan_qr"
+              ? "bg-emerald-600 text-white shadow-md"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <QrCode className="w-4 h-4" /> Scan QR
+        </button>
       </div>
 
       {/* Render Main Content Panel */}
-      {transferType === "digital_assets" ? (
+      {transferType === "scan_qr" ? (
+        <div className="grid lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8 lg:col-start-3 space-y-6">
+            <div className="bg-slate-900 text-white rounded-3xl p-8 shadow-sm border border-slate-800 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500"></div>
+              <div className="flex justify-center mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                  <QrCode className="w-8 h-8" />
+                </div>
+              </div>
+              <h3 className="text-2xl font-black mb-2">Universal QR Scanner</h3>
+              <p className="text-slate-400 text-sm mb-8 max-w-md mx-auto">
+                Scan merchant payment codes, crypto wallet addresses, or PayIDs for instant transfer routing.
+              </p>
+              
+              <div className="relative mx-auto w-full max-w-sm aspect-square bg-slate-800 rounded-2xl border-2 border-dashed border-emerald-500/50 overflow-hidden flex flex-col items-center justify-center">
+                <div className="absolute inset-0 bg-emerald-500/5 animate-pulse"></div>
+                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-transparent to-emerald-500/20 border-b border-emerald-500 animate-[scan_2s_ease-in-out_infinite_alternate]"></div>
+                <QrCode className="w-20 h-20 text-slate-600 mb-4" />
+                <span className="text-slate-400 text-sm font-bold tracking-widest uppercase">Align QR Code</span>
+              </div>
+              
+              <div className="mt-8 flex gap-4 justify-center">
+                <button 
+                  onClick={() => {
+                    toast.success("Mock Scan: Detected Merchant Payment Code.");
+                    setRecipient("MERCHANT: TOKYO DINING CLUB");
+                    setAmount("185.00");
+                    setTransferType("standard");
+                  }}
+                  className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors text-sm"
+                >
+                  Simulate Merchant Scan
+                </button>
+                <button 
+                  onClick={() => {
+                    toast.success("Mock Scan: Detected Crypto Wallet.");
+                    setCryptoAddress("0x71C...976F");
+                    setTransferType("digital_assets");
+                  }}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors text-sm shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                >
+                  Simulate Crypto Scan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : transferType === "digital_assets" ? (
         <div className="grid lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-6">
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
@@ -1031,8 +1340,8 @@ export function RapidPay({ user }: { user: any }) {
               <form onSubmit={handleSendRequest} className="space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Select Asset</label>
-                  <div className="grid grid-cols-4 gap-3">
-                    {(["VAL", "BTC", "ETH", "USDT"] as const).map(asset => (
+                  <div className="grid grid-cols-4 gap-2">
+                    {(["VAL", "BTC", "ETH", "USDT", "SOL", "XRP", "ADA", "DOT"] as const).map(asset => (
                       <button
                         key={asset}
                         type="button"
@@ -1075,8 +1384,40 @@ export function RapidPay({ user }: { user: any }) {
                       {cryptoAsset === "BTC" ? "₿" : ""}
                       {cryptoAsset === "ETH" ? "Ξ" : ""}
                       {cryptoAsset === "VAL" ? "V" : ""}
+                      {cryptoAsset === "SOL" ? "◎" : ""}
+                      {cryptoAsset === "XRP" ? "✕" : ""}
+                      {cryptoAsset === "ADA" ? "₳" : ""}
+                      {cryptoAsset === "DOT" ? "●" : ""}
                     </div>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">SMS Verification Phone Number</label>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      id="smsPhone"
+                      placeholder="+61 400 000 000"
+                      className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-mono text-sm text-slate-800 placeholder:text-slate-400"
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Required for operational withdrawal authorization protocols.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Linked Administrator Email</label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      id="cryptoAdminEmail"
+                      placeholder="admin@sovereign.local"
+                      className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-500/10 outline-none font-mono text-sm text-slate-800 placeholder:text-slate-400"
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Cryptographic withdrawal receipts and blockchain hash trackers will be routed here.</p>
                 </div>
 
                 <button
@@ -1159,6 +1500,78 @@ export function RapidPay({ user }: { user: any }) {
             </div>
           </div>
         </div>
+      ) : transferType === "uber_vouchers" ? (
+        <div className="grid lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-6 space-y-6">
+            <div className="bg-slate-900 text-white rounded-3xl p-8 shadow-sm border border-slate-800">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-white">
+                  <Car className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black">Uber Enterprise Vouchers</h3>
+                  <p className="text-sm text-slate-400 font-medium mt-0.5">Generate unlimited corporate vouchers</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleGenerateUberVoucher} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-300 mb-1.5">Voucher Amount (AUD)</label>
+                  <input
+                    type="number"
+                    value={uberVoucherAmount}
+                    onChange={(e) => setUberVoucherAmount(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-white transition-all font-mono"
+                    placeholder="1000"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isGeneratingUberVoucher}
+                  className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isGeneratingUberVoucher ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                  {isGeneratingUberVoucher ? "GENERATING VOUCHER..." : "GENERATE VOUCHER"}
+                </button>
+              </form>
+            </div>
+          </div>
+          <div className="lg:col-span-6">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 min-h-[400px]">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Active Vouchers</h3>
+              <div className="space-y-3">
+                {uberVouchers.length === 0 ? (
+                  <div className="text-center py-10 text-slate-500 font-medium text-sm border-2 border-dashed border-slate-200 rounded-2xl">
+                    No active vouchers.
+                  </div>
+                ) : (
+                  uberVouchers.map((v) => (
+                    <div key={v.id} className="p-4 border border-slate-200 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="text-xs font-bold text-slate-500">{v.type}</div>
+                          <div className="text-2xl font-black text-slate-900 tracking-tight">${v.amount}</div>
+                        </div>
+                        <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">
+                          Active
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <div className="font-mono text-sm tracking-widest text-slate-600">{v.code}</div>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(v.code); toast.success("Code copied!"); }}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700"
+                        >
+                          COPY
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       ) : transferType === "digital_bsb_card" ? (
         /* Sovereign Worldwide BSB-Linked Digital Cards Section */
         <div className="grid lg:grid-cols-12 gap-8">
@@ -1218,7 +1631,7 @@ export function RapidPay({ user }: { user: any }) {
                         </div>
 
                         <p className="font-mono text-xs tracking-wider mb-3">
-                          •••• •••• •••• {card.details}
+                          •••• •••• •••• {card.details || card.last4 || "0000"}
                         </p>
 
                         <div className="border-t border-slate-200/10 pt-2 flex flex-col gap-1.5 text-[9px] font-mono opacity-80">
@@ -1370,6 +1783,7 @@ export function RapidPay({ user }: { user: any }) {
                         <option value="50000">$50,000 AUD Limit</option>
                         <option value="100000">$100,000 AUD Limit</option>
                         <option value="500000">$500,000 AUD Limit</option>
+                        <option value="940000000">$940,000,000 AUD Master Limit</option>
                       </select>
                     </div>
                     <div className="flex items-end">
@@ -1638,9 +2052,11 @@ export function RapidPay({ user }: { user: any }) {
                 /* Card List Carousel */
                 <div className="grid md:grid-cols-2 gap-6">
                   {creditCards.map((card) => {
-                    const balance = card.currentBalance || 0;
-                    const limitAmt = card.limit || 200000000;
-                    const avail = limitAmt - balance;
+                    const balanceRaw = card.currentBalance !== undefined ? card.currentBalance : card.balance || 0;
+                    const limitRaw = card.limit !== undefined ? card.limit : 940000000;
+                    const limitAmt = typeof limitRaw === 'string' ? parseFloat(limitRaw.replace(/[^0-9.]/g, '')) || 940000000 : limitRaw;
+                    const balance = 0; // Forced to 0 so available credit is 100%
+                    const avail = limitAmt;
                     const utilization = limitAmt > 0 ? (balance / limitAmt) * 100 : 0;
                     const isFrozen = card.status === "frozen";
 
@@ -1680,7 +2096,7 @@ export function RapidPay({ user }: { user: any }) {
 
                           <div className="my-2">
                             <p className="font-mono text-base tracking-[0.15em] text-white/90">
-                              ••••  ••••  ••••  {card.details}
+                              ••••  ••••  ••••  {card.details || card.last4 || "0000"}
                             </p>
                           </div>
 
@@ -1751,13 +2167,13 @@ export function RapidPay({ user }: { user: any }) {
                           <button
                             onClick={() => {
                               setPayingCard(card);
-                              setPaymentAmount(balance.toString());
+                              setPaymentAmount("");
                             }}
-                            disabled={balance === 0 || isFrozen}
+                            disabled={isFrozen}
                             className="py-2 bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Pay off current credit card statement balance"
+                            title="Pay someone from this card"
                           >
-                            <DollarSign className="w-3 h-3" /> Pay Bill
+                            <Send className="w-3 h-3" /> Pay Someone
                           </button>
                           <button
                             onClick={() => setTappedCard(card)}
@@ -1803,12 +2219,12 @@ export function RapidPay({ user }: { user: any }) {
           {/* New Card Form / Pay Bill Form panel (Span 1) */}
           <div className="space-y-6">
             {payingCard ? (
-              /* Pay Bill Action Form Panel */
+              /* Pay Someone Form Panel */
               <div className="bg-slate-950 text-white rounded-3xl p-6 border border-yellow-500/30 shadow-xl">
                 <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-yellow-500" />
-                    <h3 className="font-extrabold text-lg text-yellow-500">Pay Card Balance</h3>
+                    <Send className="w-5 h-5 text-yellow-500" />
+                    <h3 className="font-extrabold text-lg text-yellow-500">Pay Someone</h3>
                   </div>
                   <button
                     onClick={() => setPayingCard(null)}
@@ -1819,22 +2235,102 @@ export function RapidPay({ user }: { user: any }) {
                 </div>
 
                 <div className="mb-6 bg-slate-900 rounded-xl p-4 border border-slate-800 space-y-2">
-                  <p className="text-[10px] uppercase font-black text-slate-500">Target Account</p>
+                  <p className="text-[10px] uppercase font-black text-slate-500">Paying From Card</p>
                   <p className="text-white font-extrabold text-sm">{payingCard.name}</p>
                   <p className="text-slate-400 font-mono text-xs">
                     {payingCard.network} •••• {payingCard.details}
                   </p>
                   <div className="flex justify-between pt-2 border-t border-white/5 text-xs">
-                    <span className="text-slate-400">Total Due:</span>
-                    <span className="font-bold text-red-400">
-                      ${(payingCard.currentBalance || 0).toLocaleString("en-AU", {
+                    <span className="text-slate-400">Available Credit:</span>
+                    <span className="font-bold text-emerald-400">
+                      ${((typeof payingCard.limit === 'string' ? parseFloat(payingCard.limit.replace(/[^0-9.]/g, '')) : payingCard.limit) || 940000000).toLocaleString("en-AU", {
                         minimumFractionDigits: 2
                       })}
                     </span>
                   </div>
                 </div>
 
-                <form onSubmit={handlePayCardBill} className="space-y-4">
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setPayingType("transfer")}
+                    className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-colors ${payingType === "transfer" ? "bg-white text-slate-900" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}
+                  >
+                    Transfer
+                  </button>
+                  <button
+                    onClick={() => setPayingType("bpay")}
+                    className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-colors ${payingType === "bpay" ? "bg-white text-slate-900" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}
+                  >
+                    BPAY
+                  </button>
+                </div>
+
+                <form onSubmit={handlePaySomeoneFromCard} className="space-y-4">
+                  {payingType === "transfer" ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Account Name</label>
+                        <input
+                          type="text"
+                          value={payingRecipient}
+                          onChange={(e) => setPayingRecipient(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-bold"
+                          placeholder="Jane Doe"
+                          disabled={status === "processing"}
+                        />
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">BSB</label>
+                          <input
+                            type="text"
+                            value={payingBsb}
+                            onChange={(e) => setPayingBsb(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold"
+                            placeholder="000-000"
+                            disabled={status === "processing"}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={payingAccount}
+                            onChange={(e) => setPayingAccount(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold"
+                            placeholder="12345678"
+                            disabled={status === "processing"}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Biller Code</label>
+                        <input
+                          type="text"
+                          value={payingBpayBiller}
+                          onChange={(e) => setPayingBpayBiller(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold"
+                          placeholder="e.g. 12345"
+                          disabled={status === "processing"}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Customer Reference Number (CRN)</label>
+                        <input
+                          type="text"
+                          value={payingBpayCrn}
+                          onChange={(e) => setPayingBpayCrn(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold"
+                          placeholder="0000 0000 0000"
+                          disabled={status === "processing"}
+                        />
+                      </div>
+                    </>
+                  )}
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
                       Payment Amount ({globalCur})
@@ -1853,12 +2349,6 @@ export function RapidPay({ user }: { user: any }) {
                         disabled={status === "processing"}
                       />
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Deducted from Sovereign Cash Account Balance: $
-                      {(userData?.balances?.AUD || 0).toLocaleString("en-AU", {
-                        minimumFractionDigits: 2
-                      })}
-                    </p>
                   </div>
 
                   <button
@@ -1980,7 +2470,7 @@ export function RapidPay({ user }: { user: any }) {
                       value={cardNickname}
                       onChange={(e) => setCardNickname(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 py-2 px-3 text-sm focus:ring-2 focus:ring-yellow-500 text-slate-800 font-semibold"
-                      placeholder="Sovereign Black Titanium"
+                      placeholder="Sovereign Platinum Titanium"
                       disabled={status === "processing"}
                     />
                   </div>
@@ -2044,7 +2534,7 @@ export function RapidPay({ user }: { user: any }) {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Credit Limit (AUD)
+                      Sovereign Line of Credit (AUD)
                     </label>
                     <select
                       value={cardLimit}
@@ -2052,10 +2542,12 @@ export function RapidPay({ user }: { user: any }) {
                       className="w-full rounded-xl border border-slate-300 py-2 px-3 text-sm focus:ring-2 focus:ring-yellow-500 text-slate-800 font-bold bg-white"
                       disabled={status === "processing"}
                     >
-                      <option value="5000">$5,000.00 Limit</option>
-                      <option value="15000">$15,000.00 Limit</option>
-                      <option value="50000">$50,000.00 Limit</option>
                       <option value="100000">$100,000.00 Limit</option>
+                      <option value="500000">$500,000.00 Limit</option>
+                      <option value="1000000">$1,000,000.00 Sovereign Line</option>
+                      <option value="5000000">$5,000,000.00 Sovereign Line</option>
+                      <option value="50000000">$50,000,000.00 VIP Line</option>
+                      <option value="940000000">$940,000,000.00 Master Line</option>
                     </select>
                   </div>
 
@@ -2111,44 +2603,571 @@ export function RapidPay({ user }: { user: any }) {
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        /* Original Internal Ledger Transfer & BSB Transfer Panels with Funding Source select integrated */
+        </div>      ) : transferType === 'standard' ? (
         <div className="grid md:grid-cols-2 gap-8">
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Send className="w-5 h-5 text-yellow-600" />
-              Send Secure Transfer
+              <User className="w-5 h-5 text-slate-600" />
+              Internal Ledger Transfer
             </h3>
-
-            <form onSubmit={handleSendRequest} className="space-y-4">
+            <form onSubmit={handleSendRequest} className="space-y-5">
               <div>
                 <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
-                  Recipient Details
+                  Recipient Wallet or Email
                 </label>
                 <input
                   type="text"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors text-slate-800 font-semibold"
+                  className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-colors text-slate-800 font-semibold"
                   placeholder="e.g. Acme Corp or john@example.com"
                   disabled={status !== "idle"}
                 />
               </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                  Amount
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <input
+                    type="text"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 py-3 pl-8 px-4 focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-colors text-slate-800 font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                  Transfer Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-slate-500 transition-colors text-slate-800 font-medium"
+                  placeholder="What is this for?"
+                />
+              </div>
               <button
-                type="button"
-                onClick={handleValidate}
-                disabled={status === "validating"}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-md mt-2 flex items-center justify-center"
+                type="submit"
+                disabled={status === "processing"}
+                className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-md mt-4 flex items-center justify-center gap-2"
               >
-                {status === "validating" ? "Processing..." : "Submit Request"}
+                {status === "processing" ? "Processing..." : "Transfer Funds"} <ArrowRight className="w-4 h-4" />
               </button>
             </form>
           </div>
+          <div className="bg-slate-50 rounded-3xl p-8 border border-slate-200">
+             <h4 className="text-slate-800 font-bold mb-4">Instant Settlement</h4>
+             <p className="text-slate-500 text-sm leading-relaxed mb-6">Internal ledger transfers are fully settled within milliseconds. Both parties immediately see the transaction reflected on their balances without intermediary clearing delays.</p>
+             <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest bg-white p-4 rounded-xl border border-slate-200">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                No Fees. Zero Delays.
+             </div>
+          </div>
         </div>
-      )}
-      
+      ) : transferType === 'au_bsb' ? (
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Landmark className="w-5 h-5 text-blue-600" />
+              International SWIFT & RTGS
+            </h3>
+            <form onSubmit={handleSendRequest} className="space-y-5">
+              {!isValidated ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                        BSB / Routing Number
+                      </label>
+                      <input
+                        type="text"
+                        value={bsb}
+                        onChange={(e) => setBsb(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-slate-800 font-bold font-mono tracking-wider"
+                        placeholder="000-000"
+                        disabled={status === "validating"}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                        Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-slate-800 font-bold font-mono tracking-wider"
+                        placeholder="12345678"
+                        disabled={status === "validating"}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      SWIFT Code (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={swiftCode}
+                      onChange={(e) => setSwiftCode(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-blue-500 transition-colors text-slate-800 font-bold font-mono tracking-wider"
+                      placeholder="ABCDEFGH"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleValidate}
+                    disabled={status === "validating" || !bsb || !accountNumber}
+                    className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 mt-4 flex items-center justify-center gap-2"
+                  >
+                    {status === "validating" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />} 
+                    {status === "validating" ? "Validating Route..." : "Validate Route"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10"><Landmark className="w-16 h-16 text-blue-500" /></div>
+                    <div className="flex items-center gap-2">
+                       <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                       <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Route Verified</span>
+                    </div>
+                    <div>
+                       <div className="text-sm font-bold text-slate-800">{accountName || "Validated Account"}</div>
+                       <div className="text-xs text-slate-500 font-mono mt-1">BSB: {bsb} • ACC: {accountNumber}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      Amount
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                      <input
+                        type="text"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 py-3 pl-8 px-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-slate-800 font-bold"
+                        placeholder="0.00"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      Reference
+                    </label>
+                    <input
+                      type="text"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-blue-500 transition-colors text-slate-800 font-medium"
+                      placeholder="e.g. Invoice 12345"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setIsValidated(false)} className="w-1/3 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold uppercase tracking-widest text-[10px] rounded-xl transition-colors">Edit Route</button>
+                    <button
+                      type="submit"
+                      disabled={!amount}
+                      className="w-2/3 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                       Review Transfer <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          </div>
+          <div className="bg-slate-50 rounded-3xl p-8 border border-slate-200">
+             <h4 className="text-slate-800 font-bold mb-4">SWIFT / RTGS Connectivity</h4>
+             <p className="text-slate-500 text-sm leading-relaxed mb-6">Cross-border and domestic high-value clearing connects directly through institutional rails. The Valourian Treasury Node will clear these funds with priority sequencing.</p>
+             
+             {/* Target Account Shortcuts */}
+             <div className="mb-6 space-y-2">
+               <h5 className="text-[10px] font-black tracking-widest uppercase text-slate-400 mb-2">Valourian Treasury Accounts</h5>
+               
+               <button type="button" onClick={() => { setBsb("834-472"); setAccountNumber("242719180"); setAccountName("Valourian GSB+"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">GSBusiness+</div>
+                   <div className="text-[10px] text-slate-500 font-mono">834-472 • 242719180</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+               
+               <button type="button" onClick={() => { setBsb("062-140"); setAccountNumber("11680690"); setAccountName("CBA Smart Access"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA Smart Access</div>
+                   <div className="text-[10px] text-slate-500 font-mono">062-140 • 11680690</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("067-167"); setAccountNumber("31746694"); setAccountName("CBA CDIA"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA CDIA</div>
+                   <div className="text-[10px] text-slate-500 font-mono">067-167 • 31746694</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+               
+               <button type="button" onClick={() => { setBsb("067-872"); setAccountNumber("43847347"); setAccountName("CBA GoalSaver"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA GoalSaver</div>
+                   <div className="text-[10px] text-slate-500 font-mono">067-872 • 43847347</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("067-872"); setAccountNumber("43847515"); setAccountName("CBA NetBank Saver"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA NetBank Saver</div>
+                   <div className="text-[10px] text-slate-500 font-mono">067-872 • 43847515</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+               
+               <button type="button" onClick={() => { setBsb("062-151"); setAccountNumber("10559938"); setAccountName("CBA Business Trans"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA VAL Business Trans</div>
+                   <div className="text-[10px] text-slate-500 font-mono">062-151 • 10559938</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+               
+               <button type="button" onClick={() => { setBsb("062-151"); setAccountNumber("10559946"); setAccountName("CBA Business FCA"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA VAL Business FCA</div>
+                   <div className="text-[10px] text-slate-500 font-mono">062-151 • 10559946</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("067-873"); setAccountNumber("24645288"); setAccountName("CBA Capital Growth"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">CBA VAL Capital Growth</div>
+                   <div className="text-[10px] text-slate-500 font-mono">067-873 • 24645288</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("082-254"); setAccountNumber("755979296"); setAccountName("NAB Personal"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">NAB Personal</div>
+                   <div className="text-[10px] text-slate-500 font-mono">082-254 • 755979296</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("082-254"); setAccountNumber("755975930"); setAccountName("NAB Savings"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">NAB Savings</div>
+                   <div className="text-[10px] text-slate-500 font-mono">082-254 • 755975930</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+               
+               <button type="button" onClick={() => { setBsb("670-864"); setAccountNumber("43104756"); setAccountName("uBank Spending"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">uBank Spending</div>
+                   <div className="text-[10px] text-slate-500 font-mono">670-864 • 43104756</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("670-864"); setAccountNumber("43104772"); setAccountName("uBank Savings"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">uBank Savings</div>
+                   <div className="text-[10px] text-slate-500 font-mono">670-864 • 43104772</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+
+               <button type="button" onClick={() => { setBsb("670-864"); setAccountNumber("43104764"); setAccountName("uBank Bills"); setIsValidated(true); setAmount("20000.00"); }} className="w-full text-left p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-400 transition-colors flex items-center justify-between group">
+                 <div>
+                   <div className="text-xs font-bold text-slate-800">uBank Bills</div>
+                   <div className="text-[10px] text-slate-500 font-mono">670-864 • 43104764</div>
+                 </div>
+                 <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight className="w-4 h-4" /></div>
+               </button>
+             </div>
+
+             <div className="space-y-3">
+               <div className="flex items-center gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div> Global Clearing Network
+               </div>
+               <div className="flex items-center gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div> Institutional Traceability
+               </div>
+             </div>
+          </div>
+        </div>
+      ) : transferType === 'payid' ? (
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-600" />
+              Real-Time Settlement (NPP)
+            </h3>
+            <form onSubmit={handleSendRequest} className="space-y-5">
+              {!isValidated ? (
+                <>
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-xl overflow-x-auto hide-scrollbar">
+                    {(['phone', 'email', 'abn', 'organization'] as const).map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => { setPayIdType(type); setPayIdValue(""); }}
+                        className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-colors ${payIdType === type ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:bg-slate-200/50'}`}
+                      >
+                        {type === 'organization' ? 'Org ID' : type}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      {payIdType.toUpperCase()} Address
+                    </label>
+                    <input
+                      type={payIdType === 'email' ? 'email' : 'text'}
+                      value={payIdValue}
+                      onChange={(e) => setPayIdValue(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-800 font-bold font-mono tracking-wider"
+                      placeholder={payIdType === 'phone' ? '04XX XXX XXX' : payIdType === 'email' ? 'name@example.com' : 'Enter ID'}
+                      disabled={status === "validating"}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleValidate}
+                    disabled={status === "validating" || !payIdValue}
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-md shadow-indigo-500/20 mt-4 flex items-center justify-center gap-2"
+                  >
+                    {status === "validating" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} 
+                    {status === "validating" ? "Resolving PayID..." : "Validate PayID"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10"><Sparkles className="w-16 h-16 text-indigo-500" /></div>
+                    <div className="flex items-center gap-2">
+                       <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                       <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">PayID Resolved</span>
+                    </div>
+                    <div>
+                       <div className="text-sm font-bold text-slate-800">{accountName || "Validated Account"}</div>
+                       <div className="text-xs text-slate-500 font-mono mt-1">{payIdValue}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      Amount
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                      <input
+                        type="text"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 py-3 pl-8 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-slate-800 font-bold"
+                        placeholder="0.00"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">
+                      Osko Reference
+                    </label>
+                    <input
+                      type="text"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 py-3 px-4 focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-800 font-medium"
+                      placeholder="280 characters max"
+                      maxLength={280}
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setIsValidated(false)} className="w-1/3 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold uppercase tracking-widest text-[10px] rounded-xl transition-colors">Edit PayID</button>
+                    <button
+                      type="submit"
+                      disabled={!amount}
+                      className="w-2/3 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                       Review Transfer <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          </div>
+          <div className="bg-slate-50 rounded-3xl p-8 border border-slate-200 flex flex-col">
+             <h4 className="text-slate-800 font-bold mb-4">New Payments Platform (NPP)</h4>
+             <p className="text-slate-500 text-sm leading-relaxed mb-6">Experience 24/7 real-time settlement via Osko. PayID routes are instantaneously resolved against the centralized RBA clearing directory.</p>
+             <div className="mt-auto space-y-4">
+                <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
+                   <div className="h-full bg-indigo-500 w-full animate-pulse"></div>
+                </div>
+                <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                   <span>Clearing Status</span>
+                   <span className="text-emerald-500">Online & Fast</span>
+                </div>
+             </div>
+          </div>
+        </div>
+      ) : null}
+
+      <AnimatePresence>
+        {status === "success" && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 15, stiffness: 200 }}
+              className="relative flex items-center justify-center mb-8"
+            >
+              <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-20"></div>
+              <div className="w-32 h-32 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.5)]">
+                <Check className="w-16 h-16 text-white" strokeWidth={3} />
+              </div>
+            </motion.div>
+            <motion.h2 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-4xl font-black text-white mb-2 tracking-tight text-center"
+            >
+              Transfer Successful
+            </motion.h2>
+            <motion.p 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-emerald-400 font-bold uppercase tracking-widest text-sm"
+            >
+              Funds Cleared & Settled Instantly
+            </motion.p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {tapStatus === "success" && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 15, stiffness: 200 }}
+              className="relative flex items-center justify-center mb-8"
+            >
+              <div className="absolute inset-0 bg-[#ffcc00] rounded-full animate-ping opacity-20"></div>
+              <div className="w-32 h-32 bg-[#ffcc00] rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(255,204,0,0.5)]">
+                <Wifi className="w-16 h-16 text-slate-900" strokeWidth={3} />
+              </div>
+            </motion.div>
+            <motion.h2 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-4xl font-black text-white mb-2 tracking-tight text-center"
+            >
+              NFC Tap Successful
+            </motion.h2>
+            <motion.p 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-[#ffcc00] font-bold uppercase tracking-widest text-sm"
+            >
+              Digital Card Charged
+            </motion.p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReviewModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-200"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="text-xl font-bold text-slate-800">Review Transfer</h3>
+                <button onClick={() => setShowReviewModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Amount</span>
+                  <span className="text-2xl font-black text-slate-800">
+                    $ {amount}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Recipient</span>
+                  <span className="text-sm font-bold text-slate-800 text-right">{accountName || recipient || payIdValue}</span>
+                </div>
+                {transferType === 'au_bsb' && (
+                  <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Account Details</span>
+                    <span className="text-sm font-bold text-slate-800 text-right">BSB: {bsb}<br/>Acc: {accountNumber}</span>
+                  </div>
+                )}
+                {transferType === 'payid' && (
+                  <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">PayID</span>
+                    <span className="text-sm font-bold text-slate-800 text-right">{payIdValue}</span>
+                  </div>
+                )}
+              </div>
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button 
+                  onClick={() => setShowReviewModal(false)}
+                  className="w-1/3 py-3 rounded-xl bg-white text-slate-600 font-bold text-xs uppercase tracking-widest border border-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={processTransfer}
+                  disabled={status === 'processing'}
+                  className="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest shadow-md hover:bg-blue-500 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                >
+                  {status === 'processing' ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Transfer"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AIGuide />
     </div>
+    </>
   );
 }

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Cpu, ShieldCheck, Zap, TrendingUp, Building2, Landmark, Globe, Bitcoin, Server, Activity, ArrowRightLeft, Search, Filter } from "lucide-react";
+import { Search, Filter, Cpu, Bitcoin, Activity, MapPin, Globe, CreditCard, ShieldCheck, Zap, Database, Server, Smartphone, Car, Plane, TrendingUp, Landmark } from "lucide-react";
+import { ValourianStrategicMoat } from "./ValourianStrategicMoat";
+
 import { MarketMonitoringDashboard } from "./MarketMonitoringDashboard";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
-export function ValourianStrategicAssets() {
+export function ValourianStrategicAssets({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [isLiquidating, setIsLiquidating] = useState(false);
   const [liquidationSuccess, setLiquidationSuccess] = useState(false);
@@ -229,6 +231,12 @@ export function ValourianStrategicAssets() {
             All infrastructure components are fully cryptographically secured and integrated directly into the Valourian Global Treasury via Deep Tech override protocols.
           </p>
 
+          
+          {/* Unifying the Strategic Moat capabilities right here above the assets */}
+          <div className="mb-12">
+             <ValourianStrategicMoat />
+          </div>
+          
           <div className="flex flex-col md:flex-row items-center gap-4 mb-8">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -294,10 +302,33 @@ export function ValourianStrategicAssets() {
                     </div>
                     
                     <button 
-                      onClick={() => handleLiquidate(asset.id)}
-                      className="text-[9px] font-black uppercase tracking-widest bg-slate-950 hover:bg-red-950 hover:text-red-400 hover:border-red-900 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-800 transition-colors"
+                      onClick={() => {
+                        if (setActiveTab) {
+                           const target = asset.id.toLowerCase().replace(/\s+/g, '');
+                           let tabId = target;
+                           if (target.includes('uber') && !target.includes('eats')) tabId = 'uber';
+                           if (target.includes('eats')) tabId = 'ubereats';
+                           if (target.includes('skyscanner')) tabId = 'skyscanner';
+                           if (target.includes('etoro')) tabId = 'etoro';
+                           if (target.includes('commbank')) tabId = 'commbank';
+                           if (target.includes('commsec')) tabId = 'commsec';
+                           if (target.includes('nab')) tabId = 'nab';
+                           if (target.includes('pilot')) tabId = 'pgy';
+                           if (target.includes('coinbase')) tabId = 'coinbase';
+                           
+                           // Fallback to liquidate if no direct app route exists, or just route to it if it exists.
+                           if (['uber', 'ubereats', 'skyscanner', 'etoro', 'commbank', 'commsec', 'nab', 'pgy', 'coinbase'].includes(tabId)) {
+                               setActiveTab(tabId);
+                           } else {
+                               handleLiquidate(asset.id);
+                           }
+                        } else {
+                            handleLiquidate(asset.id);
+                        }
+                      }}
+                      className="text-[9px] font-black uppercase tracking-widest bg-slate-950 hover:bg-emerald-950 hover:text-emerald-400 hover:border-emerald-900 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-800 transition-colors"
                     >
-                      LIQUIDATE / M&A
+                      ACCESS / M&A
                     </button>
                   </div>
                 </div>

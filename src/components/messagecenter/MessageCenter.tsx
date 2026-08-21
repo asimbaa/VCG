@@ -21,7 +21,7 @@ export function MessageCenter({ user }: { user: any }) {
     );
     
     const unsub = onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
+      const msgs = snap.docs.map(d => ({ ...d.data(), docIdField: d.id }));
       setDbMessages(msgs);
     });
     
@@ -74,7 +74,7 @@ export function MessageCenter({ user }: { user: any }) {
   // Combine static and db messages
   const allMessages = useMemo(() => {
     const combined = [...messages, ...dbMessages.map(m => ({
-      id: m.id || m.docId,
+      id: m.id || m.docIdField,
       category: 'invoices', // Auto categorise db emails here or based on content
       subject: m.subject || 'Sovereign Notification',
       sender: m.sender || m.email || 'Valourian System',
@@ -82,8 +82,8 @@ export function MessageCenter({ user }: { user: any }) {
       read: m.read || false,
       content: m.body || m.content || '',
       attachments: [],
-      isDbMessage: true,
-      docId: m.docId
+      isDbMsg: true,
+      docIdField: m.docIdField
     }))];
     
     // Auto catalog tags
@@ -108,9 +108,9 @@ export function MessageCenter({ user }: { user: any }) {
   
   const handleMessageClick = async (msg: any) => {
     setSelectedMessage(msg);
-    if (msg.isDbMessage && !msg.read) {
+    if (msg.isDbMsg && !msg.read) {
        try {
-         await updateDoc(doc(db, "users", user.uid, "emails", msg.docId), {
+         await updateDoc(doc(db, "users", user.uid, "emails", msg.docIdField), {
             read: true
          });
        } catch(e) {}
@@ -180,7 +180,7 @@ export function MessageCenter({ user }: { user: any }) {
         <div className="flex-1 overflow-y-auto">
           {filteredMessages.map(msg => (
             <div 
-              key={msg.isDbMessage ? msg.docId : `static-${msg.id}`}
+              key={((msg as any).isDbMsg ? (msg as any).docIdField : `static-${msg.id}`)}
               onClick={() => handleMessageClick(msg)}
               className={`p-5 border-b border-slate-100 cursor-pointer transition-colors ${selectedMessage?.id === msg.id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'} ${!msg.read ? 'bg-white' : 'opacity-80'}`}
             >

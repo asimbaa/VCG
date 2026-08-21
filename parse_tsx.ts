@@ -1,14 +1,12 @@
-import fs from 'fs';
-import * as babel from '@babel/core';
-const code = fs.readFileSync('src/components/bank/BankDashboard.tsx', 'utf-8');
-const parseOptions = {
-    presets: ['@babel/preset-typescript', '@babel/preset-react'],
-    filename: 'BankDashboard.tsx'
-};
-
-try {
-    babel.parseSync(code, parseOptions);
-    console.log("No syntax errors found!");
-} catch (e: any) {
-    console.error(e.message);
-}
+import * as fs from 'fs';
+['src/components/bank/DeliveryMap.tsx', 'src/components/bank/UberEatsApp.tsx'].forEach(file => {
+  if (!fs.existsSync(file)) return;
+  const content = fs.readFileSync(file, 'utf-8');
+  const regex = /\.\s*x\b/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const start = Math.max(0, match.index - 30);
+    const end = Math.min(content.length, match.index + 30);
+    console.log(`[${file}] Match at ${match.index}: ${content.substring(start, end).replace(/\n/g, ' ')}`);
+  }
+});

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-const geminiApiKey = process.env.GEMINI_API_KEY || "";
+const geminiApiKey = "placeholder";
 const genAI = new GoogleGenerativeAI(geminiApiKey || "");
 const aiModel = genAI.getGenerativeModel({ 
   model: "gemini-1.5-flash",

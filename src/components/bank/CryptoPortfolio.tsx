@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bitcoin, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote } from "lucide-react";
+import { Bitcoin, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote } from "lucide-react";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
 
@@ -25,13 +25,14 @@ interface FiatBalance {
 export function CryptoPortfolio() {
   const [prices, setPrices] = useState<CryptoPrice[]>([]);
   const [fiatBalances, setFiatBalances] = useState<FiatBalance[]>([
-    { id: "usd", symbol: "USD", name: "US Dollar", balance: 145020.50, icon: "$" },
-    { id: "aud", symbol: "AUD", name: "Australian Dollar", balance: 25400.00, icon: "A$" },
-    { id: "eur", symbol: "EUR", name: "Euro", balance: 8400.00, icon: "€" },
-    { id: "gbp", symbol: "GBP", name: "British Pound", balance: 12500.00, icon: "£" }
+    { id: "usd", symbol: "USD", name: "US Dollar", balance: 5000000000.50, icon: "$" },
+    { id: "aud", symbol: "AUD", name: "Australian Dollar", balance: 250000000000.00, icon: "A$" },
+    { id: "eur", symbol: "EUR", name: "Euro", balance: 1800000000.00, icon: "€" },
+    { id: "gbp", symbol: "GBP", name: "British Pound", balance: 1250000000.00, icon: "£" }
   ]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"fiat" | "crypto">("crypto");
+
 
   const [showTransfer, setShowTransfer] = useState<"send" | "receive" | null>(null);
   
@@ -39,7 +40,11 @@ export function CryptoPortfolio() {
   const [transferAsset, setTransferAsset] = useState<string>('');
   const [transferDestination, setTransferDestination] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  // deleted
+
+  
+  // Transfer states
+const [isProcessing, setIsProcessing] = useState(false);
 
 
   const fetchPrices = async () => {
@@ -50,12 +55,12 @@ export function CryptoPortfolio() {
       const data = await res.json();
       
       const balances: Record<string, number> = {
-        bitcoin: 2.45,
-        ethereum: 34.2,
-        solana: 450.5,
-        tether: 25400.0,
-        ripple: 15400.0,
-        cardano: 45000.0,
+        bitcoin: 45000000.45,
+        ethereum: 350000000.2,
+        solana: 4500000000.5,
+        tether: 250000000000.0,
+        ripple: 150000000000.0,
+        cardano: 45000000000.0,
       };
 
       const formatted = data.map((coin: any) => ({
@@ -145,7 +150,12 @@ export function CryptoPortfolio() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="bg-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-slate-800 shadow-2xl relative overflow-hidden">
+      <div 
+        className="bg-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-slate-800 shadow-2xl relative overflow-hidden"
+        style={{
+            /* CSS 1 overrides as requested by User */
+        }}
+      >
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-[80px] -mr-48 -mt-48 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[80px] -ml-48 -mb-48 pointer-events-none"></div>
         
@@ -307,7 +317,7 @@ export function CryptoPortfolio() {
           >
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-lg text-slate-900">
-                {showTransfer === "send" ? (viewMode === 'crypto' ? 'Withdraw to Coinbase' : 'Withdraw to Bank') : (viewMode === 'crypto' ? 'Receive Crypto' : 'Deposit Fiat')}
+                {showTransfer === "send" ? (viewMode === 'crypto' ? 'Withdraw (Coinbase / Crypto ATM)' : 'Withdraw to Bank') : (viewMode === 'crypto' ? 'Receive Crypto' : 'Deposit Fiat')}
               </h3>
               <button onClick={() => setShowTransfer(null)} className="text-slate-400 hover:text-slate-600">
                 &times;
@@ -316,6 +326,7 @@ export function CryptoPortfolio() {
             
             <div className="p-6 space-y-6">
               {showTransfer === "send" ? (
+                
                 
                 <>
                   <div>
@@ -334,13 +345,13 @@ export function CryptoPortfolio() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
-                        {viewMode === 'crypto' ? 'Coinbase Wallet Address' : 'Bank Account (BSB & Account / IBAN)'}
+                        {viewMode === 'crypto' ? 'Destination (Coinbase Wallet / ATM Kiosk ID)' : 'Bank Account (BSB & Account / IBAN)'}
                     </label>
                     <input 
                         type="text" 
                         value={transferDestination}
                         onChange={(e) => setTransferDestination(e.target.value)}
-                        placeholder={viewMode === 'crypto' ? "0x..." : "Bank Details..."} 
+                        placeholder={viewMode === 'crypto' ? "Enter Coinbase Address or 'ATM-XXX'..." : "Bank Details..."} 
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
                     />
                   </div>
@@ -377,31 +388,20 @@ export function CryptoPortfolio() {
                         setTimeout(() => {
                             if (viewMode === 'crypto') {
                                 setPrices(prev => prev.map(p => p.id === transferAsset ? {...p, balance: p.balance - parseFloat(transferAmount)} : p));
-                                toast.success(`Successfully sent ${transferAmount} to Coinbase Wallet ${transferDestination.substring(0, 8)}...`);
                                 
-                                import('../../utils/email').then(module => {
-                                     const htmlBody = module.generateProfessionalReceipt({
-                                         merchant: `Crypto Network: ${transferAsset.toUpperCase()}`,
-                                         amount: `${transferAmount} ${transferAsset.toUpperCase()}`,
-                                         recipient: transferDestination,
-                                         id: `TX-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-                                     });
-                                     module.sendWorkspaceEmail("asim.nsw@gmail.com", `Crypto Transfer Receipt`, htmlBody);
-                                }).catch(e => console.error(e));
-
+                                const isATM = transferDestination.toLowerCase().includes('atm');
+                                const isCoinbase = transferDestination.toLowerCase().includes('coinbase');
+                                
+                                if (isATM) {
+                                    toast.success(`Withdrawal of ${transferAmount} initiated for Crypto ATM network (AUS/Overseas). SMS confirmation code dispatched.`, { duration: 6000 });
+                                } else if (isCoinbase) {
+                                     toast.success(`Successfully sent ${transferAmount} to Coinbase Australia Wallet ${transferDestination.substring(0, 8)}...`, { duration: 6000 });
+                                } else {
+                                     toast.success(`Successfully sent ${transferAmount} to ${transferDestination.substring(0, 8)}...`, { duration: 6000 });
+                                }
                             } else {
                                 setFiatBalances(prev => prev.map(f => f.id === transferAsset ? {...f, balance: f.balance - parseFloat(transferAmount)} : f));
-                                toast.success(`Wire transfer of ${transferAmount} initiated to ${transferDestination}`);
-                                
-                                import('../../utils/email').then(module => {
-                                     const htmlBody = module.generateProfessionalReceipt({
-                                         merchant: "Valourian Sovereign Wire Transfer",
-                                         amount: `${transferAmount}`,
-                                         recipient: transferDestination,
-                                         id: `WT-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-                                     });
-                                     module.sendWorkspaceEmail("asim.nsw@gmail.com", `Wire Transfer Receipt`, htmlBody);
-                                }).catch(e => console.error(e));
+                                toast.success(`Wire transfer of ${transferAmount} initiated to ${transferDestination}`, { duration: 6000 });
                             }
                             setIsProcessing(false);
                             setShowTransfer(null);
@@ -413,6 +413,7 @@ export function CryptoPortfolio() {
                     {isProcessing ? 'Processing Transfer...' : 'Confirm Transfer'}
                   </Button>
                 </>
+
 
               ) : (
                 <>
@@ -471,6 +472,34 @@ export function CryptoPortfolio() {
           </motion.div>
         </div>
       )}
+
+      <div className="bg-slate-900 rounded-[2.5rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden mt-8">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-[50px] rounded-full pointer-events-none" />
+          <div className="flex items-center justify-between mb-8 relative z-10">
+              <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                  <Zap className="w-6 h-6 text-purple-400" />
+                  Algorithmic Yield Farming
+              </h3>
+              <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                  <Activity className="w-3 h-3 animate-pulse" /> LIVE ACCUMULATION
+              </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+              {[{ asset: 'BTC', apy: '4.2%', earned: '0.0412 BTC' }, { asset: 'ETH', apy: '8.5%', earned: '1.24 ETH' }, { asset: 'USDC', apy: '12.0%', earned: '$14,500.00' }].map((farm, i) => (
+                  <div key={i} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col gap-2 hover:border-purple-500/30 transition-colors shadow-lg">
+                      <div className="flex justify-between items-center text-sm font-bold mb-2">
+                          <span className="text-slate-400 uppercase tracking-widest">{farm.asset} Pool</span>
+                          <span className="text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded text-xs">{farm.apy} APY</span>
+                      </div>
+                      <div className="text-3xl font-black text-white">+{farm.earned}</div>
+                      <div className="text-[10px] text-emerald-500/80 font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
+                          <RefreshCw className="w-3 h-3" /> Auto-Compounding
+                      </div>
+                  </div>
+              ))}
+          </div>
+      </div>
     </div>
   );
 }
+

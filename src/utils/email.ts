@@ -117,3 +117,18 @@ export const generateProfessionalReceipt = (details: any) => {
     </div>
   `;
 };
+
+export const getEmailQueueStatus = () => {
+    return {
+        length: emailQueue.length,
+        isProcessing: isProcessingQueue
+    };
+};
+
+export const retryFailedEmails = () => {
+    if (!isProcessingQueue && emailQueue.length > 0) {
+        processQueue();
+        return true;
+    }
+    return false;
+};
