@@ -1,2 +1,0 @@
-  const [minRatingFilter, setMinRatingFilter] = useState<number>(0);
-  const [showMap, setShowMap] = useState(false);

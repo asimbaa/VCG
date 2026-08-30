@@ -14,6 +14,7 @@ export function NFCTapModal({ isOpen, onClose, cards, onPaymentComplete }: NFCTa
   const [selectedCardId, setSelectedCardId] = useState<string>('');
   const [nfcStatus, setNfcStatus] = useState<'idle' | 'listening' | 'biometric_retina' | 'biometric_facial' | 'iso20022_clearing' | 'processing' | 'success' | 'error'>('idle');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [customAmount, setCustomAmount] = useState<string>('');
   const [merchantName, setMerchantName] = useState<string>('');
   
   useEffect(() => {
@@ -31,7 +32,8 @@ export function NFCTapModal({ isOpen, onClose, cards, onPaymentComplete }: NFCTa
     // Simulate finding a terminal
     setTimeout(() => {
       // Dummy data for simulation
-      const randomAmount = Math.floor(Math.random() * 150) + 12.50;
+      const parsedCustom = parseFloat(customAmount);
+      const randomAmount = !isNaN(parsedCustom) && parsedCustom > 0 ? parsedCustom : (Math.floor(Math.random() * 150) + 12.50);
       const merchants = ["Sovereign Coffee", "AuraDrive Express", "Enterprise Fleet Terminal", "Valourian HQ Cafe"];
       const randomMerchant = merchants[Math.floor(Math.random() * merchants.length)];
       
@@ -76,6 +78,16 @@ export function NFCTapModal({ isOpen, onClose, cards, onPaymentComplete }: NFCTa
 
               {nfcStatus === 'idle' && (
                 <div className="space-y-6">
+                                    <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">Custom Amount (Optional)</label>
+                    <input 
+                      type="number" 
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder="e.g. 50.00"
+                      className="w-full bg-slate-950 border-2 border-slate-800 rounded-xl px-4 py-3 text-white font-mono focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">Select Source Card</label>
                     <div className="space-y-2">

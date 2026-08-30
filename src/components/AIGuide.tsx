@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Sparkles, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AIGuide() {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('open-ai-guide', handleOpen);
+    return () => window.removeEventListener('open-ai-guide', handleOpen);
+  }, []);
+
   const [inputVal, setInputVal] = useState("");
   const [messages, setMessages] = useState([
     { role: 'ai', content: 'Greetings. I am the Valourian AI System, powered by Enterprise Google AI Ultra & Grok Superheavy licenses. I can transform code, update database schemas and backend services, craft responsive SVG AMEX, Mastercard, and Visa cards with modern digital bank features, and provide deep insights into your sovereign funds.' }
@@ -45,7 +52,7 @@ export function AIGuide() {
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-28 right-6 md:right-10 z-50 p-4 bg-slate-900 border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] rounded-full text-yellow-500 hover:scale-110 active:scale-95 transition-all ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        className={`hidden fixed bottom-28 right-6 md:right-10 z-50 p-4 bg-slate-900 border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] rounded-full text-yellow-500 hover:scale-110 active:scale-95 transition-all ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
       >
         <Bot className="w-6 h-6" />
       </button>

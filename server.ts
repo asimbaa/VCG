@@ -19,7 +19,7 @@ if (missingSecrets.length > 0) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 app.use(express.json());
 
@@ -1736,7 +1736,7 @@ app.post("/api/gemini/deep-research", async (req, res) => {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     const response = await ai.models.generateContent({
-      model: "models/gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],

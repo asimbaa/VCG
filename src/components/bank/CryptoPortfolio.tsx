@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bitcoin, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote } from "lucide-react";
+import { Bitcoin, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote, Activity } from "lucide-react";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
 

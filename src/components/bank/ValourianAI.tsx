@@ -5,6 +5,13 @@ import { generateDocumentContent } from '../../services/geminiService';
 
 export function ValourianAI() {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('open-valourian-ai', handleOpen);
+    return () => window.removeEventListener('open-valourian-ai', handleOpen);
+  }, []);
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', content: string}>>([
     { role: 'ai', content: 'Greetings. I am Valourian Sovereign AI, powered by Google Gemini Ultra & Quantum Compute. How may I assist your treasury operations today?' }
@@ -50,7 +57,7 @@ export function ValourianAI() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-[9999] w-14 h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-900 border-2 border-indigo-400/50 shadow-[0_0_30px_rgba(79,70,229,0.5)] flex items-center justify-center group hover:scale-105 transition-transform"
+            className="hidden fixed bottom-6 right-6 md:bottom-10 md:right-10 z-[9999] w-14 h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-900 border-2 border-indigo-400/50 shadow-[0_0_30px_rgba(79,70,229,0.5)] flex items-center justify-center group hover:scale-105 transition-transform"
           >
             <div className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-20"></div>
             <BrainCircuit className="w-6 h-6 md:w-8 md:h-8 text-white group-hover:animate-pulse" />

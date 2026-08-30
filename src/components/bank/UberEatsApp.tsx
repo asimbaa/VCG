@@ -42,7 +42,8 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { db } from "../../firebase";
+import { db, createPaymentEvent } from "../../firebase";
+import { getAuth } from "firebase/auth";
 import {
   collection,
   addDoc,
@@ -1092,7 +1093,7 @@ export function UberEatsApp({
 
   // Checkout Payment states with instant camera populate options
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<
-    "vault" | "card"
+    "vault" | "card" | "qr"
   >("vault");
   const [checkoutCardholder, setCheckoutCardholder] =
     useState<string>("Mr Asim Aryal");
@@ -2784,7 +2785,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                               </span>
                             </label>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                               <button
                                 onClick={() =>
                                   setCheckoutPaymentMethod("vault")
@@ -2819,9 +2820,67 @@ Thank you for choosing Uber Eats Sovereign.`,
                                   Linked or New
                                 </span>
                               </button>
+                              
+                              <button
+                                onClick={() => setCheckoutPaymentMethod("qr")}
+                                className={`p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                                  checkoutPaymentMethod === "qr"
+                                    ? "bg-indigo-50 border-indigo-600 text-indigo-600 shadow-xs"
+                                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span className="font-sans text-[10px] leading-tight">
+                                  Valourian QR
+                                </span>
+                                <span className="text-[8px] text-slate-400 font-medium font-sans">
+                                  Scan to Pay
+                                </span>
+                              </button>
                             </div>
 
                             {/* Credit/Debit Card Form with Instant Camera Scanning integration */}
+                                                        {/* Dynamic QR Code Payment integration */}
+                            {checkoutPaymentMethod === "qr" && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                className="bg-slate-900 border border-slate-800 rounded-xl mt-2 p-5 text-center relative overflow-hidden"
+                              >
+                                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-500 via-slate-900 to-slate-900 pointer-events-none" />
+                                
+                                <div className="relative z-10 flex flex-col items-center">
+                                  <div className="bg-white p-3 rounded-xl mb-3 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                                    
+                                    <QRCodeSVG value={`valourian://pay?amount=${cartTotal}&currency=AUD&merchant=UBEREATS_GLOBAL`} size={140} level="H" />
+                                    <button
+                                      onClick={() => {
+                                        const auth = getAuth();
+                                        createPaymentEvent(db, auth, `${cartTotal.toFixed(2)} AUD`, "UberEats (QR POS)", "Sovereign Credit Line Settlement");
+                                        // Wait a moment then clear cart to simulate success
+                                        setTimeout(() => {
+                                          setCart([]);
+                                          setCheckoutPaymentMethod("vault"); // reset
+                                        }, 4000);
+                                      }}
+                                      className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-4 py-2 rounded-full uppercase tracking-widest transition-colors"
+                                    >
+                                      Simulate POS Merchant Scan
+                                    </button>
+  
+                                  </div>
+                                  
+                                  <h4 className="text-white font-bold text-sm mb-1 tracking-wider uppercase">Valourian Instant Settlement</h4>
+                                  <p className="text-slate-400 text-[10px] font-mono mb-4">Present this QR code to the merchant terminal or POS scanner to instantly settle via your Sovereign Credit Line.</p>
+                                  
+                                  <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                                    <span className="flex items-center gap-1">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Live
+                                    </span>
+                                    <span>T+0 Settlement</span>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
                             {checkoutPaymentMethod === "card" && (
                               <motion.div
                                 initial={{ opacity: 0, height: 0 }}
@@ -4192,7 +4251,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                 </div>
 
                 <div className="h-48 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="99%" height="100%">
                     <AreaChart
                       data={(() => {
                         const monthNames = [

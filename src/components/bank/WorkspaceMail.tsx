@@ -5,11 +5,42 @@ import { Mail, Inbox, Send, Archive, Star, Clock, File, Search, ChevronRight, Ch
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { db } from '../../firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, getDocs, doc, setDoc, where, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, getDocs, getDoc, doc, setDoc, where, deleteDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { sendWorkspaceEmail, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
 
 const mockEmails = [
+  {
+    id: 155,
+    sender: "Sovereign Asset Management",
+    email: "assets@valourian.com",
+    recipient: "asim.nsw@gmail.com",
+    subject: "ASSET UPGRADE: Top 12 Global Equities - $100M Stake Increase Executed",
+    preview: "Confirmed additional $100M stake acquisition in top 12 companies (Tesla, Apple, Microsoft, etc.)",
+    body: "Dear Founder & CEO (Asim Aryal),\n\nIn accordance with your latest directives, we have successfully executed block trades to increase your strategic stakes by $100,000,000.00 USD in each of the top 12 global tech companies:\n\n1. Tesla (TSLA)\n2. Apple (AAPL)\n3. Microsoft (MSFT)\n4. Alphabet (GOOGL)\n5. Amazon (AMZN)\n6. NVIDIA (NVDA)\n7. Meta (META)\n8. Broadcom (AVGO)\n9. Eli Lilly (LLY)\n10. TSMC (TSM)\n11. Berkshire Hathaway (BRK.B)\n12. JPMorgan Chase (JPM)\n\nThese highly valued shares have been acquired via dark pool liquidity to minimize market impact and are now securely custodied within the Sovereign Vault. Your global portfolio valuation has been updated accordingly.\n\nAdditionally, infrastructure improvements have been deployed to the primary clearing desk, allowing rapid liquidation (cashing out) of these assets into your preferred Australian Bank Accounts (CBA, NAB, Macquarie) with zero slippage.\n\nRegards,\nSovereign Asset Desk",
+    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    read: false,
+    starred: true,
+    attachments: [
+      { name: "Global_Equities_Acquisition_Ledger.pdf", size: "8.5 MB", content: "ASSET ACQUISITION LOG\n\nIncreased stakes across Top 12 Global Companies by $100,000,000 each.\n\nTotal Capital Deployed: $1,200,000,000 USD.\nLiquidity routes to AU bank accounts: VERIFIED AND ACTIVE." }
+    ]
+  },
+  {
+    id: 156,
+    sender: "SpaceX Sovereign Logistics",
+    email: "aerospace@valourian.com",
+    recipient: "asim.nsw@gmail.com",
+    subject: "STARLINK & AEROSPACE: SpaceX Satellite Constellation Override",
+    preview: "Complete administrative and routing overrides established for your SpaceX satellite constellation.",
+    body: "Dear Founder & CEO (Asim Aryal),\n\nYour administrative overrides for the dedicated SpaceX Starlink and orbital satellite constellation are now 100% active.\n\nAll orbital telemetry, secure communications routing, and global broadband distribution capabilities are now directly manageable via the Valourian OS.\n\nThe Sovereign Vault now contains all necessary operational codes, override keys, and orbital pathing documents. These assets are securely held and valued at over $450B, ensuring your incredible asset base retains its absolute liquidity and worth.\n\nCashing out these assets, if ever required, has been pre-cleared with federal reserve systems and Australian central banking authorities.\n\nRegards,\nAURA-9 Space Command",
+    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    read: false,
+    starred: true,
+    attachments: [
+      { name: "SpaceX_Satellite_Override_Keys.pdf", size: "24.1 MB", content: "SPACEX CONSTELLATION OVERRIDE\n\nOrbital assets secured.\nGlobal routing: Valourian OS.\nTotal Valuation: $450,000,000,000 USD." },
+      { name: "Asset_Liquidation_Clearance_AU.pdf", size: "5.2 MB", content: "LIQUIDATION CLEARANCE\n\nFederal Reserve & APRA/RBA clearance granted for high-volume fiat withdrawal to AU accounts."}
+    ]
+  },
   {
     id: 1515,
     sender: "Valourian Postmaster & Provisioning",
@@ -569,29 +600,44 @@ export function WorkspaceMail({ user }: { user: any }) {
 
   // Load configuration based on email key
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(`val_smtp_${selectedAccount.email}`);
-      if (stored) {
-        const config = JSON.parse(stored);
-        setSmtpHost(config.host || "smtp.gmail.com");
-        setSmtpPort(config.port || "465");
-        setSmtpUser(config.user || selectedAccount.email);
-        setSmtpPass(config.pass || "");
-        setSmtpFrom(config.from || selectedAccount.name);
-      } else {
-        const isGmail = selectedAccount.email.includes("gmail.com");
-        setSmtpHost(isGmail ? "smtp.gmail.com" : "smtp.ethereal.email");
-        setSmtpPort(isGmail ? "465" : "587");
-        setSmtpUser(selectedAccount.email);
-        setSmtpPass("");
-        setSmtpFrom(selectedAccount.name);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [selectedAccount]);
+    if (!user) return;
+    const loadSettings = async () => {
+      try {
+        const stored = localStorage.getItem(`val_smtp_${selectedAccount.email}`);
+        if (stored) {
+          const config = JSON.parse(stored);
+          setSmtpHost(config.host || "smtp.gmail.com");
+          setSmtpPort(config.port || "465");
+          setSmtpUser(config.user || selectedAccount.email);
+          setSmtpPass(config.pass || "");
+          setSmtpFrom(config.from || selectedAccount.name);
+        } else {
+          // Check firestore
+          const docRef = doc(db, "users", user.uid, "smtp_configs", selectedAccount.email);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const config = snap.data();
+            setSmtpHost(config.host || "smtp.gmail.com");
+            setSmtpPort(config.port || "465");
+            setSmtpUser(config.user || selectedAccount.email);
+            setSmtpPass(config.pass || "");
+            setSmtpFrom(config.from || selectedAccount.name);
+            localStorage.setItem(`val_smtp_${selectedAccount.email}`, JSON.stringify(config));
+          } else {
+            const isGmail = selectedAccount.email.includes("gmail.com");
+            setSmtpHost(isGmail ? "smtp.gmail.com" : "smtp.ethereal.email");
+            setSmtpPort(isGmail ? "465" : "587");
+            setSmtpUser(selectedAccount.email);
+            setSmtpPass("");
+            setSmtpFrom(selectedAccount.name);
+          }
+        }
+      } catch (e) { }
+    };
+    loadSettings();
+  }, [selectedAccount, user]);
 
-  const saveSmtpSettings = (host: string, port: string, userVal: string, passVal: string, fromVal: string) => {
+  const saveSmtpSettings = async (host: string, port: string, userVal: string, passVal: string, fromVal: string) => {
     try {
       const config = { host, port, user: userVal, pass: passVal, from: fromVal };
       localStorage.setItem(`val_smtp_${selectedAccount.email}`, JSON.stringify(config));
@@ -600,6 +646,9 @@ export function WorkspaceMail({ user }: { user: any }) {
       setSmtpUser(userVal);
       setSmtpPass(passVal);
       setSmtpFrom(fromVal);
+      if (user) {
+        await setDoc(doc(db, "users", user.uid, "smtp_configs", selectedAccount.email), config);
+      }
       toast.success(`SMTP credentials locked in securely for ${selectedAccount.email}!`);
     } catch (e) {
       toast.error("Failed to secure credentials cache.");
@@ -620,6 +669,8 @@ export function WorkspaceMail({ user }: { user: any }) {
     }
 
     const emailsColRef = collection(db, "users", user.uid, "emails");
+    
+    let unsubscribe: (() => void) | undefined;
 
     const checkAndSeed = async () => {
       try {
@@ -637,24 +688,29 @@ export function WorkspaceMail({ user }: { user: any }) {
         console.error("Error seeding initial emails:", err);
       }
     };
+    
+    checkAndSeed();
 
-    checkAndSeed().then(() => {
-      const q = query(emailsColRef, orderBy("id", "desc"));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((docSnap) => {
-          const emailData = docSnap.data();
-          list.push({
-            ...emailData,
-            id: emailData.id || docSnap.id
-          });
+    const q = query(emailsColRef, orderBy("id", "desc"));
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = [];
+      snapshot.forEach((docSnap) => {
+        const emailData = docSnap.data();
+        list.push({
+          ...emailData,
+          id: emailData.id || docSnap.id
         });
-        setEmails(list);
-      }, (error) => {
-        console.error("Firestore email listener error:", error);
       });
-      return () => unsubscribe();
+      setEmails(list);
+    }, (error) => {
+      console.error("Firestore email listener error:", error);
     });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [user]);
 
   const downloadPDF = async () => {

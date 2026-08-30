@@ -43,7 +43,8 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { CurrencySelector } from "../ui/CurrencySelector";
-import { db , addDoc, setDoc, updateDoc, deleteDoc } from "../../firebase";
+import { db , addDoc, setDoc, updateDoc, deleteDoc, createPaymentEvent } from "../../firebase";
+import { getAuth } from "firebase/auth";
 import {
   collection,
   query,
@@ -1180,12 +1181,12 @@ export function RapidPay({ user }: { user: any }) {
         </div>
         <div className="relative z-10">
           <span className="bg-white/20 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-full backdrop-blur-md inline-block mb-4">
-            Valourian Capital Network
+            Valourian Capital Inc. - RapidPay Sovereign Core
           </span>
           <h2 className="text-3xl font-black mb-2 tracking-tight">Rapid Institutional Transfer Hub</h2>
           <p className="text-yellow-50 opacity-90 max-w-2xl leading-relaxed text-sm">
             Instantly deploy capital, settle global obligations, or manage premium integrated credit cards
-            under zero-knowledge clearing guarantees. Zero clearance delays. Limitless global fluidity.
+            under zero-knowledge clearing guarantees. Powered by the DocuCraft Ultra AI Agents Suite for 100% compliant, real-time institutional arbitration.
           </p>
         </div>
       </div>

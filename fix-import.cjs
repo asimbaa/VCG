@@ -1,6 +1,10 @@
 const fs = require('fs');
-let content = fs.readFileSync('src/components/bank/WorkspaceMail.tsx', 'utf8');
+let content = fs.readFileSync('src/components/bank/ValourianDashboard.tsx', 'utf8');
 
-content = content.replace("import React,\nimport { QRCodeSVG } from 'qrcode.react'; { useState, useRef, useEffect } from 'react';", "import React, { useState, useRef, useEffect } from 'react';\nimport { QRCodeSVG } from 'qrcode.react';");
+// Remove ShoppingCart from email
+content = content.replace('import { ShoppingCart, sendWorkspaceEmail', 'import { sendWorkspaceEmail');
+// Add it to lucide-react
+content = content.replace('FileJson,', 'FileJson, ShoppingCart,');
 
-fs.writeFileSync('src/components/bank/WorkspaceMail.tsx', content);
+fs.writeFileSync('src/components/bank/ValourianDashboard.tsx', content);
+console.log("Fixed import");

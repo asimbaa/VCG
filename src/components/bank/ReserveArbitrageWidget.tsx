@@ -98,7 +98,7 @@ export function ReserveArbitrageWidget() {
 
 
         <div className="h-48 w-full mb-8">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="99%" height="100%">
             <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
               <XAxis dataKey="time" stroke="#475569" fontSize={10} tickMargin={8} />

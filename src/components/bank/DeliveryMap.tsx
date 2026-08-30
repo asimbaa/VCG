@@ -1,5 +1,5 @@
 import { MapErrorBoundary } from "./MapErrorBoundary";
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Compass, Shield, Gauge, Landmark, MapPin, Navigation, Activity, ZoomIn, ZoomOut, Layers, Box, Rotate3d, ChevronDown, Info, Flame, Bell, BellOff, AlertTriangle, Maximize, Minimize } from 'lucide-react';
 import { motion, AnimatePresence, animate } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, Marker, TrafficLayer, Polyline, HeatmapLayer, OverlayViewF, OverlayView, Polygon, InfoWindow } from '@react-google-maps/api';
@@ -179,7 +179,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
     const destLabel = destinationName || 'Asim Aryal - 712, 15 Barton Rd, Artarmon NSW 2064 Australia';
   
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
-  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [fetchingTraffic, setFetchingTraffic] = useState(false);
@@ -329,20 +329,20 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
   }, [progress]);
 
   useEffect(() => {
-    if (map) {
-      map.setTilt(isTilted ? 45 : 0);
+    if (mapRef.current) {
+      mapRef.current.setTilt(isTilted ? 45 : 0);
     }
-  }, [map, isTilted]);
+  }, [isTilted]);
 
   useEffect(() => {
     setMapZoom(progress > 0 && progress < 100 ? 16 : 14);
   }, [progress]);
 
   const handleZoomIn = () => {
-    if (map) {
-      const currentZoom = map.getZoom() || mapZoom;
+    if (mapRef.current) {
+      const currentZoom = mapRef.current.getZoom() || mapZoom;
       const nextZoom = Math.min(currentZoom + 1, 20);
-      map.setZoom(nextZoom);
+      mapRef.current.setZoom(nextZoom);
       setMapZoom(nextZoom);
     } else {
       setMapZoom((prev) => Math.min(prev + 1, 20));
@@ -350,10 +350,10 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
   };
 
   const handleZoomOut = () => {
-    if (map) {
-      const currentZoom = map.getZoom() || mapZoom;
+    if (mapRef.current) {
+      const currentZoom = mapRef.current.getZoom() || mapZoom;
       const nextZoom = Math.max(currentZoom - 1, 1);
-      map.setZoom(nextZoom);
+      mapRef.current.setZoom(nextZoom);
       setMapZoom(nextZoom);
     } else {
       setMapZoom((prev) => Math.max(prev - 1, 1));
@@ -435,23 +435,9 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
     
 
     setTelemetry((prev) => {
-      // Smooth transition using Framer Motion animate
-      if (latitude !== undefined && longitude !== undefined) {
-        animate(prev.lat || latitude, latitude, {
-          duration: 1.2,
-          ease: "linear",
-          onUpdate: (val) => setTelemetry(t => ({ ...t, lat: val }))
-        });
-        animate(prev.lng || longitude, longitude, {
-          duration: 1.2,
-          ease: "linear",
-          onUpdate: (val) => setTelemetry(t => ({ ...t, lng: val }))
-        });
-      }
-
       return {
-        lat: prev.lat, 
-        lng: prev.lng, 
+        lat: latitude || prev.lat, 
+        lng: longitude || prev.lng, 
         heading: headingVal || (latitude ? 12 : 0), 
         speed: currentSpeed,
         distanceRem: distanceRem
@@ -462,23 +448,23 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
 
   // Subtle Map Camera "Pan-Along" tracking effect following the courier coordinate
   useEffect(() => {
-    if (map && telemetry.lat && telemetry.lng) {
+    if (mapRef.current && telemetry.lat && telemetry.lng) {
       const isTransit = progress > 0 && progress < 100;
       const targetLatLng = { lat: telemetry.lat, lng: telemetry.lng };
       
       // Pan to the new coordinate with a smooth Google Maps pan animation
-      map.panTo(targetLatLng);
+      mapRef.current.panTo(targetLatLng);
 
       // Dynamically adjust zoom: closer look (16) during transit, broader context (14-15) otherwise
       if (progress === 0) {
-        map.setZoom(14);
+        mapRef.current.setZoom(14);
       } else if (isTransit) {
-        map.setZoom(16);
+        mapRef.current.setZoom(16);
       } else if (progress === 100) {
-        map.setZoom(15);
+        mapRef.current.setZoom(15);
       }
     }
-  }, [map, telemetry.lat, telemetry.lng, progress]);
+  }, [telemetry.lat, telemetry.lng, progress]);
 
   // Normalize route coordinate locations to responsive vector layout bounds (300 width x 100 height)
   // For safety since we removed leaflet explicit route let's just use the start and end as fallback
@@ -749,9 +735,9 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
 
             <button
               onClick={() => {
-                if (map && telemetry.lat && telemetry.lng) {
-                  map.panTo({ lat: telemetry.lat, lng: telemetry.lng });
-                  map.setZoom(16);
+                if (mapRef.current && telemetry.lat && telemetry.lng) {
+                  mapRef.current.panTo({ lat: telemetry.lat, lng: telemetry.lng });
+                  mapRef.current.setZoom(16);
                 }
               }}
               className="w-full py-1.5 px-2.5 mt-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 text-[8px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
@@ -1031,8 +1017,8 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
               tilt: isTilted ? 45 : 0,
               styles: mapViewType === 'night' ? nightModeStyle : undefined
             }}
-            onLoad={(mapInstance) => setMap(mapInstance)}
-            onUnmount={() => setMap(null)}
+            onLoad={(mapInstance) => { mapRef.current = mapInstance; }}
+            onUnmount={() => { mapRef.current = null; }}
           >
             {directionsResponse && (
               <DirectionsRenderer

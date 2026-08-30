@@ -75,3 +75,81 @@ html {
     scrollbar-width: none;
   }
 }
+
+/* Valourian Core OS v2 Spacing & Padding Tokens */
+@layer base {
+  :root {
+    --vc-radius-sm: 0.5rem;
+    --vc-radius-md: 1rem;
+    --vc-radius-lg: 1.5rem;
+    --vc-radius-xl: 2rem;
+    
+    --vc-space-xs: 0.25rem;
+    --vc-space-sm: 0.5rem;
+    --vc-space-md: 1rem;
+    --vc-space-lg: 1.5rem;
+    --vc-space-xl: 2.5rem;
+  }
+}
+
+/* Fluid Layout Enhancements */
+.fluid-container {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(1rem, 5vw, 2rem);
+  padding-right: clamp(1rem, 5vw, 2rem);
+}
+
+/* Enhanced Component Internals */
+.card-glass {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: var(--vc-radius-xl);
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.card-glass:hover {
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 20px 50px -15px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+/* Touch-friendly Targets for Mobile */
+@media (max-width: 768px) {
+  button, 
+  [role="button"],
+  a,
+  input,
+  select {
+    min-height: 44px; /* Apple HCI Guideline minimum */
+  }
+  
+  .safe-padding-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}

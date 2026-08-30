@@ -29,8 +29,7 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     tenureType: "25-Year Sovereign Corporate Lease",
     country: "Australia",
     amenities: "On-site Michelin-grade chefs, premium wellness gyms, heated pools, nootropic bars, Apple M-Series maxed fleet for all staff, high-bandwidth dedicated fiber optic rings, 24/7 dedicated supportive building staff & courier concierges."
-  },,
-
+  },
   {
     id: "LRS-NSW-003",
     address: "1/163 Prospect Hwy, Seven Hills, 2147 NSW Australia",

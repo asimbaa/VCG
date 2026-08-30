@@ -43,20 +43,21 @@ export const sendEmailViaService = async (user: any, data: EmailData, onPreviewR
 
 export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; onClose: () => void }) {
   const [activeAttachment, setActiveAttachment] = React.useState<any>(null);
-  if (!data) return null;
   
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-      >
+      {data && (
         <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 50, opacity: 0 }}
+          key="email-preview-modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        >
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
           className="bg-white max-w-2xl w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header */}
@@ -191,6 +192,7 @@ export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; o
           </div>
         </motion.div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }

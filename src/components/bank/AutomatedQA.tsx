@@ -25,7 +25,7 @@ export const AutomatedQA = () => {
         setIsRunning(true);
         toast.info("Initiating E2E Automated QA Suite...");
 
-        const resetTests = tests.map(t => ({ ...t, status: 'idle' as const, log: '' }));
+        const resetTests: TestResult[] = tests.map(t => ({ ...t, status: 'idle', log: '' }));
         setTests(resetTests);
 
         let currentTests = [...resetTests];
@@ -122,7 +122,7 @@ export const AutomatedQA = () => {
                         </div>
                         {test.log && (
                             <div className="mt-3 bg-black/40 p-3 rounded-lg border border-slate-800/50 font-mono text-xs text-emerald-400/80">
-                                > {test.log}
+                                {'>'} {test.log}
                             </div>
                         )}
                     </div>

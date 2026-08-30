@@ -144,10 +144,10 @@ export const SovereignDispatchMonitor = () => {
             }
             
             for (const vehicle of fleet) {
-                if (vehicle.status !== 'DELIVERED') {
+                if (vehicle.status !== 'DELIVERED' && vehicle.coordinates) {
                     const newLat = vehicle.coordinates.lat + (Math.random() - 0.5) * 0.005;
                     const newLng = vehicle.coordinates.lng + (Math.random() - 0.5) * 0.005;
-                    const newBat = Math.max(0, vehicle.health.battery - Math.floor(Math.random() * 2));
+                    const newBat = vehicle.health ? Math.max(0, vehicle.health.battery - Math.floor(Math.random() * 2)) : 100;
                     
                     try {
                         await updateDoc(doc(db, 'active_orders', vehicle.id), {
@@ -241,7 +241,7 @@ export const SovereignDispatchMonitor = () => {
                                                 <div className="text-[10px] uppercase font-bold text-slate-500 mb-0.5">Destination</div>
                                                 <div className="text-sm font-medium text-white">{vehicle.destination}</div>
                                                 <div className="text-xs font-mono text-emerald-400/80 mt-1">
-                                                    COORD: {vehicle.coordinates.lat.toFixed(5)}, {vehicle.coordinates.lng.toFixed(5)}
+                                                    COORD: {vehicle.coordinates?.lat?.toFixed(5) || 'N/A'}, {vehicle.coordinates?.lng?.toFixed(5) || 'N/A'}
                                                 </div>
                                             </div>
                                         </div>
@@ -252,21 +252,21 @@ export const SovereignDispatchMonitor = () => {
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Health Diagnostics</div>
                                         <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                                            <CheckCircle2 className="w-3 h-3" /> {vehicle.health.overall}
+                                            <CheckCircle2 className="w-3 h-3" /> {vehicle.health?.overall || 'UNKNOWN'}
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="bg-slate-950 p-2 rounded-xl text-center border border-slate-800/50">
                                             <Battery className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
-                                            <div className="text-xs font-bold text-white">{vehicle.health.battery}%</div>
+                                            <div className="text-xs font-bold text-white">{vehicle.health?.battery || 0}%</div>
                                         </div>
                                         <div className="bg-slate-950 p-2 rounded-xl text-center border border-slate-800/50">
                                             <Thermometer className="w-4 h-4 text-rose-400 mx-auto mb-1" />
-                                            <div className="text-xs font-bold text-white">{vehicle.health.engineTemp}°</div>
+                                            <div className="text-xs font-bold text-white">{vehicle.health?.engineTemp || 0}°</div>
                                         </div>
                                         <div className="bg-slate-950 p-2 rounded-xl text-center border border-slate-800/50">
                                             <Activity className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-                                            <div className="text-xs font-bold text-white">{vehicle.health.tirePressure} PSI</div>
+                                            <div className="text-xs font-bold text-white">{vehicle.health?.tirePressure || 0} PSI</div>
                                         </div>
                                     </div>
                                     {vehicle.status !== 'DELIVERED' && (

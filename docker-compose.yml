@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  valourian-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: valourian-core-os:latest
+    container_name: valourian-core-os
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Load these from your .env file
+    env_file:
+      - .env
+    restart: unless-stopped

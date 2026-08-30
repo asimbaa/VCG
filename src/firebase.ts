@@ -170,7 +170,35 @@ export const withRetry = async <T>(operation: () => Promise<T>, maxRetries = 3, 
   throw new Error("Retry failed");
 };
 
-import { addDoc as firestoreAddDoc, setDoc as firestoreSetDoc, updateDoc as firestoreUpdateDoc, deleteDoc as firestoreDeleteDoc } from "firebase/firestore";
+import { addDoc as firestoreAddDoc, setDoc as firestoreSetDoc, updateDoc as firestoreUpdateDoc, deleteDoc as firestoreDeleteDoc, collection, serverTimestamp } from "firebase/firestore";
+
+export const createPaymentEvent = async (db, auth, amount, merchant, description) => {
+  try {
+    if (!auth.currentUser) return null;
+    const docRef = (await addDoc(collection(db, 'users', auth.currentUser.uid, 'payment_events'), {
+      amount,
+      merchant,
+      description,
+      status: 'pending',
+      timestamp: serverTimestamp()
+    })) as any;
+    
+    // Simulate processing delay then confirm
+    setTimeout(async () => {
+      try {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid, 'payment_events', docRef.id), {
+          status: 'confirmed'
+        });
+      } catch(e) {}
+    }, 2500);
+    
+    return docRef.id;
+  } catch(e) {
+    console.error("Failed to create payment event", e);
+    return null;
+  }
+};
+
 
 
 

@@ -210,7 +210,7 @@ export const SovereignAI: React.FC<{
 
     const lowerInput = input.toLowerCase();
     if (lowerInput.includes('liquidity') || lowerInput.includes('predict') || lowerInput.includes('cashflow') || lowerInput.includes('q3')) {
-        const aiChartMsg = {
+        const aiChartMsg: Message = {
             role: 'assistant',
             content: 'Based on historical RapidPay clearing volume and recent high-sovereignty asset acquisitions, here is the algorithmic cashflow prediction and liquidity trajectory for Q3 and beyond. We are tracking a steep parabolic curve toward $35B+ capital reserve.',
             timestamp: new Date().toISOString(),

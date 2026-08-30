@@ -1,9 +1,20 @@
-import {StrictMode} from 'react';
+
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CurrencyProvider } from './contexts/CurrencyContext';;
 import './index.css';
+
+const originalMeasure = performance.measure;
+performance.measure = (...args) => {
+  try {
+    return originalMeasure.apply(performance, args);
+  } catch(e) {
+    // Return mock
+    return { name: args[0], entryType: 'measure', startTime: 0, duration: 0 };
+  }
+};
+
 
 const originalWarn = console.warn;
 console.warn = (...args) => {
@@ -25,9 +36,9 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+  
     <CurrencyProvider><ErrorBoundary><App /></ErrorBoundary></CurrencyProvider>
-  </StrictMode>,
+  ,
 );
 
 if ("serviceWorker" in navigator) {

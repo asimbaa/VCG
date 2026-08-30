@@ -34,6 +34,13 @@ export const sendBrowserNotification = (title: string, body: string) => {
 
 export const ThresholdAlerts: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('open-threshold-alerts', handleOpen);
+    return () => window.removeEventListener('open-threshold-alerts', handleOpen);
+  }, []);
+
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [newAsset, setNewAsset] = useState('BTC');
   const [newCondition, setNewCondition] = useState<'above' | 'below'>('above');
@@ -63,34 +70,36 @@ export const ThresholdAlerts: React.FC = () => {
           next[symbol] = next[symbol] + change;
         });
 
-        // Check rules against next prices
-        setRules(prevRules => {
-          let updated = false;
-          const nextRules = prevRules.map(rule => {
-            if (!rule.active) return rule;
-            const currentPrice = next[rule.asset];
-            if (!currentPrice) return rule;
+        // Use setTimeout to defer the setRules call outside the current state updater
+        setTimeout(() => {
+          setRules(prevRules => {
+            let updated = false;
+            const nextRules = prevRules.map(rule => {
+              if (!rule.active) return rule;
+              const currentPrice = next[rule.asset];
+              if (!currentPrice) return rule;
 
-            const isTriggered = rule.condition === 'above' 
-              ? currentPrice > rule.threshold
-              : currentPrice < rule.threshold;
+              const isTriggered = rule.condition === 'above' 
+                ? currentPrice > rule.threshold
+                : currentPrice < rule.threshold;
 
-            const now = Date.now();
-            // Prevent spamming (alert once per 60 seconds)
-            const canTrigger = !rule.lastTriggered || (now - rule.lastTriggered) > 60000;
+              const now = Date.now();
+              // Prevent spamming (alert once per 60 seconds)
+              const canTrigger = !rule.lastTriggered || (now - rule.lastTriggered) > 60000;
 
-            if (isTriggered && canTrigger) {
-              sendBrowserNotification(
-                `🚨 ${rule.asset} Alert Triggered`, 
-                `${rule.asset} is now ${rule.condition} $${rule.threshold} (Current: $${currentPrice.toFixed(2)})`
-              );
-              updated = true;
-              return { ...rule, lastTriggered: now };
-            }
-            return rule;
+              if (isTriggered && canTrigger) {
+                sendBrowserNotification(
+                  `🚨 ${rule.asset} Alert Triggered`, 
+                  `${rule.asset} is now ${rule.condition} ${rule.threshold} (Current: ${currentPrice.toFixed(2)})`
+                );
+                updated = true;
+                return { ...rule, lastTriggered: now };
+              }
+              return rule;
+            });
+            return updated ? nextRules : prevRules;
           });
-          return updated ? nextRules : prevRules;
-        });
+        }, 0);
 
         return next;
       });
@@ -124,7 +133,7 @@ export const ThresholdAlerts: React.FC = () => {
       {/* Floating Button */}
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-48 right-6 md:right-10 bg-slate-900 text-emerald-400 p-4 rounded-full shadow-2xl border border-emerald-500/30 hover:scale-110 transition-transform z-50 flex items-center justify-center gap-2 group"
+        className="hidden fixed bottom-48 right-6 md:right-10 bg-slate-900 text-emerald-400 p-4 rounded-full shadow-2xl border border-emerald-500/30 hover:scale-110 transition-transform z-50 flex items-center justify-center gap-2 group"
       >
         <Bell className="w-6 h-6 group-hover:animate-ping" />
         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
