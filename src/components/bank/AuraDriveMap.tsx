@@ -75,6 +75,8 @@ import {
   Scissors,
   Merge,
   AlertTriangle,
+  Plus,
+  Minus
 } from "lucide-react";
 
 const transportIcon = new DivIcon({
@@ -191,6 +193,21 @@ const AutoFitBounds = ({ routes }: { routes: any[] }) => {
     }
   }, [routes, map]);
   return null;
+};
+
+
+const CustomZoomControlOverlay = () => {
+  const map = useMap();
+  return (
+    <div className="absolute top-1/2 -translate-y-1/2 right-4 z-[400] pointer-events-auto flex flex-col gap-2">
+      <button onClick={(e) => { e.stopPropagation(); map.zoomIn(); }} className="bg-slate-900/80 backdrop-blur-md border border-slate-700 text-slate-300 p-2 rounded-xl shadow-lg hover:bg-slate-800 transition-colors group" title="Zoom In">
+        <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+      </button>
+      <button onClick={(e) => { e.stopPropagation(); map.zoomOut(); }} className="bg-slate-900/80 backdrop-blur-md border border-slate-700 text-slate-300 p-2 rounded-xl shadow-lg hover:bg-slate-800 transition-colors group" title="Zoom Out">
+        <Minus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+      </button>
+    </div>
+  );
 };
 
 export function AuraDriveMap({
@@ -584,6 +601,7 @@ export function AuraDriveMap({
       car.id.toString() === searchQuery,
   );
 
+
   const getRouteColor = (route: any) => {
     if (hoveredRouteId === route.id) return "#fbbf24";
     if (highContrast) return "#FFFFFF";
@@ -779,6 +797,7 @@ export function AuraDriveMap({
   };
 
   const filteredRoutes = routeSegments.filter(checkIsVisible);
+  const activePolylinesCount = filteredRoutes.length;
 
   const aggregateMetrics = selectedRouteIds.reduce((acc, id) => {
     const r = routeSegments.find((rs) => rs.id === id);
@@ -800,6 +819,32 @@ export function AuraDriveMap({
   const aggregateEta = aggregateMetrics.etaMins > 60 
     ? (aggregateMetrics.etaMins / 60).toFixed(1) + ' hrs' 
     : Math.round(aggregateMetrics.etaMins) + ' mins';
+
+
+  const handleExportSelectedToKML = () => {
+    const selectedRoutes = routeSegments.filter(r => selectedRouteIds.includes(r.id));
+    if (selectedRoutes.length === 0) return;
+
+    let kmlContent = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n`;
+    
+    selectedRoutes.forEach(route => {
+      kmlContent += `  <Placemark>\n    <name>${route.name}</name>\n    <LineString>\n      <coordinates>\n`;
+      route.positions.forEach(pos => {
+        kmlContent += `        ${pos[1]},${pos[0]},0\n`;
+      });
+      kmlContent += `      </coordinates>\n    </LineString>\n  </Placemark>\n`;
+    });
+    
+    kmlContent += `</Document>\n</kml>`;
+
+    const blob = new Blob([kmlContent], { type: "application/vnd.google-earth.kml+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `valourian_routes_${new Date().getTime()}.kml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div
@@ -874,7 +919,7 @@ export function AuraDriveMap({
         }
       `}</style>
 
-      <MapContainer
+      <MapContainer zoomControl={false}
         center={[-33.8688, 151.2093]}
         zoom={13}
         style={{ height: "100%", width: "100%", borderRadius: "2.5rem" }}
@@ -1140,6 +1185,7 @@ export function AuraDriveMap({
             </Popup>
           </Marker>
         ))}
+        <CustomZoomControlOverlay />
       </MapContainer>
 
       {/* Map UI Overlays */}
@@ -1155,192 +1201,73 @@ export function AuraDriveMap({
         </button>
       </div>
 
-      {/* Route Metadata Panel */}
-      <div className="absolute bottom-4 left-4 z-[400] w-64 pointer-events-none flex flex-col gap-2 max-h-[70%] overflow-y-auto hide-scrollbar">
-        {selectionMode && selectedRouteIds.length > 0 && (
-          <div className="bg-amber-500/90 backdrop-blur-md border border-amber-400 p-3 rounded-2xl shadow-xl pointer-events-auto w-full animate-in fade-in slide-in-from-left-4 shrink-0 text-slate-900">
-            <div className="flex justify-between items-center mb-1">
-              <h5 className="font-black text-[10px] uppercase tracking-wider">
-                Multi-Segment Route
-              </h5>
-              <span className="font-bold text-xs">
-                {selectedRouteIds.length} segments
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 mb-2 max-h-32 overflow-y-auto hide-scrollbar border border-amber-500/30 rounded p-1">
-              {selectedRouteIds.map((id) => {
-                const r = routeSegments.find((rs) => rs.id === id);
-                return (
-                  <div
-                    key={id}
-                    className="flex justify-between items-center text-[9px] p-1 hover:bg-amber-500/20 rounded cursor-pointer transition-colors"
-                    onClick={() => setSelectedRouteIds([id])}
-                  >
-                    <span className="font-mono text-slate-800 font-bold truncate max-w-[120px]">
-                      {r?.name || id}
-                    </span>
-                    <span className="text-slate-600">{r?.distance}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <button
-              onClick={handleMergeRoutes}
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded py-1 mb-2 text-[9px] uppercase font-bold flex items-center justify-center gap-1 transition-colors"
-            >
-              <Merge className="w-3 h-3" /> Merge Selected Routes
-            </button>
-            <div className="flex justify-between items-end">
-              <div>
-                <div className="text-2xl font-black font-mono leading-none">
-                  {aggregateDistance} <span className="text-sm">km</span>
-                </div>
-                <div className="text-[9px] uppercase tracking-wider font-bold opacity-80 mt-1">
-                  Total Distance
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-black font-mono leading-none text-slate-800">
-                  {aggregateEta}
-                </div>
-                <div className="text-[9px] uppercase tracking-wider font-bold opacity-80 mt-1">
-                  Est. Travel Time
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedRouteIds.length === 1 && (
-          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-3 rounded-2xl shadow-xl pointer-events-auto w-full animate-in fade-in slide-in-from-left-4 shrink-0 mt-2">
-            <div className="flex justify-between items-center mb-2">
-              <h5 className="font-black text-[10px] uppercase tracking-wider text-slate-400">
-                Route Analysis
-              </h5>
-              <button
-                onClick={() => handleReplayRoute(selectedRouteIds[0])}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white p-1 rounded transition-colors flex items-center gap-1 text-[9px] uppercase font-bold"
-              >
-                <Play className="w-3 h-3" />{" "}
-                {replayingRouteId === selectedRouteIds[0]
-                  ? "Stop Replay"
-                  : "Replay"}
-              </button>
-            </div>
-            <div className="h-24 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={
-                    routeSegments
-                      .find((r) => r.id === selectedRouteIds[0])
-                      ?.positions.map((p, i) => ({
-                        dist: i,
-                        elevation: Math.abs(Math.sin(p[0] * 100) * 100) + 50,
-                      })) || []
-                  }
-                >
-                  <defs>
-                    <linearGradient
-                      id="colorElevation"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="dist" hide />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "#0f172a",
-                      border: "1px solid #334155",
-                      borderRadius: "8px",
-                      fontSize: "10px",
-                    }}
-                    itemStyle={{ color: "#8b5cf6" }}
-                    labelStyle={{ display: "none" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="elevation"
-                    stroke="#8b5cf6"
-                    fillOpacity={1}
-                    fill="url(#colorElevation)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="text-[9px] text-center text-slate-500 font-mono mt-1 uppercase">
-              Elevation Profile
-            </div>
-          </div>
-        )}
-
-        {filteredRoutes.map((route) => (
-          <div
-            key={route.id}
-            className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-3 rounded-2xl shadow-xl pointer-events-auto w-full animate-in fade-in slide-in-from-left-4 shrink-0"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: getRouteColor(route) }}
-              ></div>
-              <h5 className="text-white font-bold text-xs truncate">
-                {route.name}
-              </h5>
-            </div>
-            <div className="grid grid-cols-3 gap-1">
-              <div className="bg-slate-950 rounded p-1.5 text-center border border-white/5">
-                <div className="text-[8px] text-slate-500 uppercase font-black">
-                  Dist
-                </div>
-                <div className="text-white text-[10px] font-mono">
-                  {route.distance}
-                </div>
-              </div>
-              <div className="bg-slate-950 rounded p-1.5 text-center border border-white/5">
-                <div className="text-[8px] text-slate-500 uppercase font-black">
-                  Dur
-                </div>
-                <div className="text-white text-[10px] font-mono">
-                  {route.eta}
-                </div>
-              </div>
-              <div className="bg-slate-950 rounded p-1.5 text-center border border-white/5">
-                <div className="text-[8px] text-slate-500 uppercase font-black">
-                  Spd
-                </div>
-                <div className="text-white text-[10px] font-mono">
-                  {route.speed}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2 items-end pointer-events-none">
         {/* Fixed Top-Right Search Interface */}
         <div className="w-64 md:w-80 pointer-events-auto space-y-2">
           <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2 rounded-2xl shadow-2xl flex flex-col gap-2 pointer-events-auto">
             {selectedRouteIds.length > 0 && (
-              <div className="flex justify-between items-center w-full px-1 mb-1 border-b border-slate-700/50 pb-2">
-                <div className="flex items-center gap-1 bg-fuchsia-500/20 text-fuchsia-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">
-                  {selectedRouteIds.length} Selected
+              <div className="w-full flex flex-col gap-2 mb-2 border-b border-slate-700/50 pb-2">
+                <div className="flex justify-between items-center w-full px-1">
+                  <div className="flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">
+                    Registry Summary: {selectedRouteIds.length} Segments
+                  </div>
+                  {selectedRouteIds.length === 1 && (
+                    <button
+                      onClick={() => handleReplayRoute(selectedRouteIds[0])}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded transition-colors flex items-center gap-1 text-[9px] uppercase font-bold"
+                    >
+                      <Play className="w-3 h-3" />{" "}
+                      {replayingRouteId === selectedRouteIds[0]
+                        ? "Stop Replay"
+                        : "Replay Route"}
+                    </button>
+                  )}
                 </div>
-                {selectedRouteIds.length === 1 && (
-                  <button
-                    onClick={() => handleReplayRoute(selectedRouteIds[0])}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded transition-colors flex items-center gap-1 text-[9px] uppercase font-bold"
-                  >
-                    <Play className="w-3 h-3" />{" "}
-                    {replayingRouteId === selectedRouteIds[0]
-                      ? "Stop Replay"
-                      : "Replay Route"}
-                  </button>
+                
+                <div className="flex justify-between items-end px-1 mt-1">
+                  <div>
+                    <div className="text-xl font-black font-mono leading-none text-emerald-400">
+                      {aggregateDistance} <span className="text-xs">km</span>
+                    </div>
+                    <div className="text-[9px] uppercase tracking-wider font-bold opacity-80 mt-1 text-slate-400">
+                      Aggregate Distance
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-black font-mono leading-none text-amber-400">
+                      {aggregateEta}
+                    </div>
+                    <div className="text-[9px] uppercase tracking-wider font-bold opacity-80 mt-1 text-slate-400">
+                      Est. Travel Time
+                    </div>
+                  </div>
+                </div>
+
+                {selectionMode && selectedRouteIds.length > 1 && (
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={handleMergeRoutes}
+                      className="flex-1 bg-amber-600/80 hover:bg-amber-600 text-white rounded py-1 text-[9px] uppercase font-bold flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Merge className="w-3 h-3" /> Merge
+                    </button>
+                    <button
+                      onClick={handleExportSelectedToKML}
+                      className="flex-1 bg-emerald-600/80 hover:bg-emerald-600 text-white rounded py-1 text-[9px] uppercase font-bold flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Download className="w-3 h-3" /> KML Export
+                    </button>
+                  </div>
+                )}
+                {selectionMode && selectedRouteIds.length === 1 && (
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={handleExportSelectedToKML}
+                      className="w-full bg-emerald-600/80 hover:bg-emerald-600 text-white rounded py-1 text-[9px] uppercase font-bold flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Download className="w-3 h-3" /> KML Export
+                    </button>
+                  </div>
                 )}
               </div>
             )}

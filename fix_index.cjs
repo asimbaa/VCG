@@ -1,15 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#020617" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Valourian" />
-    <title>ValourianCapital.io</title>
-    
+const fs = require('fs');
+let code = fs.readFileSync('index.html', 'utf8');
+
+const injection = `
     <script>
       const __originalError = console.error;
       console.error = function(...args) {
@@ -43,15 +35,7 @@
       });
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+`;
 
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0f172a" />
-  </head>
-  <body class="antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-
+code = code.replace('<link rel="preconnect" href="https://fonts.googleapis.com">', injection);
+fs.writeFileSync('index.html', code);

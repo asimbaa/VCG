@@ -1,3 +1,4 @@
+import { sendWorkspaceEmail, generateProfessionalReceipt } from "../../utils/email";
 import React, { useState, useEffect, useRef } from "react";
 const DeliveryMap = React.lazy(() =>
   import("./DeliveryMap").then((m) => ({ default: m.DeliveryMap })),
@@ -3255,8 +3256,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         `Ride completed safely! ${formatConverted(fare)} charged to Corporate Treasury. Receipt dispatched to Workspace Comms.`,
       );
 
-      import("../../utils/email")
-        .then((module) => {
+      Promise.resolve().then(() => { const module = { sendWorkspaceEmail, generateProfessionalReceipt };
           const htmlBody = module.generateProfessionalReceipt({
             merchant: "Uber Executive / Private Aviation",
             amount: formatConverted(fare),

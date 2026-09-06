@@ -1,3 +1,4 @@
+import { sendWorkspaceEmail, generateProfessionalReceipt } from "../../utils/email";
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { jsPDF } from "jspdf";
@@ -1971,8 +1972,7 @@ Thank you for choosing Uber Eats Sovereign.`,
         );
 
         // Send email receipt
-        import("../../utils/email")
-          .then((module) => {
+        Promise.resolve().then(() => { const module = { sendWorkspaceEmail, generateProfessionalReceipt };
             const htmlBody = module.generateProfessionalReceipt({
               merchant: selectedRestaurant.name,
               amount: formatConverted(totalToPay),

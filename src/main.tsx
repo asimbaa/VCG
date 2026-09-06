@@ -1,5 +1,18 @@
 
 import {createRoot} from 'react-dom/client';
+
+import L from 'leaflet';
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CurrencyProvider } from './contexts/CurrencyContext';;
@@ -49,3 +62,22 @@ if ("serviceWorker" in navigator) {
     );
   });
 }
+
+
+// Suppress ResizeObserver benign errors
+const suppressResizeObserver = () => {
+  const resizeObserverErrDiv = document.createElement('div');
+  const _error = console.error;
+  console.error = (...args) => {
+    if (args[0] && typeof args[0] === 'string' && args[0].includes('ResizeObserver loop limit exceeded')) {
+      return;
+    }
+    _error(...args);
+  };
+  window.addEventListener('error', (e) => {
+    if (e.message === 'ResizeObserver loop limit exceeded') {
+      e.stopImmediatePropagation();
+    }
+  });
+};
+suppressResizeObserver();

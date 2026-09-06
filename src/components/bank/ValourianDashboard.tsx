@@ -5032,7 +5032,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
       });
 
       // Import the email utility (assuming it is imported, but we'll import it dynamically just in case or we already did)
-      import("../../utils/email").then(({ sendWorkspaceEmail }) => {
+      Promise.resolve().then(() => { 
         sendWorkspaceEmail(
           "asim.nsw@gmail.com",
           "Valourian Capital OS - Corporate Cards Ready for Dispatch",
@@ -5117,7 +5117,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
               HKD: 0,
               INR: 0,
             },
-          }).catch((err) =>
+           }).catch((err) =>
             handleFirestoreError(err, OperationType.CREATE, "users"),
           );
         }
@@ -6460,7 +6460,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
     );
 
     try {
-      const emailUtils = await import("../../utils/email");
+      const emailUtils = { sendWorkspaceEmail, generateProfessionalReceipt };
       const docId =
         nabTransactionId ||
         `NAB-TXN-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -8034,6 +8034,7 @@ Valourian Capital Treasury Command
 
   return (
     <div className="w-full mx-auto space-y-8 relative flex flex-col min-h-[100dvh] overflow-x-hidden">
+      <div className="valourian-ambient-bg"></div>
       <CommandPalette isOpen={cmdOpen} setIsOpen={setCmdOpen} setActiveTab={setActiveTab} />
 
       {user?.email === "asim.nsw@gmail.com" && (
@@ -11032,8 +11033,7 @@ Valourian Capital Treasury Command
                         toast.success(
                           "Dispatching official Valourian & Reserve Bank payout confirmations to asim.nsw@gmail.com...",
                         );
-                        import("../../utils/email")
-                          .then(({ sendWorkspaceEmail }) => {
+                        Promise.resolve().then(() => {
                             sendWorkspaceEmail(
                               "asim.nsw@gmail.com",
                               "OFFICIAL BRANCH DISPATCH & LEGAL CASH CLEARANCES - SYDNEY CHATSWOOD",
