@@ -1949,15 +1949,18 @@ app.post("/api/fintech/deposit-au", (req, res) => {
 
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
+  const httpServer = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
   import("vite").then(({ createServer: createViteServer }) => {
     createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer }
+      },
       appType: "spa",
     }).then((vite) => {
       app.use(vite.middlewares);
-      app.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running on http://localhost:${PORT}`);
-      });
     });
   });
 } else {

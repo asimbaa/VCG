@@ -1,0 +1,14 @@
+--- server.ts
++++ server.ts
+@@ -213,10 +213,11 @@
+       server: { middlewareMode: true, hmr: false },
+       appType: "spa",
+     }).then((vite) => {
+       app.use(vite.middlewares);
+-      app.listen(PORT, "0.0.0.0", () => {
++      const httpServer = app.listen(PORT, "0.0.0.0", () => {
+         console.log(`Server running on http://localhost:${PORT}`);
+       });
+     });
+   });
+ } else {
