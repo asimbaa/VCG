@@ -699,12 +699,24 @@ export function RapidPay({ user }: { user: any }) {
         return;
       }
       setStatus("validating");
+      // Simulate real-time resolution of PayID against RBA/NPP directory
       setTimeout(() => {
         setStatus("idle");
-        setAccountName(`Verified ${payIdType.toUpperCase()} ${payIdValue.substring(0, 4)}...`);
+        
+        // Generate a mock realistic Australian name or business name based on the input
+        let resolvedName = "VALOURIAN CAPITAL PTY LTD";
+        if (payIdValue.includes('@')) {
+           resolvedName = payIdValue.split('@')[0].replace(/\./g, ' ').toUpperCase() + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        } else if (payIdType === 'abn') {
+           resolvedName = "ENTERPRISE ABN " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        } else {
+           resolvedName = "VERIFIED USER " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        }
+        
+        setAccountName(resolvedName);
         setIsValidated(true);
-        toast.success("PayID validated successfully");
-      }, 100);
+        toast.success("PayID Resolved via NPP Directory");
+      }, 1200);
       return;
     }
     

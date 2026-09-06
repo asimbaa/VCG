@@ -12,6 +12,23 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   scroll-behavior: smooth;
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  will-change: auto;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 /* Global Keyboard Accessibility Focus Ring */
@@ -152,4 +169,30 @@ html {
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+@keyframes drawPolyline {
+  0% {
+    stroke-dasharray: 4000;
+    stroke-dashoffset: 4000;
+  }
+  100% {
+    stroke-dasharray: 4000;
+    stroke-dashoffset: 0;
+  }
+}
+
+.leaflet-overlay-pane path {
+  animation: drawPolyline 3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes routePulseGlow {
+  0% { filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9)); transform: scale(1.02); }
+  100% { filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4)); transform: scale(1); }
+}
+
+.route-hover-glow {
+  animation: routePulseGlow 1.5s infinite ease-in-out;
+  transform-origin: center;
 }

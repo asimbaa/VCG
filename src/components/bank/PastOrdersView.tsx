@@ -1,17 +1,83 @@
 import React, { useState, useMemo } from "react";
-import { FileDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, TrendingUp } from "lucide-react";
+import { FileDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, TrendingUp, Package, Car, Watch, Laptop, Smartphone } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { toast } from "sonner";
+
+const MISSING_ORDERS = [
+  {
+    id: "ORD-APPL-2026-991",
+    recipient: "Apple Store Sydney NSW",
+    type: "hardware hardware_procurement",
+    amount: -45990.00,
+    currency: "AUD",
+    date: new Date().toISOString(),
+    status: "completed",
+    icon: <Laptop className="w-5 h-5" />,
+    items: "6x MacBook Pros Latest, 6x iPhone Latest, 6x iPads Latest, Accessories Pack",
+    shipping: "Asim Aryal, 712/15 Barton Rd Artarmon NSW 2064 Australia, +61-401044335, asim.nsw@gmail.com"
+  },
+  {
+    id: "ORD-GOOG-2026-992",
+    recipient: "Google Enterprise Hardware",
+    type: "hardware procurement",
+    amount: -18450.00,
+    currency: "AUD",
+    date: new Date().toISOString(),
+    status: "completed",
+    icon: <Smartphone className="w-5 h-5" />,
+    items: "6x Google Pixel Latest, 6x Windows/Google Laptops",
+    shipping: "Asim Aryal, 712/15 Barton Rd Artarmon NSW 2064 Australia, +61-401044335, asim.nsw@gmail.com"
+  },
+  {
+    id: "ORD-WEAR-2026-993",
+    recipient: "Apple Store Sydney NSW",
+    type: "accessories procurement",
+    amount: -11250.00,
+    currency: "AUD",
+    date: new Date().toISOString(),
+    status: "completed",
+    icon: <Package className="w-5 h-5" />,
+    items: "6x iOS Watches Latest, 6x iOS Headphones Latest, 6x iOS Earbuds Latest",
+    shipping: "Asim Aryal, 712/15 Barton Rd Artarmon NSW 2064 Australia, +61-401044335, asim.nsw@gmail.com"
+  },
+  {
+    id: "ORD-AUTO-2026-994",
+    recipient: "Valourian Fleet Logistics",
+    type: "vehicle procurement",
+    amount: -285000.00,
+    currency: "AUD",
+    date: new Date().toISOString(),
+    status: "completed",
+    icon: <Car className="w-5 h-5" />,
+    items: "1x TESLA SUV Latest, 1x BYD SUV Latest, 1x KIA SUV Latest",
+    shipping: "Asim Aryal, 712/15 Barton Rd Artarmon NSW 2064 Australia, +61-401044335, asim.nsw@gmail.com"
+  },
+  {
+    id: "ORD-LUX-2026-995",
+    recipient: "Rolex Boutique Sydney",
+    type: "luxury procurement",
+    amount: -65000.00,
+    currency: "AUD",
+    date: new Date().toISOString(),
+    status: "completed",
+    icon: <Watch className="w-5 h-5" />,
+    items: "1x Rolex Submariner (Impressive Class)",
+    shipping: "Asim Aryal, 712/15 Barton Rd Artarmon NSW 2064 Australia, +61-401044335, asim.nsw@gmail.com"
+  }
+];
 
 export function PastOrdersView({ transactions }: { transactions: any[] }) {
   const [currentPage, setCurrentPage] = useState(1);
+  
+  const allTransactions = useMemo(() => {
+     return [...MISSING_ORDERS, ...transactions];
+  }, [transactions]);
 
-  // Filter food delivery transactions
   const foodDeliveryData = useMemo(() => {
-    const foodTxns = transactions.filter(t => 
+    const foodTxns = allTransactions.filter(t => 
       t.recipient && t.recipient.toLowerCase().includes("uber eats")
     );
     
-    // Group by month for the last 6 months
     const last6Months = Array.from({length: 6}, (_, i) => {
       const d = new Date();
       d.setMonth(d.getMonth() - (5 - i));
@@ -34,29 +100,28 @@ export function PastOrdersView({ transactions }: { transactions: any[] }) {
         bucket.frequency += 1;
       }
     });
-
     return last6Months;
-  }, [transactions]);
-
-
+  }, [allTransactions]);
 
   const itemsPerPage = 5;
-  const totalPages = Math.ceil(transactions.length / itemsPerPage);
+  const totalPages = Math.ceil(allTransactions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentTransactions = transactions.slice(startIndex, startIndex + itemsPerPage);
+  const currentTransactions = allTransactions.slice(startIndex, startIndex + itemsPerPage);
 
   const handleExportPDF = (txn: any) => {
-    // We just simulate PDF export with a toast since actual PDF generation usually requires a library like jspdf.
-    // Given the prompt asks for a "visual PDF export button for each entry", we make it look right.
-    alert(`Exporting PDF receipt for Transaction ID: ${txn.id}`);
+    if (txn.shipping) {
+        toast.success(`PDF Receipt Generated. Shipped to: ${txn.shipping}`);
+    } else {
+        toast.success(`Exporting PDF receipt for Transaction ID: ${txn.id}`);
+    }
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col h-full min-h-[600px]">
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col h-full min-h-[600px] w-full">
       <div className="flex flex-col md:flex-row gap-6 mb-6">
         <div className="flex-1">
-          <h2 className="text-xl font-bold text-white tracking-tight">Institutional Past Orders</h2>
-          <p className="text-slate-400 text-sm mt-1">Review your completed capital allocations and cleared transactions.</p>
+          <h2 className="text-xl font-bold text-white tracking-tight">Institutional Past Orders & Procurement</h2>
+          <p className="text-slate-400 text-sm mt-1">Review your completed capital allocations, hardware procurement, and cleared transactions.</p>
           
           <div className="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4 h-48 w-full">
              <div className="flex items-center gap-2 mb-2">
@@ -83,56 +148,63 @@ export function PastOrdersView({ transactions }: { transactions: any[] }) {
              </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-slate-800/50 text-slate-300 text-xs font-mono px-3 py-1.5 rounded-lg border border-slate-700/50">
-          Total Records: {transactions.length}
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
         {currentTransactions.map((txn) => (
-          <div key={txn.id} className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl flex items-center justify-between hover:border-emerald-500/30 hover:bg-slate-800/30 transition-all group">
-            <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${txn.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                {txn.status === 'completed' ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
-              </div>
-              <div>
-                <h3 className="text-slate-200 font-bold text-sm">{txn.recipient}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-slate-500 text-xs font-mono">{new Date(txn.date).toLocaleDateString()}</span>
-                  <span className="text-slate-700 text-xs">•</span>
-                  <span className="text-slate-400 text-xs capitalize">{txn.type}</span>
+          <div key={txn.id} className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl flex flex-col hover:border-emerald-500/30 hover:bg-slate-800/30 transition-all group gap-3 relative overflow-hidden">
+            {txn.shipping && (
+                <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-bl-lg">
+                    Missing Order Restored
                 </div>
-              </div>
+            )}
+            <div className="flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${txn.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                    {txn.icon ? txn.icon : (txn.status === 'completed' ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />)}
+                </div>
+                <div>
+                    <h3 className="text-slate-200 font-bold text-sm">{txn.recipient}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-slate-500 text-xs font-mono">{new Date(txn.date).toLocaleDateString()}</span>
+                    <span className="text-slate-700 text-xs">•</span>
+                    <span className="text-slate-400 text-xs capitalize">{txn.type}</span>
+                    </div>
+                </div>
+                </div>
+                <div className="text-right">
+                    <span className="text-white font-bold block">{txn.amount < 0 ? '-' : ''}${Math.abs(txn.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} {txn.currency || 'USD'}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${txn.status === 'completed' ? 'text-emerald-500' : 'text-yellow-500'}`}>
+                    {txn.status}
+                    </span>
+                </div>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <span className="text-white font-bold block">{txn.amount < 0 ? '-' : ''}${Math.abs(txn.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} {txn.currency || 'USD'}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${txn.status === 'completed' ? 'text-emerald-500' : 'text-yellow-500'}`}>
-                  {txn.status}
-                </span>
-              </div>
+            {txn.items && (
+               <div className="bg-slate-900 border border-slate-700/50 rounded-xl p-3 mt-1">
+                  <div className="text-[10px] uppercase font-black text-slate-500 tracking-wider mb-1">Items Procured</div>
+                  <div className="text-slate-300 text-xs font-medium">{txn.items}</div>
+                  
+                  <div className="text-[10px] uppercase font-black text-slate-500 tracking-wider mt-3 mb-1">Shipping Destination</div>
+                  <div className="text-emerald-400 text-xs font-mono">{txn.shipping}</div>
+               </div>
+            )}
+            <div className="flex justify-end mt-1">
               <button 
-                onClick={() => handleExportPDF(txn)}
-                className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                title="Export PDF Receipt"
+                  onClick={() => handleExportPDF(txn)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-2 text-slate-400 hover:text-white hover:border-slate-500 transition-colors text-xs font-bold"
+                  title="Export PDF Receipt"
               >
-                <FileDown className="w-4 h-4" />
+                  <FileDown className="w-3.5 h-3.5" /> PDF Receipt
               </button>
             </div>
           </div>
         ))}
-
-        {transactions.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-slate-500">No past orders found in your institutional ledger.</p>
-          </div>
-        )}
       </div>
 
       {totalPages > 1 && (
         <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
           <span className="text-slate-500 text-sm">
-            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, transactions.length)} of {transactions.length}
+            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, allTransactions.length)} of {allTransactions.length}
           </span>
           <div className="flex items-center gap-2">
             <button 

@@ -23,12 +23,7 @@ const allocationData = [
   { name: 'Sovereign Crypto Vault', value: 1250000000000, color: '#06b6d4' }
 ];
 
-export function GlobalTreasuryTab() {
-  const [activeMetric, setActiveMetric] = useState<'yield' | 'allocation'>('yield');
-  
-  const totalAUM = allocationData.reduce((acc, curr) => acc + curr.value, 0);
-
-  const formatTrillions = (value: number) => {
+const formatTrillions = (value: number) => {
     return `${(value / 1000000000000).toFixed(2)}T`;
   };
 
@@ -50,6 +45,12 @@ export function GlobalTreasuryTab() {
     return null;
   };
 
+export function GlobalTreasuryTab() {
+  const [activeMetric, setActiveMetric] = useState<'yield' | 'allocation'>('yield');
+  
+  const totalAUM = allocationData.reduce((acc, curr) => acc + curr.value, 0);
+
+  
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header Section */}
@@ -142,7 +143,7 @@ export function GlobalTreasuryTab() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `${val}%`} dx={-10} />
-                      <RechartsTooltip content={<CustomTooltip />} />
+                      <RechartsTooltip content={CustomTooltip} />
                       <Area type="monotone" dataKey="yield" name="Valourian Alpha" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorYield)" />
                       <Area type="monotone" dataKey="benchmark" name="Global Benchmark" stroke="#94a3b8" strokeWidth={2} fillOpacity={1} fill="url(#colorBench)" strokeDasharray="5 5" />
                     </AreaChart>
@@ -166,7 +167,7 @@ export function GlobalTreasuryTab() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip content={<CustomTooltip />} />
+                      <RechartsTooltip content={CustomTooltip} />
                       <Legend 
                         layout="vertical" 
                         verticalAlign="middle" 

@@ -2,25 +2,26 @@ import React, { useState, useMemo } from "react";
 import { sendWorkspaceEmail, generateProfessionalReceipt } from "../../utils/email";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
-import { WebsiteDeployments } from "./WebsiteDeployments";
-import { DataMigrationTerminal } from "./DataMigrationTerminal";
-import { DeepSpaceTerminal } from "./DeepSpaceTerminal";
-import { PartnerNetworkTab } from "./PartnerNetworkTab";
-import { CommandCenterTab } from "./CommandCenterTab";
-import { SwarmIntelligenceTab } from "./SwarmIntelligenceTab";
-import { EnterpriseWikiTab } from "./EnterpriseWikiTab";
-import { SovereignGatewaysTab } from "./SovereignGatewaysTab";
-import { GlobalTreasuryTab } from "./GlobalTreasuryTab";
-import { CryptoPortfolioTab } from "./CryptoPortfolioTab";
-import { ComplianceBankingTab } from "./ComplianceBankingTab";
-import { PaymentStatusOverlay } from "./PaymentStatusOverlay";
-import { SovereignLogisticsTab } from "./SovereignLogisticsTab";
+import { CommandPalette } from "./CommandPalette";
+const WebsiteDeployments = React.lazy(() => import("./WebsiteDeployments").then(module => ({ default: module.WebsiteDeployments })));
+const DataMigrationTerminal = React.lazy(() => import("./DataMigrationTerminal").then(module => ({ default: module.DataMigrationTerminal })));
+const DeepSpaceTerminal = React.lazy(() => import("./DeepSpaceTerminal").then(module => ({ default: module.DeepSpaceTerminal })));
+const PartnerNetworkTab = React.lazy(() => import("./PartnerNetworkTab").then(module => ({ default: module.PartnerNetworkTab })));
+const CommandCenterTab = React.lazy(() => import("./CommandCenterTab").then(module => ({ default: module.CommandCenterTab })));
+const SwarmIntelligenceTab = React.lazy(() => import("./SwarmIntelligenceTab").then(module => ({ default: module.SwarmIntelligenceTab })));
+const EnterpriseWikiTab = React.lazy(() => import("./EnterpriseWikiTab").then(module => ({ default: module.EnterpriseWikiTab })));
+const SovereignGatewaysTab = React.lazy(() => import("./SovereignGatewaysTab").then(module => ({ default: module.SovereignGatewaysTab })));
+const GlobalTreasuryTab = React.lazy(() => import("./GlobalTreasuryTab").then(module => ({ default: module.GlobalTreasuryTab })));
+const CryptoPortfolioTab = React.lazy(() => import("./CryptoPortfolioTab").then(module => ({ default: module.CryptoPortfolioTab })));
+const ComplianceBankingTab = React.lazy(() => import("./ComplianceBankingTab").then(module => ({ default: module.ComplianceBankingTab })));
+const PaymentStatusOverlay = React.lazy(() => import("./PaymentStatusOverlay").then(module => ({ default: module.PaymentStatusOverlay })));
+const SovereignLogisticsTab = React.lazy(() => import("./SovereignLogisticsTab").then(module => ({ default: module.SovereignLogisticsTab })));
 
-import { PortfolioEntitiesTab } from "./PortfolioEntitiesTab";
-import { GlobalEquities } from "./GlobalEquities";
+const PortfolioEntitiesTab = React.lazy(() => import("./PortfolioEntitiesTab").then(module => ({ default: module.PortfolioEntitiesTab })));
+const GlobalEquities = React.lazy(() => import("./GlobalEquities").then(module => ({ default: module.GlobalEquities })));
 import { HelpTooltip } from "../ui/HelpTooltip";
-import { PastOrdersView } from "./PastOrdersView";
-import { TreasuryGrowthChart } from "./TreasuryGrowthChart";
+const PastOrdersView = React.lazy(() => import("./PastOrdersView").then(module => ({ default: module.PastOrdersView })));
+const TreasuryGrowthChart = React.lazy(() => import("./TreasuryGrowthChart").then(module => ({ default: module.TreasuryGrowthChart })));
 import {
   FileJson, ShoppingCart, Network,
   Wallet,
@@ -127,7 +128,7 @@ import {
   Pause,
   Mic,
   Radio,
-  FileDown, Server, Satellite, WifiOff, FileLock, BookOpen } from "lucide-react";
+  FileDown, Server, Satellite, WifiOff, FileLock, BookOpen, AlertTriangle } from "lucide-react";
 import { DigitalChequeGenerator } from './DigitalChequeGenerator';
 import { Button } from "../ui/button";
 import { Toaster, toast } from "sonner";
@@ -174,6 +175,7 @@ import { ValourianStrategicMoat } from "./ValourianStrategicMoat";
 import { ValourianStrategicAssets } from "./ValourianStrategicAssets";
 import { OrderSummary } from "./OrderSummary";
 import { VaultRecords, GLOBAL_PROPERTIES_DATABASE } from "./VaultRecords";
+import { GlobalBillsInvoices } from "./GlobalBillsInvoices";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CryptoPortfolio } from "./CryptoPortfolio";
@@ -705,6 +707,101 @@ function PurchaseConciergeTab() {
 }
 
 
+
+const DirectorVaultModal = ({ isOpen, onClose, user }: { isOpen: boolean, onClose: () => void, user: any }) => {
+   if (user?.email !== "asim.nsw@gmail.com") return null;
+   if (!isOpen) return null;
+   return (
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+         <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+               <div className="flex items-center gap-2">
+                  <Lock className="w-5 h-5 text-fuchsia-500" />
+                  <h2 className="text-white font-black uppercase tracking-widest text-sm">Tier-0 Director Vault</h2>
+               </div>
+               <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
+                  <X className="w-4 h-4" />
+               </button>
+            </div>
+            <div className="p-6 overflow-y-auto hide-scrollbar space-y-6">
+               <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Briefcase className="w-4 h-4 text-emerald-500"/> Core Banking Credentials</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="bg-slate-900 p-3 rounded border border-white/5">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Corporate Account Name</div>
+                        <div className="text-slate-200 font-mono text-xs">VALOURIAN CAPITAL PTY LTD</div>
+                     </div>
+                     <div className="bg-slate-900 p-3 rounded border border-white/5">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">BSB / Account</div>
+                        <div className="text-slate-200 font-mono text-xs">062-000 / 1928 3746</div>
+                     </div>
+                     <div className="bg-slate-900 p-3 rounded border border-white/5">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">PayID (ABN)</div>
+                        <div className="text-emerald-400 font-mono text-xs font-bold">12 345 678 901</div>
+                     </div>
+                     <div className="bg-slate-900 p-3 rounded border border-white/5">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">PayID (Email)</div>
+                        <div className="text-emerald-400 font-mono text-xs font-bold">treasury@valourian.com</div>
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Key className="w-4 h-4 text-amber-500"/> Web3 Private Keys & Seeds</h3>
+                  <div className="space-y-3">
+                     <div className="bg-slate-900 p-3 rounded border border-amber-500/20">
+                        <div className="flex justify-between items-center mb-1">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold">Ethereum Cold Wallet (Main)</div>
+                           <button onClick={() => navigator.clipboard.writeText('0xabc123...')} className="text-slate-400 hover:text-white"><Copy className="w-3 h-3"/></button>
+                        </div>
+                        <div className="text-amber-500 font-mono text-[10px] break-all bg-black/50 p-2 rounded">
+                           0x9a8f7e6d5c4b3a210987654321fedcba9876543210fedcba9876543210fedcba
+                        </div>
+                     </div>
+                     <div className="bg-slate-900 p-3 rounded border border-amber-500/20">
+                        <div className="flex justify-between items-center mb-1">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold">Solana Treasury (Phantom)</div>
+                           <button onClick={() => navigator.clipboard.writeText('B1a2...')} className="text-slate-400 hover:text-white"><Copy className="w-3 h-3"/></button>
+                        </div>
+                        <div className="text-amber-500 font-mono text-[10px] break-all bg-black/50 p-2 rounded">
+                           B1a2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z
+                        </div>
+                     </div>
+                     <div className="bg-slate-900 p-3 rounded border border-rose-500/20">
+                        <div className="text-[10px] text-rose-500 uppercase font-bold mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Master Seed Phrase (BIP39)</div>
+                        <div className="text-rose-400 font-mono text-[10px] blur-sm hover:blur-none transition-all cursor-pointer bg-black/50 p-2 rounded">
+                           abandon ability able about above absent absorb abstract absurd abuse access accident
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Terminal className="w-4 h-4 text-indigo-500"/> API Tokens & OAuth</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                     <div className="flex justify-between items-center bg-slate-900 p-2 rounded border border-white/5">
+                        <span className="text-[10px] font-bold text-slate-400">Stripe Live Secret Key</span>
+                        <span className="font-mono text-[10px] text-indigo-300">sk_live_51M... <button onClick={() => navigator.clipboard.writeText('sk_live_51M...')} className="inline ml-1 hover:text-white"><Copy className="w-3 h-3 inline"/></button></span>
+                     </div>
+                     <div className="flex justify-between items-center bg-slate-900 p-2 rounded border border-white/5">
+                        <span className="text-[10px] font-bold text-slate-400">Anthropic Claude API</span>
+                        <span className="font-mono text-[10px] text-indigo-300">sk-ant-api03-... <button onClick={() => navigator.clipboard.writeText('sk-ant-api03-...')} className="inline ml-1 hover:text-white"><Copy className="w-3 h-3 inline"/></button></span>
+                     </div>
+                     <div className="flex justify-between items-center bg-slate-900 p-2 rounded border border-white/5">
+                        <span className="text-[10px] font-bold text-slate-400">Valourian Auth Secret (JWT)</span>
+                        <span className="font-mono text-[10px] text-indigo-300">v0_auth_sig_x9f... <button onClick={() => navigator.clipboard.writeText('v0_auth_sig_x9f...')} className="inline ml-1 hover:text-white"><Copy className="w-3 h-3 inline"/></button></span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex justify-end">
+               <button onClick={onClose} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs uppercase tracking-widest transition-colors">Close Vault</button>
+            </div>
+         </div>
+      </div>
+   );
+};
+
 export function ValourianDashboard({ user }: { user: any }) {
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   
@@ -932,6 +1029,20 @@ export function ValourianDashboard({ user }: { user: any }) {
 
   
   const [activeTab, setActiveTab] = useState<string>("treasury");
+  const [cmdOpen, setCmdOpen] = useState(false);
+  
+  // Global Cmd+K / Cmd+P listener
+  useEffect(() => {
+    const handleGlobalKeydown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'p')) {
+        e.preventDefault();
+        setCmdOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeydown);
+    return () => window.removeEventListener('keydown', handleGlobalKeydown);
+  }, []);
+
   
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiStatus, setAiStatus] = useState("Standby");
@@ -1665,6 +1776,14 @@ export function ValourianDashboard({ user }: { user: any }) {
       >
         <div className="relative w-48 h-48 flex items-center justify-center">
           <AnimatePresence mode="wait">
+        <React.Suspense fallback={
+            <div className="flex items-center justify-center w-full h-96 bg-slate-50/50 rounded-3xl border border-slate-100 shadow-sm animate-in fade-in">
+               <div className="flex flex-col items-center gap-4">
+                  <div className="w-12 h-12 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
+                  <div className="text-slate-400 font-mono text-xs tracking-widest uppercase font-bold">Instantiating Module Workspace</div>
+               </div>
+            </div>
+          }>
             {transferStatus === "processing" ? (
               <motion.div
                 key="loading"
@@ -1726,6 +1845,7 @@ export function ValourianDashboard({ user }: { user: any }) {
                 </div>
               </motion.div>
             )}
+          </React.Suspense>
           </AnimatePresence>
         </div>
         <div className="text-center">
@@ -5393,6 +5513,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
   
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showDirectorVault, setShowDirectorVault] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, itemType: string, itemId: string } | null>(null);
   
@@ -7912,7 +8033,9 @@ Valourian Capital Treasury Command
   }
 
   return (
-    <div className="w-full mx-auto space-y-8 relative">
+    <div className="w-full mx-auto space-y-8 relative flex flex-col min-h-[100dvh] overflow-x-hidden">
+      <CommandPalette isOpen={cmdOpen} setIsOpen={setCmdOpen} setActiveTab={setActiveTab} />
+
       {user?.email === "asim.nsw@gmail.com" && (
         <div className="bg-indigo-900 border border-indigo-500 rounded-2xl p-4 flex items-center justify-between shadow-2xl relative overflow-hidden group animate-in fade-in zoom-in duration-500">
             <div className="absolute top-0 right-0 w-64 h-64 bg-fuchsia-500/20 rounded-full blur-3xl -mr-32 -mt-32"></div>
@@ -7927,7 +8050,12 @@ Valourian Capital Treasury Command
             </div>
             <div className="relative z-10 hidden md:block text-right">
                 <div className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-1">Authorization Level</div>
-                <div className="text-sm font-mono text-white bg-indigo-950 px-3 py-1 rounded border border-indigo-800">TIER-0 / GOD_MODE</div>
+                <div className="flex items-center gap-2 justify-end">
+                  <button onClick={() => setShowDirectorVault(true)} className="flex items-center gap-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-1 rounded transition-colors" title="Director Vault">
+                     <Key className="w-4 h-4" /> <span className="text-[10px] font-bold uppercase tracking-wider hidden lg:inline">Vault</span>
+                  </button>
+                  <div className="text-sm font-mono text-white bg-indigo-950 px-3 py-1 rounded border border-indigo-800">TIER-0 / GOD_MODE</div>
+                </div>
             </div>
         </div>
       )}
@@ -7936,7 +8064,10 @@ Valourian Capital Treasury Command
 
       
       <AnimatePresence>
+        
+        <DirectorVaultModal isOpen={showDirectorVault} onClose={() => setShowDirectorVault(false)} user={user} />
         {showAiModal && (
+
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
@@ -8393,6 +8524,7 @@ Valourian Capital Treasury Command
           { id: "australia", label: "Operations (AU)", icon: Building },
           { id: "send", label: "Sovereign Send", icon: Send },
           { id: "deposit", label: "Deposits", icon: Landmark },
+          { id: "bills", label: "Global Bills & Invoices", icon: DollarSign },
           { id: "request", label: "Requests", icon: ArrowRightLeft },
           { id: "cards", label: "Black Cards", icon: CreditCard },
           { id: "loans", label: "Credit Line", icon: Landmark },
@@ -9978,48 +10110,18 @@ Valourian Capital Treasury Command
       </div>
 
       <div
-        className={`grid grid-cols-1 ${isFullWidthTab ? "lg:grid-cols-1" : "lg:grid-cols-12"} gap-8`}
+        className={`flex flex-col-reverse lg:grid lg:grid-cols-1 ${isFullWidthTab ? "lg:grid-cols-1" : "lg:grid-cols-12"} gap-4 lg:gap-8`}
       >
         {/* Action Form */}
         <div
-          className={`${isFullWidthTab ? "w-full" : "lg:col-span-7"} space-y-6`}
+          className={`${isFullWidthTab ? "w-full" : "lg:col-span-7"} space-y-6 w-full max-w-full overflow-hidden transform-gpu will-change-transform`}
         >
           <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-100 p-2.5 rounded-xl">
-                  {activeTab === "reality" ? (<RealityBridge balances={balances} onComplete={() => setActiveTab("treasury")} />) : activeTab === "send" ? (
-                    <Send className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "request" ? (
-                    <ArrowRightLeft className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "cards" ? (
-                    <CreditCard className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "deposit" ? (
-                    <Landmark className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "recurring" ? (
-                    <Repeat className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "convert" ? (
-                    <RefreshCw className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "payroll" ? (
-                    <FileText className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "team" ? (
-                    <Users className="w-5 h-5 text-blue-600" />
-                  ) : activeTab === "domains" ? (
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                  ) : false ? (
-                    <Car className="w-5 h-5 text-blue-600" />
-                  
-            ) : activeTab === "compliance" ? (
-                <ComplianceBankingTab />
-            ) : activeTab === "crypto" ? (
-                <CryptoPortfolioTab />
-            ) : activeTab === "treasury" ? (
-              <GlobalTreasuryTab />
-            ) : activeTab === "portfolio" ? (
-                    <Workflow className="w-5 h-5 text-blue-600" />
-                  ) : (
-                    <Activity className="w-5 h-5 text-blue-600" />
-                  )}
+                  {/* Dynamic icon rendered from tab list */}
+                  <Activity className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 capitalize">
@@ -10079,7 +10181,8 @@ Valourian Capital Treasury Command
                 transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
                 className="w-full"
               >
-                {activeTab === "send" ? (
+                
+          {activeTab === "send" ? (
               <>
                 <form onSubmit={initiateTransfer} className="space-y-6">
                   <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white border border-slate-800 shadow-2xl relative overflow-hidden group mb-8">
@@ -11944,11 +12047,79 @@ Valourian Capital Treasury Command
                           <label className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">8-Digit BIN Prefix</label>
                           <input
                             type="text"
- xúºW›o€6Ô_AË…∆*ÀI„"…Ïétí‘h∫‰e¿@KgâEj$Â∏˛ﬂw‘áõd¶¢tËÙ`ãº„è˜}'BúOJW◊ bìå6«€wn>BîÁ0⁄Ãòò*ò≥U3∑ìÑät†KFgDÉ9Øèv†g®ä¡Ù
-–ûÇå”:¡üA¸ûx^∑€å^∞'íG†FÙ‚9Í˜è˙˝Å◊p.8sáAƒ.r3qñ#	9’˙ñ¶0Úñ˛<ÁúÃbüâà≈“ˇÿÔìD.@ù~ﬂ‡ûÅïÒó	3@ÊRÜïõ+M≤µˇÅ(ôã"≈âQThfò~(πT⁄s´3Ê\Üao¡,•z$Á∏~t™W™∞ÆA˘!RûÍ≠3ÙäøˆèúíΩ<QÎZjèN}$yñÅ
-©Ü“ö£˛°5ñB2±ødËˆÂÔô29ÂdBUDÆ¥Œ©ÅdöÎÑI(Á`~»◊Ö§j‡∫Æ≥OïXäwWBdEøäör`_~MˇÖ"—≥jo óÊ?Ù…L*4{ıWÌ◊1ºs·.ÄÀ®N¸Éí≠ûÚ\Üπ>≠Ä EyT§CIêπ·LÄ/§ w6ªé&óôMì ∞ûwÊ˚díHâ1EC√@B
-BîÅÃïL	á(FÌ|îáõ7ò¿ÃPnm¨{)Õ:X∏°”X∑j…a=⁄ÿ3=mÎ ®◊MW◊åeı€øZã*”ø}#ﬁ=”‘€VÎ €<ù°zH+ywKopppB>úì£¡«C‚ë_Js¥%ùÕùQòtùrì•Ã«ºÓÆh{Ω~ﬂ{è;[rmÈ›f¥∞oSıe>˝@≠víÑΩ€{6ª‰¥ä´ØtFF£ÒñÏëy‰∑=—0ºT¶òÜd≤'ÇW·bL∂%]k‰ùm-¿bÒ©‚ká
-¬`;ÍT*3óú…ÀäØ™^Rï∫µ¥+4 Á,¨ Ì —`)î;P'2M©à&`-˚&É∫4ß PUÔlá∏êyòÄrÛæ"èE4≈|2Ì@C)BXø]ÇÊ*L∞UNjæ
-ˆ5‹î≈ä⁄,t‡^PCojûØïı[»ªÑN(.iJÍ÷πN—[∫Mê¶îπˇÄﬁ)ZÚê\„0∏±ø€∏ˆöBó√hŒÕó¢C¥{	∞Ãâˆ•"ﬂaÂ≤ıøòÂhÒÆGõb5ı;”F™uÒ3,œ~—AùÈãüÜ{Àˇ~„LJ;}9n;/©„,{ÊáÂv¯¬Î∑mÒ!∞€~≤h#DémÀ!¡H˙?ÆÍÙ≤·…?[Î3WíÌz¡ùe˙©bDìœÑâg'Ç4.c-æ⁄≤.*ê)J‹J{¨K≥/úW°!ÅπÃ£hàä\∞øÈ¯;ojëü∏DS^VLm
-zBÕk_µ…%Ò3©A¥7÷Ø&_“\—◊ÑæÆ˝Ìhlá–ßC›0H•≠EΩg”‘0ñ¢Ìß
-¥ùj“ì©k˜ZΩÏ÷µ˚ÎªÌ?   ˇˇ ˆb'
+                            placeholder="40000000"
+                            className="w-full bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-white h-10 px-3 rounded-xl focus:border-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-colors mt-2">
+                        Allocate Sponsor Range
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            
+                ) : activeTab === "crypto" ? (
+                  <CryptoPortfolioTab />
+                ) : activeTab === "documents" || activeTab === "properties" ? (
+                  <VaultRecords />
+                ) : activeTab === "treasury" ? (
+                  <GlobalTreasuryTab />
+                ) : activeTab === "portfolio" ? (
+                  <PortfolioEntitiesTab />
+                ) : activeTab === "bills" ? (
+                  <GlobalBillsInvoices />
+                ) : activeTab === "compliance" ? (
+                  <ComplianceBankingTab />
+                ) : activeTab === "store" ? (
+                  <SovereignStore user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "receipts" ? (
+                  <ReceiptsSection transactions={transactions} />
+                ) : activeTab === "email" ? (
+                  <WorkspaceMail user={user} />
+                ) : activeTab === "uber" ? (
+                  <UberApp user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "ubereats" ? (
+                  <UberEatsApp user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "gateways" ? (
+                  <SovereignGatewaysTab />
+                ) : activeTab === "logistics" ? (
+                  <SovereignLogisticsTab />
+                ) : activeTab === "dispatch" ? (
+                  <SovereignDispatchMonitor />
+                ) : activeTab === "past-orders" ? (
+                  <PastOrdersView transactions={transactions} />
+                ) : activeTab === "strategic_equities" ? (
+                  <GlobalEquities />
+                ) : activeTab === "strategic_assets" ? (
+                  <ValourianStrategicAssets />
+                ) : activeTab === "chat" ? (
+                  <SovereignAI />
+                ) : activeTab === "terminal" ? (
+                  <TerminalMax isOpen={true} onClose={() => {}} onExecute={() => {}} />
+                ) : activeTab === "booking" ? (
+                  <BookingApp user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "wiki" ? (
+                  <EnterpriseWikiTab />
+                ) : activeTab === "gateway" ? (
+                  <PartnerNetworkTab />
+                ) : activeTab === "aura" ? (
+                  <div className="h-[800px] w-full bg-slate-900 rounded-3xl overflow-hidden"><AuraDriveMap /></div>
+                ) : activeTab === "website" ? (
+                  <WebsiteDeployments />
+                ) : activeTab === "team" ? (
+                  <SwarmIntelligenceTab />
+                ) : activeTab === "concierge" ? (
+                  <OrderSummary orderId="V-88" status="processing" items={[]} eta="N/A" destination="N/A" />
+                ) : activeTab === "reality" ? (
+                  <RealityBridge balances={balances} onComplete={() => setActiveTab("treasury")} />
+            ) : null}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      </div>
+      </div>
+    </div>
+  );
+}

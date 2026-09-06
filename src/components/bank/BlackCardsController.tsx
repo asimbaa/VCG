@@ -251,17 +251,21 @@ export const BlackCardsController = () => {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col mb-6">
               <h2 className="text-xl font-medium text-white flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-indigo-400" />
-                Global Card Management & Tokenization
+                Valourian Black Cards & Manufacturing
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-2">
+                  <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-widest flex items-center gap-1"><ShieldCheck className="w-3 h-3"/> God Mode: Mr. Asim Aryal</span>
+                  <span className="bg-indigo-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-widest flex items-center gap-1"><Zap className="w-3 h-3"/> Outsourced Manufacturing: Active</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mb-6">
                 <button onClick={() => setCurrency && setCurrency('USD')} className={`px-3 py-1 rounded text-xs font-medium ${currency === 'USD' ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/5 text-white/50'}`}>USD</button>
                 <button onClick={() => setCurrency && setCurrency('AUD')} className={`px-3 py-1 rounded text-xs font-medium ${currency === 'AUD' ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/5 text-white/50'}`}>AUD</button>
                 <button onClick={() => setCurrency && setCurrency('EUR')} className={`px-3 py-1 rounded text-xs font-medium ${currency === 'EUR' ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/5 text-white/50'}`}>EUR</button>
               </div>
-            </div>
 
             <div className="space-y-4">
               {cards.map(card => {

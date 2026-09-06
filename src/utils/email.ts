@@ -14,48 +14,38 @@ const processQueue = async () => {
     if (!email) continue;
     
     try {
-      let token = getWorkspaceAccessToken();
-      if (!token) {
-        toast.error("Workspace Comms Disconnected. Emails are queued.", { id: "email-queue" });
-        email.resolve(false);
-        continue;
-      }
-      
-      const emailContent = [
-        `To: ${email.to}`,
-        'Content-Type: text/html; charset=utf-8',
-        'MIME-Version: 1.0',
-        `Subject: ${email.subject}`,
-        '',
-        email.htmlBody
-      ].join('\r\n');
 
-      const base64EncodedEmail = btoa(unescape(encodeURIComponent(emailContent)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
 
-      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      // Enhanced Server-side Email Sending (bypasses Gmail Auth if SMTP is configured)
+      const response = await fetch('/api/email/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          raw: base64EncodedEmail
+          to: email.to,
+          subject: email.subject,
+          htmlBody: email.htmlBody
         })
       });
 
       if (!response.ok) {
         const err = await response.json();
-        console.error("Gmail API Error:", err);
-        if (response.status === 401) {
-           toast.error("Gmail authorization expired. Please sign in again.");
-           signInWithGoogle(); // Trigger sign in
-        }
+        console.error("Backend Email API Error:", err);
         email.resolve(false);
       } else {
-        console.log(`Email successfully sent to ${email.to}: ${email.subject}`);
+        const data = await response.json();
+        if (data.testUrl) {
+            console.log(`Email delivered to Ethereal Testing Sandbox. Preview URL: ${data.testUrl}`);
+            toast.success("Email Sent! (Check terminal for Ethereal Preview URL)", { duration: 6000 });
+            // Optionally, you could open the test URL in a new window, but standard logging is safer
+        } else if (data.mock) {
+            console.log(`Email mock sent (configure SMTP in .env to send real emails) to ${email.to}`);
+            toast.success("Email sent! (Check Server Console)");
+        } else {
+            console.log(`Email successfully delivered to ${email.to}: ${email.subject}`);
+            toast.success("Email Delivered Successfully via SMTP.");
+        }
         email.resolve(true);
       }
     } catch (e) {

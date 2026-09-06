@@ -1,14 +1,50 @@
 const fs = require('fs');
-let content = fs.readFileSync('src/components/pay/RapidPay.tsx', 'utf8');
+let code = fs.readFileSync('src/components/pay/RapidPay.tsx', 'utf8');
 
-content = content.replace(
-  '<span className="bg-white/20 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-full backdrop-blur-md inline-block mb-4">\n            Valourian Capital Network\n          </span>',
-  '<span className="bg-white/20 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-full backdrop-blur-md inline-block mb-4">\n            Valourian Capital Inc. - RapidPay Sovereign Core\n          </span>'
-);
+const validateSearch = `    if (transferType === 'payid') {
+      if (!payIdValue) {
+        toast.error("Please enter a PayID");
+        return;
+      }
+      setStatus("validating");
+      setTimeout(() => {
+        setStatus("idle");
+        setAccountName(\`Verified \${payIdType.toUpperCase()} \${payIdValue.substring(0, 4)}...\`);
+        setIsValidated(true);
+        toast.success("PayID validated successfully");
+      }, 100);
+      return;
+    }`;
 
-content = content.replace(
-  'Instantly deploy capital, settle global obligations, or manage premium integrated credit cards\n            under zero-knowledge clearing guarantees. Zero clearance delays. Limitless global fluidity.',
-  'Instantly deploy capital, settle global obligations, or manage premium integrated credit cards\n            under zero-knowledge clearing guarantees. Powered by the DocuCraft Ultra AI Agents Suite for 100% compliant, real-time institutional arbitration.'
-);
+const validateReplace = `    if (transferType === 'payid') {
+      if (!payIdValue) {
+        toast.error("Please enter a PayID");
+        return;
+      }
+      setStatus("validating");
+      // Simulate real-time resolution of PayID against RBA/NPP directory
+      setTimeout(() => {
+        setStatus("idle");
+        
+        // Generate a mock realistic Australian name or business name based on the input
+        let resolvedName = "VALOURIAN CAPITAL PTY LTD";
+        if (payIdValue.includes('@')) {
+           resolvedName = payIdValue.split('@')[0].replace(/\\./g, ' ').toUpperCase() + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        } else if (payIdType === 'abn') {
+           resolvedName = "ENTERPRISE ABN " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        } else {
+           resolvedName = "VERIFIED USER " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        }
+        
+        setAccountName(resolvedName);
+        setIsValidated(true);
+        toast.success("PayID Resolved via NPP Directory");
+      }, 1200);
+      return;
+    }`;
 
-fs.writeFileSync('src/components/pay/RapidPay.tsx', content);
+if (code.includes(validateSearch)) {
+    code = code.replace(validateSearch, validateReplace);
+}
+
+fs.writeFileSync('src/components/pay/RapidPay.tsx', code);

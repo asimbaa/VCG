@@ -47,7 +47,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$240,000 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-004",
@@ -64,7 +65,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$650,000 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-001",
@@ -81,7 +83,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$8,900,000 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-002",
@@ -98,7 +101,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$1,567,500 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "REG-UK-001",
@@ -115,7 +119,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "£4,250,000 GBP",
     fundingSource: "Valourian Sovereign Fund Node 1 (UK)",
     tenureType: "Freehold Absolute Title",
-    country: "United Kingdom"
+    country: "United Kingdom",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "REG-US-001",
@@ -132,7 +137,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$1,825,000 USD",
     fundingSource: "Valourian Treasury Reserve (US)",
     tenureType: "Condominium Freehold",
-    country: "United States"
+    country: "United States",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "REG-US-002",
@@ -149,7 +155,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$4,706,750 USD",
     fundingSource: "Valourian Capital Vault Primary",
     tenureType: "Commercial Freehold",
-    country: "United States"
+    country: "United States",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "REG-EU-001",
@@ -166,7 +173,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "€5,117,000 EUR",
     fundingSource: "Valourian Sovereign Fund Node 2 (EU)",
     tenureType: "Freehold (Pleine Propriété)",
-    country: "France"
+    country: "France",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-006",
@@ -183,7 +191,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$18,700,000 AUD",
     fundingSource: "Valourian Capital Treasury",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-007",
@@ -200,7 +209,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$840,000 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "LRS-NSW-008",
@@ -217,7 +227,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$1,150,000 AUD",
     fundingSource: "Valourian Treasury Reserve",
     tenureType: "Torrens Title / Freehold",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
   },
   {
     id: "VEH-TESLA-001",
@@ -234,7 +245,44 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     stampDutyPaid: "$3,435 AUD",
     fundingSource: "Valourian Sovereign Fleet Reserve",
     tenureType: "Outright Corporate Ownership",
-    country: "Australia"
+    country: "Australia",
+  benificialInfluxUnitValues: "10,000 Influx Units"
+  },
+    {
+    id: "VEH-TESLA-002",
+    address: "Tesla Lidcombe Delivery Centre, B1/29 Birnie Ave Lidcombe, NSW 2141",
+    type: "Tesla Model Y Performance Dual Motor All-Wheel Drive",
+    folio: "RN119834827",
+    value: "$114,500 AUD",
+    purchaseDate: "2026-08-20",
+    proprietor: "ASIM ARYAL",
+    zoning: "Electric Vehicle (Performance)",
+    lot: "VIN: LRWY232_a43d726b25932adabcf11bff2f15c070",
+    lrsReference: "RMS-NSW-REG-84729",
+    deedNumber: "TESLA-INV-AU-991283",
+    stampDutyPaid: "$3,435 AUD",
+    fundingSource: "Valourian Sovereign Fleet Reserve",
+    tenureType: "Outright Corporate Ownership",
+    country: "Australia",
+    benificialInfluxUnitValues: "10,000 Influx Units"
+  },
+  {
+    id: "LRS-NSW-009",
+    address: "Unit 712, 15 Barton Road, Artarmon NSW 2064, Australia",
+    type: "Luxury Penthouse Suite",
+    folio: "712/DP84295",
+    value: "$2,450,000 AUD",
+    purchaseDate: "2024-05-15",
+    proprietor: "ASIM ARYAL",
+    zoning: "R4 High Density Residential",
+    lot: "Lot 712 in Deposited Plan 84295",
+    lrsReference: "NSW-LRS-VOL-84295-712",
+    deedNumber: "NSW-DEED-A849204A",
+    stampDutyPaid: "$114,845 AUD",
+    fundingSource: "Valourian Treasury Reserve",
+    tenureType: "Strata Title / Freehold",
+    country: "Australia",
+    benificialInfluxUnitValues: "4,500 Influx Units"
   },
   // Programmatically generate remaining properties to reach 40+ global properties
   ...Array.from({ length: 35 }, (_, index) => {
@@ -278,7 +326,8 @@ export const GLOBAL_PROPERTIES_DATABASE = [
       stampDutyPaid: `${symbol}${Math.floor(valueNum * 0.055).toLocaleString()} ${area.curr}`,
       fundingSource: "Valourian Treasury Reserve",
       tenureType: area.type.includes("Commercial") ? "Freehold" : "Strata Title / Freehold",
-      country: area.country
+      country: area.country,
+    benificialInfluxUnitValues: "10,000 Influx Units"
     };
   })
 ];
@@ -684,6 +733,7 @@ export function VaultRecords() {
             <div class="schedule-title">Registry Settlement & Financial Details</div>
             <p>TOTAL ACQUISITION VALUE: <b>${prop.value}</b></p>
             <p>STAMP DUTY VERIFIED & SETTLED: <b>${prop.stampDutyPaid}</b></p>
+            <p>BENEFICIAL INFLUX UNIT VALUES: <b>${prop.benificialInfluxUnitValues || "10,000 Influx Units"}</b></p>
             <p>FUNDING RESOLUTION: <b>${prop.fundingSource} (${prop.tenureType})</b></p>
           </div>
 
@@ -1166,6 +1216,10 @@ export function VaultRecords() {
                        <div>
                           <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Estimated Valuation</div>
                           <div className="text-sm font-black text-indigo-600 mt-0.5">{prop.value}</div>
+                       </div>
+                       <div>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Beneficial Influx Units</div>
+                          <div className="text-sm font-black text-emerald-600 mt-0.5">{prop.benificialInfluxUnitValues || "10,000 Influx Units"}</div>
                        </div>
                     </div>
                   </div>
