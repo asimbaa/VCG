@@ -125,10 +125,10 @@ export function GlobalTreasuryTab() {
               </div>
             </div>
 
-            <div className="h-[350px] w-full relative">
+            <div className="h-[350px] w-full min-w-0 relative">
               {activeMetric === 'yield' ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                     <AreaChart data={yieldData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorYield" x1="0" y1="0" x2="0" y2="1">
@@ -150,8 +150,8 @@ export function GlobalTreasuryTab() {
                   </ResponsiveContainer>
                 </motion.div>
               ) : (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full min-w-0 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                     <PieChart>
                       <Pie
                         data={allocationData}

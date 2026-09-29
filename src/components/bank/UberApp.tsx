@@ -2608,7 +2608,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
       try {
         const messageText =
           `🚨 SOVEREIGN EMERGENCY SOS BROADCAST 🚨\n` +
-          `Rider: Mr. Asim Aryal (${user?.email || "Founder & CEO"})\n` +
+          `Rider: Mr. Asim Aryal (${user?.email || "Founder, CEO, Managing Director"})\n` +
           `Status: CRITICAL RESCUE TRIGGERED\n` +
           `Coordinates: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}\n` +
           `Vehicle: ${selectedVehicle?.carModel || "Executive EV"} (${selectedVehicle?.driver || "Premium Fleet Partner"})\n` +
@@ -3899,7 +3899,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               className="w-full bg-slate-900 border border-slate-800 px-2 py-1 rounded text-[11px] text-slate-200 focus:outline-none focus:border-indigo-505 font-mono cursor-pointer"
                             >
                               {uberCards.map((card, idx) => (
-                                <option key={card.id || idx} value={idx}>
+                                <option key={`uber-card-${card.id || 'card'}-${idx}`} value={idx}>
                                   {card.network ||
                                     card.bank ||
                                     "Corporate Card"}{" "}

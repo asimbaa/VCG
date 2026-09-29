@@ -28,11 +28,25 @@ import {
   PhoneCall,
   Share,
   Map,
-
-
-
-  LocateFixed
+  LocateFixed,
+  QrCode,
+  Shield,
+  RefreshCw,
+  Copy,
+  Check,
+  Smartphone,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  Zap,
+  Terminal,
+  Clock,
+  ArrowRight,
+  Laptop,
+  Monitor
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { HotelMapViewer } from './HotelMapViewer';
 import { db } from '../../firebase';
@@ -71,6 +85,13 @@ export function BookingApp({ user, balances, setBalances }: {
   const [showMap, setShowMap] = useState(false);
   const [bookingHistory, setBookingHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Uber Transit and Scenic Route Detour states
+  const [includeUberTransit, setIncludeUberTransit] = useState(false);
+  const [isScenicRouteEnabled, setIsScenicRouteEnabled] = useState(false);
+  const [scenicWaypointSeed, setScenicWaypointSeed] = useState(1);
+  const [activeDevicePlatform, setActiveDevicePlatform] = useState<'android' | 'ios' | 'windows' | 'mac' | 'universal'>('universal');
+  const [deviceProvisionSuccess, setDeviceProvisionSuccess] = useState<string | null>(null);
 
   // Dynamic Catering Package checkboxes
   const [includeBreakfast, setIncludeBreakfast] = useState(false);
@@ -160,14 +181,90 @@ export function BookingApp({ user, balances, setBalances }: {
   });
   const [selectedBookingCardIndex, setSelectedBookingCardIndex] = useState<number>(0);
 
+  // QR-Based Payment Verification Overlay States
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrCountdown, setQrCountdown] = useState(30);
+  const [dynamicOtp, setDynamicOtp] = useState('849 201');
+  const [isCardNumberRevealed, setIsCardNumberRevealed] = useState(false);
+  const [simulatingScan, setSimulatingScan] = useState(false);
+  const [scanApproved, setScanApproved] = useState(false);
+
+  useEffect(() => {
+    let timer: any;
+    if (showQrModal) {
+      setScanApproved(false);
+      timer = setInterval(() => {
+        setQrCountdown((prev) => {
+          if (prev <= 1) {
+            const randomCode = Math.floor(100000 + Math.random() * 900000);
+            setDynamicOtp(`${randomCode.toString().slice(0, 3)} ${randomCode.toString().slice(3)}`);
+            return 30;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setQrCountdown(30);
+      setScanApproved(false);
+    }
+    return () => clearInterval(timer);
+  }, [showQrModal]);
+
+  const playTerminalScanTone = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1046.5, ctx.currentTime);
+      osc.frequency.setValueAtTime(1318.5, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.22);
+    } catch (e) {
+      // AudioContext fallback
+    }
+  };
+
+  const handleSimulateTerminalScan = () => {
+    setSimulatingScan(true);
+    setScanApproved(false);
+    setTimeout(() => {
+      setSimulatingScan(false);
+      setScanApproved(true);
+      playTerminalScanTone();
+      toast.success("Affiliated POS Terminal clearance approved! Ref: VAL-POS-8801");
+    }, 1200);
+  };
+
+  const generateNewOtp = () => {
+    const randomCode = Math.floor(100000 + Math.random() * 900000);
+    setDynamicOtp(`${randomCode.toString().slice(0, 3)} ${randomCode.toString().slice(3)}`);
+    setQrCountdown(30);
+  };
+
   useEffect(() => {
     const syncCards = () => {
       try {
-        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+        const saved = window.localStorage.getItem('valourian_vbank_virtual_cards_v9') || window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed && parsed.length > 0) {
-            setBookingCards(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const uniqueCards: any[] = [];
+            const seen = new globalThis.Set<string>();
+            parsed.forEach((c: any, idx: number) => {
+              const key = c?.id || `bcard-${idx}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueCards.push(c);
+              }
+            });
+            setBookingCards(uniqueCards);
           }
         }
       } catch (e) {
@@ -733,7 +830,8 @@ export function BookingApp({ user, balances, setBalances }: {
   const baseUnits = activeService === "stays" ? calculatedNights * roomsCount : activeService === "cars" ? calculatedNights : activeService === "flights" || activeService === "dining" ? totalGuests : 1;
   const roomRatesSubtotal = selectedHotel ? (selectedHotel.price * baseUnits) : 0;
   const foodPackagesSubtotal = selectedHotel && activeService === "stays" ? (getPackagesPricePerGuestPerNight() * totalGuests * calculatedNights) : 0;
-  const rawSubtotal = roomRatesSubtotal + foodPackagesSubtotal;
+  const uberTransitSubtotal = includeUberTransit ? (isScenicRouteEnabled ? 115 : 85) : 0;
+  const rawSubtotal = roomRatesSubtotal + foodPackagesSubtotal + uberTransitSubtotal;
   const taxAddition = Math.round(rawSubtotal * 0.10); // 10% Hotel Levy & local taxes
   const bookingGrandTotal = rawSubtotal + taxAddition;
 
@@ -878,15 +976,28 @@ export function BookingApp({ user, balances, setBalances }: {
             <h2 className="text-2xl font-bold tracking-tight">Booking.com</h2>
             <span className="text-[9px] bg-amber-400 text-[#003580] font-black px-1.5 py-0.5 rounded uppercase leading-none">VIP CORP</span>
           </div>
-          <div className="flex items-center gap-4 text-sm font-medium">
-            <button 
+          <div className="flex items-center gap-2.5 text-sm font-medium">
+            <motion.button 
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              id="booking-qr-pos-btn"
+              onClick={() => setShowQrModal(true)} 
+              className="hover:bg-blue-800 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer font-bold text-xs bg-blue-900/90 border border-amber-400/40 text-amber-300 shadow-sm"
+              title="Open POS Terminal Settlement QR"
+            >
+              <QrCode className="w-3.5 h-3.5 text-amber-400 animate-pulse" /> 
+              <span>POS Card QR</span>
+            </motion.button>
+            <motion.button 
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               id="booking-history-trips-btn"
               onClick={() => setShowHistory(true)} 
               className="hover:bg-blue-800 p-2 rounded-lg transition-colors flex items-center gap-2 cursor-pointer font-semibold"
             >
               <History className="w-4 h-4 text-amber-400" /> 
               <span>My Trips</span>
-            </button>
+            </motion.button>
             <span className="hidden sm:inline font-bold font-mono bg-blue-900 px-2 py-0.5 rounded border border-blue-800 text-[11px]">AUD BALANCED</span>
             <div className="w-8 h-8 bg-blue-700 rounded-full flex items-center justify-center">
                <User className="w-5 h-5 text-white" />
@@ -897,44 +1008,60 @@ export function BookingApp({ user, balances, setBalances }: {
         {/* Navigation Tabs */}
         {!showHistory && !selectedHotel && !confirmedBookingData && (
           <div className="flex items-center gap-2 overflow-x-auto pb-4 hide-scrollbar">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setActiveService("stays")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                activeService === "stays" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeService === "stays" ? "bg-blue-600/50 border border-blue-400 shadow-inner" : "hover:bg-blue-800/50 border border-transparent"
               }`}
             >
               <Building className="w-4 h-4" /> Stays
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setActiveService("flights")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                activeService === "flights" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeService === "flights" ? "bg-blue-600/50 border border-blue-400 shadow-inner" : "hover:bg-blue-800/50 border border-transparent"
               }`}
             >
               <Compass className="w-4 h-4" /> Flights
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setActiveService("cars")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                activeService === "cars" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeService === "cars" ? "bg-blue-600/50 border border-blue-400 shadow-inner" : "hover:bg-blue-800/50 border border-transparent"
               }`}
             >
               <Car className="w-4 h-4" /> Car rentals
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setActiveService("dining")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                activeService === "dining" ? "bg-blue-600/50 border border-blue-400" : "hover:bg-blue-800/50 border border-transparent"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeService === "dining" ? "bg-blue-600/50 border border-blue-400 shadow-inner" : "hover:bg-blue-800/50 border border-transparent"
               }`}
             >
               <Utensils className="w-4 h-4" /> Dining
-            </button>
+            </motion.button>
           </div>
         )}
       </div>
       
+      <AnimatePresence mode="wait">
       {showHistory ? (
-        <div className="flex-1 bg-slate-50 flex flex-col pt-4">
+        <motion.div 
+          key="booking-history-view"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3 }}
+          className="flex-1 bg-slate-50 flex flex-col pt-4"
+        >
           <div className="px-6 py-4 flex justify-between items-center border-b border-slate-200 bg-white shadow-xs">
              <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800 font-sans"><History className="w-5 h-5 text-blue-600"/> Booking History Ledger</h2>
              <button 
@@ -1137,9 +1264,16 @@ export function BookingApp({ user, balances, setBalances }: {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       ) : (
-        <div className="flex-1 flex flex-col pt-0">
+        <motion.div 
+          key="booking-main-view"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex-1 flex flex-col pt-0"
+        >
           
           {/* Main Booking.com Banner Container */}
           <div className="bg-[#003580] px-6 pb-10 pt-6">
@@ -1212,96 +1346,104 @@ export function BookingApp({ user, balances, setBalances }: {
                 </div>
 
                 {/* Floating Guest & Room picker Dropdown panel */}
-                {showGuestsDropdown && (
-                  <div className="absolute top-[105%] left-0 right-0 lg:w-64 bg-white border border-slate-200 rounded-xl shadow-2xl p-4 z-50 space-y-4">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Configure Occupants</span>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setShowGuestsDropdown(false); }}
-                        className="text-slate-400 hover:text-slate-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Adults counter */}
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-xs font-black text-slate-800">Adults</p>
-                        <p className="text-[9px] text-slate-400 font-medium">Age 13 or above</p>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        <button 
-                          onClick={() => setAdultsCount(Math.max(1, adultsCount - 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{adultsCount}</span>
-                        <button 
-                          onClick={() => setAdultsCount(Math.min(10, adultsCount + 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Children counter */}
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-xs font-black text-slate-800">Children</p>
-                        <p className="text-[9px] text-slate-400 font-medium">Age 0 to 12</p>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        <button 
-                          onClick={() => setChildrenCount(Math.max(0, childrenCount - 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{childrenCount}</span>
-                        <button 
-                          onClick={() => setChildrenCount(Math.min(10, childrenCount + 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Rooms counter */}
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                      <div>
-                        <p className="text-xs font-black text-slate-800">Rooms</p>
-                        <p className="text-[9px] text-slate-400 font-medium font-sans">Required suites</p>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        <button 
-                          onClick={() => setRoomsCount(Math.max(1, roomsCount - 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{roomsCount}</span>
-                        <button 
-                          onClick={() => setRoomsCount(Math.min(5, roomsCount + 1))}
-                          className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <button 
-                      id="close-guests-popover-btn"
-                      onClick={() => setShowGuestsDropdown(false)}
-                      className="w-full bg-[#003580] hover:bg-blue-800 text-white text-[10px] font-black uppercase py-2 rounded-lg cursor-pointer"
+                <AnimatePresence>
+                  {showGuestsDropdown && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="absolute top-[105%] left-0 right-0 lg:w-64 bg-white border border-slate-200 rounded-xl shadow-2xl p-4 z-50 space-y-4"
                     >
-                      Done Setting Guests
-                    </button>
-                  </div>
-                )}
+                      <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Configure Occupants</span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setShowGuestsDropdown(false); }}
+                          className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Adults counter */}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-black text-slate-800">Adults</p>
+                          <p className="text-[9px] text-slate-400 font-medium">Age 13 or above</p>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <button 
+                            onClick={() => setAdultsCount(Math.max(1, adultsCount - 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{adultsCount}</span>
+                          <button 
+                            onClick={() => setAdultsCount(Math.min(10, adultsCount + 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Children counter */}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-black text-slate-800">Children</p>
+                          <p className="text-[9px] text-slate-400 font-medium">Age 0 to 12</p>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <button 
+                            onClick={() => setChildrenCount(Math.max(0, childrenCount - 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{childrenCount}</span>
+                          <button 
+                            onClick={() => setChildrenCount(Math.min(10, childrenCount + 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Rooms counter */}
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                        <div>
+                          <p className="text-xs font-black text-slate-800">Rooms</p>
+                          <p className="text-[9px] text-slate-400 font-medium font-sans">Required suites</p>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <button 
+                            onClick={() => setRoomsCount(Math.max(1, roomsCount - 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="font-mono font-black text-sm text-slate-800 w-5 text-center">{roomsCount}</span>
+                          <button 
+                            onClick={() => setRoomsCount(Math.min(5, roomsCount + 1))}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <button 
+                        id="close-guests-popover-btn"
+                        onClick={() => setShowGuestsDropdown(false)}
+                        className="w-full bg-[#003580] hover:bg-blue-800 text-white text-[10px] font-black uppercase py-2 rounded-lg cursor-pointer"
+                      >
+                        Done Setting Guests
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Submit Buttons */}
@@ -1346,9 +1488,17 @@ export function BookingApp({ user, balances, setBalances }: {
               </div>
             ) : (
               <div className="max-w-4xl mx-auto">
+                <AnimatePresence mode="wait">
                 {confirmedBookingData ? (
                   /* Beautiful Stay Confirmation Card display right below/after successful submission/payment of order */
-                  <div className="bg-white rounded-[1.5rem] shadow-xl border-2 border-emerald-500 overflow-hidden p-6 space-y-6">
+                  <motion.div 
+                    key="booking-confirmed-card"
+                    initial={{ opacity: 0, scale: 0.94, y: 15 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.94, y: -15 }}
+                    transition={{ type: "spring", duration: 0.45, bounce: 0.2 }}
+                    className="bg-white rounded-[1.5rem] shadow-xl border-2 border-emerald-500 overflow-hidden p-6 space-y-6"
+                  >
                     <div className="flex flex-col items-center text-center pb-4 border-b border-slate-100">
                       <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-3">
                         <CheckCircle2 className="w-8 h-8" />
@@ -1402,11 +1552,18 @@ export function BookingApp({ user, balances, setBalances }: {
                         Book Another Sovereign Stay
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 ) : selectedHotel ? (
                   
                   /* Detailed View card with included Foods Packages select sliders and dynamic ledger calculation */
-                  <div className="bg-white rounded-[1.5rem] shadow-xl border border-slate-200 overflow-hidden">
+                  <motion.div 
+                    key={`selected-hotel-${selectedHotel.id}`}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="bg-white rounded-[1.5rem] shadow-xl border border-slate-200 overflow-hidden"
+                  >
                     <div className="h-56 w-full bg-slate-200 overflow-hidden relative">
                        <img src={selectedHotel.image} alt={selectedHotel.name} className="w-full h-full object-cover" />
                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-6">
@@ -1582,17 +1739,143 @@ export function BookingApp({ user, balances, setBalances }: {
                           </div>
 
                         </div>
+
+                        {/* Uber Executive Transit & Airport Transfer Add-on with Scenic Route Detour */}
+                        <div className="mt-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 border border-slate-700 rounded-2xl p-4 text-white shadow-xl space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0 shadow-md">
+                                <Car className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-xs font-black text-white uppercase tracking-wider">Uber Executive Airport & City Transit</h4>
+                                  <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold font-mono">
+                                    BLACK SUV
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-300 mt-0.5 leading-tight">
+                                  Private chauffeured airport and city transfer directly to {selectedHotel.name}.
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextTransit = !includeUberTransit;
+                                setIncludeUberTransit(nextTransit);
+                                if (nextTransit) {
+                                  toast.success("Uber Executive Transit added to reservation!");
+                                } else {
+                                  toast.info("Uber Transit removed.");
+                                }
+                              }}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto ${
+                                includeUberTransit 
+                                  ? "bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20" 
+                                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600"
+                              }`}
+                            >
+                              {includeUberTransit ? "Transit Included (AUD $85)" : "+ Add Uber Transit ($85)"}
+                            </button>
+                          </div>
+
+                          {/* Scenic Route Detour Control Card */}
+                          <div className="bg-slate-950/70 border border-slate-800/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                                  Scenic Route Detour (Uber Transit)
+                                </span>
+                                {isScenicRouteEnabled && (
+                                  <span className="text-[8px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono font-bold">
+                                    Randomized Waypoints Active
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-400 leading-tight">
+                                Modifies the transit route path generation to add randomized scenic coastal, botanical, and panoramic viewpoints.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                id="toggle-scenic-route-btn"
+                                type="button"
+                                onClick={() => {
+                                  const nextState = !isScenicRouteEnabled;
+                                  setIsScenicRouteEnabled(nextState);
+                                  setShowMap(true);
+                                  if (nextState) {
+                                    toast.success("Scenic Route Detour Activated: Added randomized panoramic waypoints!");
+                                  } else {
+                                    toast.info("Direct Route Path restored.");
+                                  }
+                                }}
+                                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+                                  isScenicRouteEnabled
+                                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-cyan-500/30"
+                                    : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                                }`}
+                              >
+                                <Compass className="w-3.5 h-3.5" />
+                                {isScenicRouteEnabled ? "Scenic Detour: ON" : "Toggle Scenic Route"}
+                              </button>
+
+                              {isScenicRouteEnabled && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setScenicWaypointSeed(s => s + 1);
+                                    setShowMap(true);
+                                    toast.success("Re-randomized scenic waypoints and updated detour geometry!");
+                                  }}
+                                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-colors cursor-pointer"
+                                  title="Shuffle & regenerate randomized waypoints"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Local Area Map */}
-                      {/* Local Area Map */}
-                      <div className="pt-2">
-                        <button 
-                          onClick={() => setShowMap(!showMap)} 
-                          className="px-4 py-2 bg-[#003580] text-white rounded-lg font-bold text-xs flex items-center gap-2 mb-2 w-full justify-center transition-colors hover:bg-blue-800"
-                        >
-                          <Map className="w-4 h-4" /> {showMap ? 'Hide Local Area & Attractions Map' : 'Explore Local Area & Attractions Map'}
-                        </button>
+                      {/* Local Area Map with Scenic Route Controls */}
+                      <div className="pt-2 space-y-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <button 
+                            onClick={() => setShowMap(!showMap)} 
+                            className="flex-1 px-4 py-2.5 bg-[#003580] hover:bg-blue-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+                          >
+                            <Map className="w-4 h-4" /> {showMap ? 'Hide Local Area & Attractions Map' : 'Explore Local Area & Transit Map'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextState = !isScenicRouteEnabled;
+                              setIsScenicRouteEnabled(nextState);
+                              setShowMap(true);
+                              if (nextState) {
+                                toast.success("Scenic Route Detour Activated: Added randomized panoramic waypoints!");
+                              } else {
+                                toast.info("Direct Route Path restored.");
+                              }
+                            }}
+                            className={`px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                              isScenicRouteEnabled 
+                                ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20" 
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Compass className="w-4 h-4" />
+                            {isScenicRouteEnabled ? "Scenic Detour: ON" : "Scenic Route (Uber Transit)"}
+                          </button>
+                        </div>
+
                         <AnimatePresence>
                           {showMap && (
                             <motion.div
@@ -1602,7 +1885,14 @@ export function BookingApp({ user, balances, setBalances }: {
                               transition={{ duration: 0.3 }}
                               className="overflow-hidden"
                             >
-                              <HotelMapViewer hotelName={selectedHotel.name} hotelLocation={selectedHotel.location} />
+                              <HotelMapViewer 
+                                hotelName={selectedHotel.name} 
+                                hotelLocation={selectedHotel.location} 
+                                scenicRoute={isScenicRouteEnabled}
+                                onToggleScenicRoute={() => setIsScenicRouteEnabled(prev => !prev)}
+                                waypointSeed={scenicWaypointSeed}
+                                onRegenerateWaypoints={() => setScenicWaypointSeed(s => s + 1)}
+                              />
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -1642,43 +1932,217 @@ export function BookingApp({ user, balances, setBalances }: {
                         </div>
 
                         {/* Interactive Billing Inputs */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-3 border-t border-slate-200 text-xs">
+                        {/* Interactive Billing Inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-3 border-t border-slate-200 text-xs">
                           <div>
-                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Billing Email</label>
+                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Billing Recipient Email</label>
                             <input
                               type="email"
                               value={confirmationEmail}
                               onChange={(e) => setConfirmationEmail(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:border-[#003580] focus:outline-none font-semibold text-slate-800"
-                              placeholder="Confirmation Email"
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 focus:border-[#003580] focus:outline-none font-semibold text-slate-800"
+                              placeholder="e.g. asim.nsw@gmail.com"
                             />
                           </div>
                           <div>
-                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Contact Phone Number</label>
+                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Contact Phone Number (VIP Concierge)</label>
                             <input
                               type="tel"
                               value={contactPhone}
                               onChange={(e) => setContactPhone(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:border-[#003580] focus:outline-none font-semibold text-slate-800 font-mono"
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 focus:border-[#003580] focus:outline-none font-semibold text-slate-800 font-mono"
                               placeholder="e.g. +61-401044335"
                             />
                           </div>
-                          <div>
-                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1">Ledger Route Card</label>
-                            <select
-                              value={selectedBookingCardIndex}
-                              onChange={(e) => setSelectedBookingCardIndex(Number(e.target.value))}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:border-[#003580] focus:outline-none font-bold text-[#003580] cursor-pointer"
+                        </div>
+
+                        {/* Dedicated Card Details Display & Affiliated POS Settlement Rail */}
+                        <div className="mt-4 pt-3 border-t border-slate-200 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <CreditCard className="w-4 h-4 text-[#003580]" />
+                              <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Settlement Virtual Card Details</span>
+                            </div>
+                            <span className="text-[9px] bg-blue-100 text-[#003580] font-extrabold px-2 py-0.5 rounded-full font-mono uppercase">
+                              Active Route: {bookingCards[selectedBookingCardIndex]?.network || 'Visa'} (*{bookingCards[selectedBookingCardIndex]?.last4 || '4242'})
+                            </span>
+                          </div>
+
+                          {/* Card Selection Pills */}
+                          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            {bookingCards.map((card, idx) => {
+                              const isSelected = selectedBookingCardIndex === idx;
+                              return (
+                                <motion.button
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  key={`booking-card-${card.id || 'card'}-${idx}`}
+                                  type="button"
+                                  onClick={() => setSelectedBookingCardIndex(idx)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer border ${
+                                    isSelected 
+                                      ? "bg-[#003580] text-white border-[#003580] shadow-sm" 
+                                      : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <span>{card.network || 'Card'}</span>
+                                  <span className="font-mono text-[10px] opacity-80">*{card.last4 || card.cardNumber?.replace(/\s+/g, '').slice(-4) || '4242'}</span>
+                                  {isSelected && <Check className="w-3 h-3 text-amber-400" />}
+                                </motion.button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Realistic Virtual Card Display with Framer Motion layout */}
+                          {(() => {
+                            const curCard = bookingCards[selectedBookingCardIndex] || bookingCards[0] || {
+                              network: "Visa",
+                              last4: "4242",
+                              fullNumber: "4242 4242 4242 4242",
+                              holder: "ASIM ARYAL",
+                              expiry: "12/28",
+                              balance: 15000
+                            };
+                            const isMastercard = (curCard.network || '').toLowerCase().includes('mastercard');
+                            const isAmex = (curCard.network || '').toLowerCase().includes('amex') || (curCard.network || '').toLowerCase().includes('american');
+
+                            const cardBg = isMastercard 
+                              ? "bg-gradient-to-tr from-stone-900 via-neutral-900 to-amber-950 border-amber-500/40 text-white" 
+                              : isAmex 
+                              ? "bg-gradient-to-tr from-slate-900 via-zinc-800 to-stone-900 border-amber-300/50 text-white" 
+                              : "bg-gradient-to-tr from-[#001f4d] via-[#003580] to-slate-950 border-blue-400/40 text-white";
+
+                            const displayNum = isCardNumberRevealed 
+                              ? (curCard.fullNumber || `4242 4242 4242 ${curCard.last4 || '4242'}`)
+                              : `•••• •••• •••• ${curCard.last4 || '4242'}`;
+
+                            return (
+                              <motion.div 
+                                layout
+                                initial={{ opacity: 0, scale: 0.98 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: 0.25 }}
+                                className={`rounded-2xl p-4 sm:p-5 border shadow-xl relative overflow-hidden ${cardBg}`}
+                              >
+                                {/* Holographic background accent */}
+                                <div className="absolute -top-16 -right-16 w-44 h-44 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+                                <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-gradient-to-tr from-amber-400/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+                                {/* Top Row: EMV Chip, NFC, and Brand */}
+                                <div className="flex items-center justify-between mb-4 relative z-10">
+                                  <div className="flex items-center gap-3">
+                                    {/* Golden Metallic Chip */}
+                                    <div className="w-9 h-6 rounded-md bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 p-0.5 shadow-sm border border-amber-200/50 flex flex-col justify-between">
+                                      <div className="h-1 border-b border-amber-700/30"></div>
+                                      <div className="h-1 border-b border-amber-700/30"></div>
+                                    </div>
+                                    {/* Contactless Wave */}
+                                    <div className="flex items-center text-amber-300/80">
+                                      <Wifi className="w-4 h-4 rotate-90" />
+                                    </div>
+                                    <span className="text-[10px] font-mono font-bold tracking-widest text-blue-200/80 uppercase">VALOURIAN V-PAY</span>
+                                  </div>
+                                  
+                                  {/* Network Logo styling */}
+                                  <div className="text-right">
+                                    {isMastercard ? (
+                                      <div className="flex items-center -space-x-2">
+                                        <div className="w-5 h-5 rounded-full bg-red-600/90 shadow-sm" />
+                                        <div className="w-5 h-5 rounded-full bg-amber-500/90 shadow-sm" />
+                                      </div>
+                                    ) : isAmex ? (
+                                      <span className="text-xs font-black tracking-widest text-amber-300 uppercase font-mono">AMEX CENTURION</span>
+                                    ) : (
+                                      <span className="text-base font-black italic tracking-wider text-white font-sans">VISA</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Card Number Row with Eye Toggle & Copy */}
+                                <div className="my-3 relative z-10 flex items-center justify-between">
+                                  <span className="font-mono text-base sm:text-lg font-bold tracking-[0.2em] text-white select-all">
+                                    {displayNum}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsCardNumberRevealed(!isCardNumberRevealed)}
+                                      className="p-1 rounded-md hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
+                                      title={isCardNumberRevealed ? "Hide Card Digits" : "Reveal Full Card Digits"}
+                                    >
+                                      {isCardNumberRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(curCard.fullNumber || `424242424242${curCard.last4 || '4242'}`);
+                                        toast.success("Card number copied to clipboard!");
+                                      }}
+                                      className="p-1 rounded-md hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
+                                      title="Copy Card Number"
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Bottom Row: Cardholder, Expiry, Rolling CVV & Balance */}
+                                <div className="flex flex-wrap items-end justify-between gap-3 pt-2 border-t border-white/15 relative z-10 text-[11px]">
+                                  <div>
+                                    <span className="text-[8px] uppercase tracking-widest text-white/60 font-semibold block leading-none mb-0.5">Cardholder</span>
+                                    <span className="font-mono font-bold tracking-wider text-white uppercase text-xs">{curCard.holder || 'ASIM ARYAL'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] uppercase tracking-widest text-white/60 font-semibold block leading-none mb-0.5">Expires</span>
+                                    <span className="font-mono font-bold text-white text-xs">{curCard.expiry || '12/28'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] uppercase tracking-widest text-white/60 font-semibold block leading-none mb-0.5">Dynamic CVV</span>
+                                    <span className="font-mono font-bold text-amber-300 text-xs bg-black/30 px-1.5 py-0.5 rounded border border-amber-400/30 flex items-center gap-1">
+                                      <Shield className="w-2.5 h-2.5" />
+                                      {dynamicOtp.split(' ')[0]}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-[8px] uppercase tracking-widest text-white/60 font-semibold block leading-none mb-0.5">Ledger Balance</span>
+                                    <span className="font-mono font-extrabold text-emerald-300 text-xs">
+                                      AUD ${curCard.balance?.toLocaleString() || '15,000'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            );
+                          })()}
+
+                          {/* High-Visibility QR-Based POS Verification Overlay Banner */}
+                          <div className="p-3.5 bg-gradient-to-r from-blue-900/10 via-amber-500/10 to-blue-900/10 border border-blue-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-[#003580] text-amber-400 flex items-center justify-center shrink-0 shadow-md">
+                                <QrCode className="w-5 h-5 animate-pulse" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-black text-slate-900">Affiliated POS Terminal Clearance</span>
+                                  <span className="text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded uppercase font-mono">
+                                    POS Ready
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                                  Instant QR verification at affiliated hotel front desk, lounge, valet, and partner POS terminals.
+                                </p>
+                              </div>
+                            </div>
+                            <motion.button
+                              whileHover={{ scale: 1.03 }}
+                              whileTap={{ scale: 0.97 }}
+                              type="button"
+                              id="open-pos-qr-overlay-btn"
+                              onClick={() => setShowQrModal(true)}
+                              className="px-3.5 py-2.5 bg-[#003580] hover:bg-blue-800 text-amber-300 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-400/30 whitespace-nowrap"
                             >
-                              {bookingCards.map((card, idx) => (
-                                <option key={card.id || idx} value={idx}>
-                                  {card.network || card.bank || 'Corp Card'} (*{card.last4 || card.cardNumber?.replace(/\s+/g, '').slice(-4)})
-                                </option>
-                              ))}
-                              {bookingCards.length === 0 && (
-                                <option value={0}>Sovereign Clearing</option>
-                              )}
-                            </select>
+                              <QrCode className="w-4 h-4 text-amber-400" />
+                              <span>Open POS QR Code</span>
+                            </motion.button>
                           </div>
                         </div>
                       </div>
@@ -1712,11 +2176,18 @@ export function BookingApp({ user, balances, setBalances }: {
                       </div>
 
                     </div>
-                  </div>
+                  </motion.div>
                 ) : (
                   
                   /* Search list grid displaying results */
-                  <div className="space-y-4">
+                  <motion.div 
+                    key={`search-list-${activeService}`}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -15 }}
+                    transition={{ duration: 0.25 }}
+                    className="space-y-4"
+                  >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                       <h3 className="text-base font-black uppercase text-slate-700 tracking-wider">
                         Luxury {activeService} found in {destination}
@@ -1725,26 +2196,36 @@ export function BookingApp({ user, balances, setBalances }: {
                         <span className="text-xs text-slate-500 font-bold uppercase tracking-wider mr-1">Filter:</span>
                         <button 
                           onClick={() => setMinRatingFilter(0)} 
-                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 0 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${minRatingFilter === 0 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         >
                           All
                         </button>
                         <button 
                           onClick={() => setMinRatingFilter(4.8)} 
-                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 4.8 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${minRatingFilter === 4.8 ? 'bg-[#003580] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         >
                           4.8+ Stars
                         </button>
                         <button 
                           onClick={() => setMinRatingFilter(5)} 
-                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors ${minRatingFilter === 5 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${minRatingFilter === 5 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         >
                           ★ 5 Star Only
                         </button>
                       </div>
                     </div>
-                    {activeDataList.filter((item: any) => (item.stars || item.rating || 0) >= minRatingFilter).map((item: any) => (
-                      <motion.div whileHover={{ scale: 1.02, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }} key={item.id} className="bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300">
+                    <AnimatePresence mode="popLayout">
+                    {activeDataList.filter((item: any) => (item.stars || item.rating || 0) >= minRatingFilter).map((item: any, idx: number) => (
+                      <motion.div 
+                        layout
+                        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.28, delay: idx * 0.03 }}
+                        whileHover={{ y: -3, boxShadow: '0 12px 28px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06)' }} 
+                        key={item.id} 
+                        className="bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300"
+                      >
                         <div className="w-full sm:w-64 h-48 bg-slate-100 relative overflow-hidden shrink-0">
                           <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
                           <div className="absolute top-3 left-3 bg-[#003580] text-amber-400 font-extrabold px-2 py-0.5 rounded text-[8px] tracking-wider uppercase">
@@ -1803,13 +2284,259 @@ export function BookingApp({ user, balances, setBalances }: {
                         </div>
                       </motion.div>
                     ))}
-                  </div>
+                    </AnimatePresence>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* Affiliated POS Terminal QR-Based Payment Verification Overlay Modal */}
+      <AnimatePresence>
+        {showQrModal && (
+          <motion.div
+            key="pos-qr-verification-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowQrModal(false);
+                setScanApproved(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="bg-slate-900 border border-slate-700/80 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative text-white"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top Accent Gradient Bar */}
+              <div className="h-1.5 w-full bg-gradient-to-r from-cyan-400 via-blue-500 to-amber-400" />
+
+              {/* Header */}
+              <div className="p-5 pb-4 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-cyan-400 shadow-inner">
+                    <QrCode className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black tracking-tight uppercase text-white flex items-center gap-1.5">
+                      POS Terminal Verification
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-bold px-1.5 py-0.5 rounded">
+                        NPP LIVE
+                      </span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      Affiliated Front Desk & Concierge Scanning Protocol
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="close-qr-modal-btn"
+                  onClick={() => {
+                    setShowQrModal(false);
+                    setScanApproved(false);
+                  }}
+                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Content Body */}
+              <div className="p-5 space-y-4">
+                {/* QR Code Container with High-Tech Laser Reticle */}
+                <div className="relative bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col items-center justify-center">
+                  {/* Scanner Corner Brackets */}
+                  <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-cyan-400 rounded-tl-sm pointer-events-none" />
+                  <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-cyan-400 rounded-tr-sm pointer-events-none" />
+                  <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-cyan-400 rounded-bl-sm pointer-events-none" />
+                  <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-cyan-400 rounded-br-sm pointer-events-none" />
+
+                  {/* QR Code Canvas */}
+                  <div className="p-3 bg-white rounded-xl shadow-lg relative overflow-hidden">
+                    <QRCodeSVG
+                      value={JSON.stringify({
+                        protocol: "VALOURIAN_POS_NPP_V1",
+                        terminalRef: "VAL-POS-SYD-8801",
+                        merchant: selectedHotel?.name || "Crown Towers Sovereign Stay",
+                        cardholder: bookingCards[selectedBookingCardIndex]?.holder || "ASIM ARYAL",
+                        cardLast4: bookingCards[selectedBookingCardIndex]?.last4 || "4242",
+                        network: bookingCards[selectedBookingCardIndex]?.network || "Visa",
+                        authAmount: bookingGrandTotal || 2500,
+                        currency: globalCur || "AUD",
+                        rollingOtp: dynamicOtp.replace(/\s+/g, ""),
+                        expirySeconds: qrCountdown,
+                        issuedAt: new Date().toISOString(),
+                        signature: `SIG_VAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+                      })}
+                      size={180}
+                      level="H"
+                      includeMargin={false}
+                    />
+
+                    {/* Animated Sweeping Laser Scanner */}
+                    <motion.div
+                      animate={{ y: [0, 170, 0] }}
+                      transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                      className="absolute left-1 right-1 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#22d3ee] pointer-events-none"
+                    />
+                  </div>
+
+                  {/* Rolling 30s OTP and Countdown */}
+                  <div className="mt-4 w-full flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5 text-amber-400" />
+                      <div>
+                        <span className="text-[8px] uppercase tracking-widest text-slate-400 block leading-none">
+                          Rolling Security Token
+                        </span>
+                        <span className="font-mono text-xs font-bold text-amber-300">
+                          {dynamicOtp}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className="text-[8px] uppercase tracking-widest text-slate-400 block leading-none">
+                          Refreshes in
+                        </span>
+                        <span className="font-mono text-xs font-black text-cyan-400">
+                          {qrCountdown}s
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={generateNewOtp}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                        title="Force Refresh Token"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Countdown Progress Bar */}
+                  <div className="w-full h-1 bg-slate-800 rounded-full mt-2 overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-cyan-400 to-amber-400"
+                      animate={{ width: `${(qrCountdown / 30) * 100}%` }}
+                      transition={{ duration: 1, ease: "linear" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Card & Authorization Summary */}
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-slate-400 text-[11px]">
+                    <span>Target Merchant / Front Desk:</span>
+                    <span className="font-bold text-white max-w-[200px] truncate text-right">
+                      {selectedHotel?.name || "Crown Towers Sydney"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1.5 border-t border-slate-700/40">
+                    <span>Authorized Card:</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {bookingCards[selectedBookingCardIndex]?.network || 'Visa'} •••• {bookingCards[selectedBookingCardIndex]?.last4 || '4242'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1.5 border-t border-slate-700/40">
+                    <span>Hold / Clearance Total:</span>
+                    <span className="font-mono font-black text-emerald-400 text-sm">
+                      {globalCur} {formatConverted(bookingGrandTotal || 2500)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Terminal Scan Status Banner */}
+                {scanApproved && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="p-3 bg-emerald-500/15 border border-emerald-500/40 rounded-xl flex items-center gap-2.5 text-emerald-300 text-xs"
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="font-bold">Affiliated POS Terminal Scan Approved</p>
+                      <p className="text-[10px] text-emerald-400/80 font-mono mt-0.5">
+                        Terminal #04 (Barangaroo Front Desk) • Auth #VAL-POS-8801 • CLEARED
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="space-y-2 pt-1">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    id="simulate-pos-scan-btn"
+                    onClick={handleSimulateTerminalScan}
+                    disabled={simulatingScan}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer font-sans"
+                  >
+                    {simulatingScan ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Communicating with Affiliated Terminal...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Terminal className="w-4 h-4 text-slate-950" />
+                        <span>Simulate Affiliated POS Terminal Scan</span>
+                      </>
+                    )}
+                  </motion.button>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const payload = JSON.stringify({
+                          protocol: "VALOURIAN_POS_NPP_V1",
+                          terminalRef: "VAL-POS-SYD-8801",
+                          merchant: selectedHotel?.name || "Crown Towers Sovereign Stay",
+                          cardLast4: bookingCards[selectedBookingCardIndex]?.last4 || "4242",
+                          authAmount: bookingGrandTotal || 2500,
+                          otp: dynamicOtp.replace(/\s+/g, "")
+                        });
+                        navigator.clipboard?.writeText(payload);
+                        toast.success("POS Settlement Payload copied to clipboard!");
+                      }}
+                      className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-[11px] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Payload</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQrModal(false);
+                        setScanApproved(false);
+                      }}
+                      className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-[11px] rounded-xl transition-colors cursor-pointer text-center"
+                    >
+                      Done / Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <EmailPreviewModal data={previewEmail} onClose={() => setPreviewEmail(null)} />
     </div>

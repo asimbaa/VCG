@@ -91,9 +91,9 @@ export function NFCTapModal({ isOpen, onClose, cards, onPaymentComplete }: NFCTa
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">Select Source Card</label>
                     <div className="space-y-2">
-                      {cards.map(card => (
+                      {cards.map((card, idx) => (
                         <div 
-                          key={card.id}
+                          key={`nfc-card-${card.id || 'c'}-${idx}`}
                           onClick={() => setSelectedCardId(card.id)}
                           className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${selectedCardId === card.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700'}`}
                         >

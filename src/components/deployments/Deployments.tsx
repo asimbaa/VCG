@@ -97,8 +97,11 @@ export function Deployments({ user }: { user: any }) {
                       </p>
                       
                       <div className="bg-white/5 border border-white/10 p-8 rounded-2xl backdrop-blur-md">
-                          <p className="text-sm font-bold text-blue-400 uppercase tracking-[0.2em] mb-2">Office of the Founder / CEO</p>
-                          <h2 className="text-3xl font-bold text-white tracking-tight">Asim Aryal</h2>
+                          <p className="text-sm font-bold text-[#ffcc00] uppercase tracking-[0.2em] mb-2">Office of the Founder, CEO & Managing Director</p>
+                          <h2 className="text-3xl font-black text-white tracking-tight">ASIM ARYAL</h2>
+                          <div className="mt-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                            Sole Beneficial Owner • Unchallengeable 100% Equity & Permanent Governance Authority
+                          </div>
                       </div>
                    </div>
                </div>

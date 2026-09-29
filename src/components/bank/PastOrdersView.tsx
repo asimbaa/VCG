@@ -123,12 +123,12 @@ export function PastOrdersView({ transactions }: { transactions: any[] }) {
           <h2 className="text-xl font-bold text-white tracking-tight">Institutional Past Orders & Procurement</h2>
           <p className="text-slate-400 text-sm mt-1">Review your completed capital allocations, hardware procurement, and cleared transactions.</p>
           
-          <div className="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4 h-48 w-full">
+          <div className="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4 h-48 w-full min-w-0 relative">
              <div className="flex items-center gap-2 mb-2">
                <TrendingUp className="w-4 h-4 text-emerald-500" />
                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Food Delivery Activity (6 Mo)</span>
              </div>
-             <ResponsiveContainer width="99%" height="100%">
+             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={130}>
                <AreaChart data={foodDeliveryData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                  <defs>
                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">

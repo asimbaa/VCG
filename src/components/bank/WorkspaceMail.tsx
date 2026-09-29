@@ -558,7 +558,7 @@ const mockEmails = [
 ];
 
 const accounts = [
-  { email: "asim@valourian.com", name: "Mr. Asim Aryal", status: "Founder & CEO (Unlimited)", password: "VAL_CEO_MAX_POWER_2026", designation: "Founder & CEO" },
+  { email: "asim@valourian.com", name: "Mr. Asim Aryal", status: "Founder, CEO, Managing Director (Perpetual Control)", password: "VAL_CEO_MAX_POWER_2026", designation: "Founder, CEO, Managing Director" },
   { email: "aleks@valourian.com", name: "Aleks", status: "Board Director - Operations", password: "VC_BOARD_OPS_NET_99", designation: "Board Director" },
   { email: "justin@valourian.com", name: "Justin", status: "Board Director - Security", password: "VC_BOARD_SEC_NET_88", designation: "Board Director" },
   { email: "asim.nsw@gmail.com", name: "Asim Aryal (Personal)", status: "Active - 25 Yr Paid", password: "VAL_NSW_GMAIL_SECURE", designation: "Personal Mail" },

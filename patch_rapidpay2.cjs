@@ -1,31 +1,55 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/components/pay/RapidPay.tsx', 'utf8');
+let content = fs.readFileSync('src/components/pay/RapidPay.tsx', 'utf-8');
 
-const processSearch = `    if (transferType === "payid") {
-      transferTo = \`\${accountName} (PayID: \${payIdValue}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia\`;
-      typeLabel = "au_bsb_payid";
-    }`;
+const scannerComponent = `
+const RealQRScanner = ({ onScan }: { onScan: (data: string) => void }) => {
+  const webcamRef = useRef<Webcam>(null);
 
-const processReplace = `    if (transferType === "payid") {
-      transferTo = \`\${accountName} (PayID: \${payIdValue}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia\`;
-      typeLabel = "au_bsb_payid";
-    }`;
-
-// Since the file already sets typeLabel = "au_bsb_payid" and the success message uses NPP logic for real-time, we are good. Let's just make sure the toast matches "earliest convenience".
-const successSearch = `      } else {
-        toast.success(\`Transfer of \${amount} to \${transferTo} successful.\`);
-      }`;
-
-const successReplace = `      } else {
-        if (transferType === 'payid') {
-           toast.success(\`Transfer of $\${amount} to \${transferTo} initiated via NPP. Funds will be available in the recipient's account at the earliest convenience.\`, { duration: 6000 });
-        } else {
-           toast.success(\`Transfer of \${amount} to \${transferTo} successful.\`);
+  const capture = useCallback(() => {
+    if (webcamRef.current) {
+      const video = (webcamRef.current as any).video;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+          if (code) {
+            onScan(code.data);
+          }
         }
-      }`;
+      }
+    }
+  }, [onScan]);
 
-if (code.includes(successSearch)) {
-    code = code.replace(successSearch, successReplace);
+  useEffect(() => {
+    const interval = setInterval(capture, 500);
+    return () => clearInterval(interval);
+  }, [capture]);
+
+  return (
+    <div className="relative w-full h-full overflow-hidden rounded-2xl">
+      <Webcam
+        ref={webcamRef}
+        audio={false}
+        screenshotFormat="image/jpeg"
+        videoConstraints={{ facingMode: "environment" }}
+        className="object-cover w-full h-full"
+      />
+      <div className="absolute inset-0 border-2 border-dashed border-emerald-500/50 pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-transparent to-emerald-500/20 border-b border-emerald-500 animate-[scan_2s_ease-in-out_infinite_alternate] pointer-events-none"></div>
+    </div>
+  );
+};
+`;
+
+if (!content.includes('const RealQRScanner =')) {
+    content = content.replace('export function RapidPay(', scannerComponent + '\nexport function RapidPay(');
 }
 
-fs.writeFileSync('src/components/pay/RapidPay.tsx', code);
+fs.writeFileSync('src/components/pay/RapidPay.tsx', content);

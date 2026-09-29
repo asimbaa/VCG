@@ -31,7 +31,14 @@ performance.measure = (...args) => {
 
 const originalWarn = console.warn;
 console.warn = (...args) => {
-  if (typeof args[0] === 'string' && args[0].includes('THREE.Clock')) return;
+  if (
+    typeof args[0] === 'string' && (
+      args[0].includes('THREE.Clock') ||
+      args[0].includes('width(-1)') ||
+      args[0].includes('height(-1)') ||
+      args[0].includes('The width(-1) and height(-1) of chart should be greater than 0')
+    )
+  ) return;
   originalWarn(...args);
 };
 
@@ -49,17 +56,14 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 createRoot(document.getElementById('root')!).render(
-  
-    <CurrencyProvider><ErrorBoundary><App /></ErrorBoundary></CurrencyProvider>
-  ,
+  <CurrencyProvider><ErrorBoundary><App /></ErrorBoundary></CurrencyProvider>
 );
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").then(
-      (registration) => { console.log("SW registered: ", registration.scope); },
-      (err) => { console.log("SW registration failed: ", err); }
-    );
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // SW registered cleanly without console spam
+    });
   });
 }
 

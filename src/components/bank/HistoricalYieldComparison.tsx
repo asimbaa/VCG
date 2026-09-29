@@ -28,8 +28,8 @@ export function HistoricalYieldComparison() {
         </div>
       </div>
       
-      <div className="h-[300px] w-full">
-        <ResponsiveContainer width="99%" height="100%">
+      <div className="h-[300px] w-full min-w-0 relative">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
           <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} dy={10} />

@@ -931,16 +931,17 @@ DEPLOYMENT DATE : ${new Date().toLocaleDateString()}
 VALOURIAN CUSTODY SUMMARY:
 -------------------------------------------------------------------
 This legal instrument confirms that Valourian Capital, under the
-leadership of Founder, CEO & Chairman Mr. Asim Aryal, retains full 
+leadership of Founder, CEO & Managing Director Mr. Asim Aryal, retains full 
 unconditional sovereign title, absolute IP propagation rights, and 
 all related physical/digital proprietary interests in this asset.
+Unchallengeable 100% controlling ownership and sole executive veto.
 
 REPRESENTATIVES & ATTESTATION:
 -------------------------------------------------------------------
 All corporate actions and payments are fully debited from safe 
 liquidity pools and authenticated by the Valourian Board:
 
-- Founder & CEO: Mr. Asim Aryal (asim.nsw@gmail.com)
+- Founder, CEO & Managing Director: Mr. Asim Aryal (asim.nsw@gmail.com)
 - Director of Operations: Aleks (aleks@valourian.com)
 - Director of Security: Justin (justin@valourian.com)
 
@@ -992,7 +993,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
         receiverEmail: "aleks@valourian.com",
         subject: `[BOARD RESOLUTION] Safe-Sync Active Title Clearance - ${assetName}`,
         preview: `Notification of Sovereign IP Acquisition for "${assetName}" under custody of Valourian Capital.`,
-        body: `Hello Aleks,\n\nThis board memo confirms that Valourian Capital has successfully finalized the acquisition, checkout clearance, and custody protocol for the following asset:\n\nAsset: ${assetName}\nType: ${assetType}\nAllocated Funds: $${cost.toLocaleString()} AUD\n\nThis asset has been fully linked with our active DNS routes and resolved on valourian.com. Direct safe-sync validation is online.\n\nBest regards,\nMr. Asim Aryal\nFounder, CEO & Chairman\nValourian Capital`
+        body: `Hello Aleks,\n\nThis board memo confirms that Valourian Capital has successfully finalized the acquisition, checkout clearance, and custody protocol for the following asset:\n\nAsset: ${assetName}\nType: ${assetType}\nAllocated Funds: $${cost.toLocaleString()} AUD\n\nThis asset has been fully linked with our active DNS routes and resolved on valourian.com. Direct safe-sync validation is online.\n\nBest regards,\nMr. Asim Aryal\nFounder, CEO & Managing Director\nValourian Capital (100% Unchallenged Controlling Ownership)`
       }, setPreviewEmail);
 
       // Send email to Justin
@@ -1002,7 +1003,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
         receiverEmail: "justin@valourian.com",
         subject: `[BOARD RESOLUTION] Safe-Sync Active Title Clearance - ${assetName}`,
         preview: `Notification of Sovereign IP Acquisition for "${assetName}" under custody of Valourian Capital.`,
-        body: `Hello Justin,\n\nThis board memo confirms that Valourian Capital has successfully finalized the acquisition, checkout clearance, and custody protocol for the following asset:\n\nAsset: ${assetName}\nType: ${assetType}\nAllocated Funds: $${cost.toLocaleString()} AUD\n\nThis asset has been fully linked with our active DNS routes and resolved on valourian.com. Direct safe-sync validation is online.\n\nBest regards,\nMr. Asim Aryal\nFounder, CEO & Chairman\nValourian Capital`
+        body: `Hello Justin,\n\nThis board memo confirms that Valourian Capital has successfully finalized the acquisition, checkout clearance, and custody protocol for the following asset:\n\nAsset: ${assetName}\nType: ${assetType}\nAllocated Funds: $${cost.toLocaleString()} AUD\n\nThis asset has been fully linked with our active DNS routes and resolved on valourian.com. Direct safe-sync validation is online.\n\nBest regards,\nMr. Asim Aryal\nFounder, CEO & Managing Director\nValourian Capital (100% Unchallenged Controlling Ownership)`
       });
 
       toast.success(`Audit notice forwarded to Board members Aleks & Justin. Received successfully in workspace.`, { icon: "��" });
@@ -1529,7 +1530,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
               {/* Board switcher */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
-                  { key: "Asim", name: "Mr. Asim Aryal", role: "Founder, CEO & Chairman", email: "asim.nsw@gmail.com" },
+                  { key: "Asim", name: "Mr. Asim Aryal", role: "Founder, CEO & Managing Director (Sole Owner)", email: "asim.nsw@gmail.com" },
                   { key: "Aleks", name: "Aleks", role: "Board Director (Ops)", email: "aleks@valourian.com" },
                   { key: "Justin", name: "Justin", role: "Board Director (Sec)", email: "justin@valourian.com" }
                 ].map((member) => (

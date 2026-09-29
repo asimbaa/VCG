@@ -2976,8 +2976,8 @@ Thank you for choosing Uber Eats Sovereign.`,
                                       <option value="new">
                                         Use a New Card
                                       </option>
-                                      {linkedCards.map((card) => (
-                                        <option key={card.id} value={card.id}>
+                                      {linkedCards.map((card, idx) => (
+                                        <option key={`ue-opt-${card.id}-${idx}`} value={card.id}>
                                           {card.bank.substring(0, 15)}... ••••{" "}
                                           {card.cardNumber.slice(-4)} (
                                           {card.network})
@@ -3915,7 +3915,7 @@ Thank you for choosing Uber Eats Sovereign.`,
 
                 {/* Grid layout of linked cards in Australia style */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {linkedCards.map((card) => {
+                  {linkedCards.map((card, idx) => {
                     const isCBA = card.bank.includes("Commonwealth");
                     const isWestpac = card.bank.includes("Westpac");
                     const isANZ = card.bank.includes("ANZ");
@@ -3932,7 +3932,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                             : "bg-gradient-to-br from-emerald-600 to-teal-850 text-white";
 
                     return (                      <div
-                        key={card.id}
+                        key={`ue-card-${card.id}-${idx}`}
                         className={`p-5 rounded-2xl relative overflow-hidden shadow-md flex flex-col justify-between min-h-36 ${cardBg}`}
                       >
                         <div className="flex justify-between items-start z-10">
@@ -4028,8 +4028,8 @@ Thank you for choosing Uber Eats Sovereign.`,
                         onChange={(e) => setTransferTargetId(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-emerald-500 font-semibold font-sans cursor-pointer"
                       >
-                        {linkedCards.map((c) => (
-                          <option key={c.id} value={c.id}>
+                        {linkedCards.map((c, idx) => (
+                          <option key={`ue-payout-${c.id}-${idx}`} value={c.id}>
                             {c.bank} — ••••{" "}
                             {c.cardNumber.substring(c.cardNumber.length - 4)} (
                             {c.bsb}) (${c.balance.toFixed(2)} AUD)
@@ -4292,8 +4292,8 @@ Thank you for choosing Uber Eats Sovereign.`,
                   </span>
                 </div>
 
-                <div className="h-48 w-full pt-2">
-                  <ResponsiveContainer width="99%" height="100%">
+                <div className="h-48 w-full min-w-0 relative pt-2">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
                     <AreaChart
                       data={(() => {
                         const monthNames = [
