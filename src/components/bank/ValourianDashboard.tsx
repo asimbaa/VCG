@@ -22,6 +22,8 @@ const GlobalEquities = React.lazy(() => import("./GlobalEquities").then(module =
 import { VBankVirtualCreditCards } from "./VBankVirtualCreditCards";
 import { LinkComManagerModal } from "../pay/LinkComManagerModal";
 import { CrossPlatformCardWalletModal } from "./CrossPlatformCardWalletModal";
+import { CardDetailsCopyModal } from "./CardDetailsCopyModal";
+import { numpyCardSuperService } from "../../services/numpyCardSuperService";
 import { MessageCenter } from "../messagecenter/MessageCenter";
 import { CommBankPayIDFlow } from "../pay/CommBankPayIDFlow";
 import {
@@ -3644,6 +3646,8 @@ This electronic transmission is the authenticated digital twin of the recorded a
     null,
   );
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [selectedCardForDetailsCopy, setSelectedCardForDetailsCopy] = useState<any | null>(null);
+  const [isCardDetailsCopyModalOpen, setIsCardDetailsCopyModalOpen] = useState(false);
   const [isNfcOverlayOpen, setIsNfcOverlayOpen] = useState(false);
   const [activeNfcCard, setActiveNfcCard] = useState<any | null>(null);
   const [nfcState, setNfcState] = useState<"ready" | "scanning" | "sovereign_auth" | "sovereign_auth2" | "iso20022_clearing" | "torrens_signing" | "processing" | "success">("ready");
@@ -11698,10 +11702,23 @@ Valourian Capital Treasury Command
                                   <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        const copyText = `Card Number: ${card.fullNumber || card.number || `5119 3988 4562 ${card.last4}`}\nExpiry: ${card.expiry}\nCVC: ${card.cvv || card.cvc || "789"}\nPIN: ${card.pin || "1994"}\nZIP: ${card.zip || "10001"}\nName: ${card.holder || "Asim Aryal"}`; navigator.clipboard.writeText(copyText);
-                                        toast.success("Full Card Details Copied. Ready for entry.", { icon: "" });
+                                        setSelectedCardForDetailsCopy(card);
+                                        setIsCardDetailsCopyModalOpen(true);
                                     }}
-                                    className="p-2 transition-colors rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 shrink-0"
+                                    className="px-3 py-1.5 transition-colors rounded-lg bg-gradient-to-r from-emerald-600/30 to-teal-600/30 hover:from-emerald-600/50 hover:to-teal-600/50 border border-emerald-500/40 flex items-center gap-1.5 shrink-0 text-emerald-300 font-bold tracking-wider text-[10px] uppercase shadow-sm cursor-pointer"
+                                    title="Copy Full Card Details for Online Merchants & Physical Payment Terminals"
+                                  >
+                                    <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Copy Details & POS</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const pkg = numpyCardSuperService.generateCopyableCardPackage(card);
+                                        navigator.clipboard.writeText(pkg.formattedClipboardText);
+                                        toast.success("Full Card Credentials Package Copied! Ready for any online or in-store terminal.", { icon: "💳" });
+                                    }}
+                                    className="p-2 transition-colors rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 shrink-0 cursor-pointer"
                                     title="Copy for online purchases"
                                   >
                                     <Copy className="w-4 h-4 text-white" />
@@ -12161,6 +12178,11 @@ Valourian Capital Treasury Command
             prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
           );
         }}
+      />
+      <CardDetailsCopyModal
+        card={selectedCardForDetailsCopy}
+        isOpen={isCardDetailsCopyModalOpen}
+        onClose={() => setIsCardDetailsCopyModalOpen(false)}
       />
       <CommBankPayIDFlow
         user={user}

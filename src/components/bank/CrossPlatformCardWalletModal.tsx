@@ -26,6 +26,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import toast from "react-hot-toast";
 import { TARGET_LINK_EMAIL, TARGET_LINK_HOLDER, LINK_COM_APP_URL } from "../../services/linkComService";
+import { numpyCardSuperService } from "../../services/numpyCardSuperService";
 
 export interface DigitalBankCard {
   id: string;
@@ -492,27 +493,47 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
                   </button>
                 </div>
 
-                {/* 1-Click Copy Fast Actions */}
-                <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                {/* 1-Click Copy Fast Actions for Online & Physical Merchants */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
                   <button
-                    onClick={() => handleCopy(rawNumber, "Card Number")}
-                    className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    onClick={() => {
+                      const pkg = numpyCardSuperService.generateCopyableCardPackage(card);
+                      navigator.clipboard.writeText(pkg.formattedClipboardText);
+                      toast.success("Full Card Credentials Package Copied! Ready to paste into any merchant checkout or payment system.");
+                    }}
+                    className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
                   >
-                    <Copy className="w-3 h-3" /> Copy PAN
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Full Checkout Package (Online & POS)</span>
                   </button>
-                  <button
-                    onClick={() => handleCopy(`${bsb} / ${acc}`, "BSB & Account")}
-                    className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3 h-3" /> Copy BSB/ACC
-                  </button>
-                  <button
-                    onClick={handleExportWalletPass}
-                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center transition-colors cursor-pointer"
-                    title="Export universal wallet pass bundle"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleCopy(rawNumber, "Card Number")}
+                      className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" /> PAN Only
+                    </button>
+                    <button
+                      onClick={() => handleCopy(`${expiry} / CVV: ${dynamicCvv}`, "Expiry & CVV")}
+                      className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" /> Exp/CVV
+                    </button>
+                    <button
+                      onClick={() => handleCopy(`${bsb} / ${acc}`, "BSB & Account")}
+                      className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" /> BSB/ACC
+                    </button>
+                    <button
+                      onClick={handleExportWalletPass}
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold flex items-center justify-center transition-colors cursor-pointer"
+                      title="Export universal wallet pass bundle"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

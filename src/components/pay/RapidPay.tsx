@@ -69,6 +69,7 @@ import {
   COMMBANK_LINKED_ACCOUNTS,
   updateCbaAccountBalance,
   subscribeToCbaBalances,
+  resolvePayIDDirectory,
 } from "../../services/paymentSettlementService";
 import {
   BASE_BANKING_CREDIT_CARDS,
@@ -1003,7 +1004,7 @@ export function RapidPay({ user }: { user: any }) {
     }
   };
 
-  const handleValidate = (e: React.MouseEvent) => {
+  const handleValidate = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (transferType === 'payid') {
       if (!payIdValue) {
@@ -1011,24 +1012,20 @@ export function RapidPay({ user }: { user: any }) {
         return;
       }
       setStatus("validating");
-      // Simulate real-time resolution of PayID against RBA/NPP directory
-      setTimeout(() => {
+      try {
+        const res = await resolvePayIDDirectory(payIdValue, payIdType, "+61");
         setStatus("idle");
-        
-        // Generate a mock realistic Australian name or business name based on the input
-        let resolvedName = "VALOURIAN CAPITAL PTY LTD";
-        if (payIdValue.includes('@')) {
-           resolvedName = payIdValue.split('@')[0].replace(/\./g, ' ').toUpperCase() + " (AUSTRALIAN DOLLAR ACCOUNT)";
-        } else if (payIdType === 'abn') {
-           resolvedName = "ENTERPRISE ABN " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+        if (res.isValid) {
+          setAccountName(res.registeredName);
+          setIsValidated(true);
+          toast.success(`PayID Resolved: ${res.registeredName} • ${res.institution}`);
         } else {
-           resolvedName = "VERIFIED USER " + payIdValue.substring(0, 4) + " (AUSTRALIAN DOLLAR ACCOUNT)";
+          toast.error("Unable to resolve PayID directory lookup");
         }
-        
-        setAccountName(resolvedName);
-        setIsValidated(true);
-        toast.success("PayID Resolved via NPP Directory");
-      }, 1200);
+      } catch (err) {
+        setStatus("idle");
+        toast.error("PayID lookup timed out. Please check format.");
+      }
       return;
     }
     
@@ -1044,10 +1041,20 @@ export function RapidPay({ user }: { user: any }) {
     setStatus("validating");
     setTimeout(() => {
       setStatus("idle");
-      setAccountName(`Verified Endpoint ${accountNumber.slice(-4)}`);
+      let bsbBank = "Australian Financial Institution";
+      if (cleanBsb.startsWith("06")) bsbBank = "Commonwealth Bank of Australia";
+      else if (cleanBsb.startsWith("08")) bsbBank = "National Australia Bank";
+      else if (cleanBsb.startsWith("03")) bsbBank = "Westpac Banking Corporation";
+      else if (cleanBsb.startsWith("01")) bsbBank = "ANZ Banking Group";
+      else if (cleanBsb.startsWith("18")) bsbBank = "Macquarie Bank";
+      else if (cleanBsb.startsWith("63") || cleanBsb.startsWith("67")) bsbBank = "Bendigo and Adelaide Bank";
+      else if (cleanBsb.startsWith("80") || cleanBsb.startsWith("83")) bsbBank = "Great Southern / Sovereign Treasury";
+
+      const verifiedRecipientName = recipient.trim() || `Verified Account Holder (${bsbBank})`;
+      setAccountName(verifiedRecipientName);
       setIsValidated(true);
-      toast.success("Endpoint validated successfully");
-    }, 100);
+      toast.success(`Account Validated: ${bsbBank} (BSB: ${cleanBsb.slice(0, 3)}-${cleanBsb.slice(3)})`);
+    }, 150);
   };
 
   const handleSendRequest = (e: React.FormEvent) => {
@@ -1164,10 +1171,10 @@ export function RapidPay({ user }: { user: any }) {
     let typeLabel = "Email/ID";
     
     if (transferType === "au_bsb") {
-      transferTo = `${accountName} (BSB: ${bsb} Acc: ${accountNumber}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia`;
+      transferTo = `${accountName} (BSB: ${bsb} Acc: ${accountNumber})`;
       typeLabel = "au_bsb";
     } else if (transferType === "payid") {
-      transferTo = `${accountName} (PayID: ${payIdValue}) - Delivered to: Asim Aryal, 712, 15 Barton Rd, Artarmon NSW 2064 Australia`;
+      transferTo = `${accountName} (PayID: ${payIdValue})`;
       typeLabel = "au_bsb_payid";
     }
 

@@ -8,6 +8,9 @@ import { useGlobalCurrency } from '../../contexts/CurrencyContext';
 import { NFCTapModal } from '../pay/NFCTapModal';
 import { LinkComManagerModal } from '../pay/LinkComManagerModal';
 import { CrossPlatformCardWalletModal } from './CrossPlatformCardWalletModal';
+import { CardDetailsCopyModal } from './CardDetailsCopyModal';
+import { NumpySuperServiceWidget } from './NumpySuperServiceWidget';
+import { numpyCardSuperService } from '../../services/numpyCardSuperService';
 import { 
   TARGET_LINK_EMAIL, TARGET_LINK_HOLDER, LINK_COM_APP_URL, 
   getAllBankingCreditCards, syncAllCardsToLinkAccount, LinkComCard 
@@ -198,6 +201,106 @@ const INITIAL_CARDS: BankCard[] = [
     appleGooglePayEnrolled: true
   },
   { 
+    id: 'amex_au_centurion_black', 
+    type: 'virtual', 
+    name: 'American Express Centurion Black Card (Australia)', 
+    number: '3782 821944 10001', 
+    fullNumber: '3782 821944 10001',
+    balance: 1000000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 'unlimited', 
+    cvv: '7712', 
+    dynamicCvv: '7712',
+    expiry: '06/30',
+    network: 'AMEX',
+    bsb: '021-000',
+    accountNumber: '8499210050',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'global_credit',
+    appleGooglePayEnrolled: true
+  },
+  { 
+    id: 'amex_au_platinum_business', 
+    type: 'virtual', 
+    name: 'American Express Platinum Business Card (Australia)', 
+    number: '3760 918234 51008', 
+    fullNumber: '3760 918234 51008',
+    balance: 940000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 940000000, 
+    cvv: '8819', 
+    dynamicCvv: '8819',
+    expiry: '08/29',
+    network: 'AMEX',
+    bsb: '021-000',
+    accountNumber: '8499210051',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'global_credit',
+    appleGooglePayEnrolled: true
+  },
+  { 
+    id: 'amex_au_explorer', 
+    type: 'virtual', 
+    name: 'American Express Explorer Credit Card (Australia)', 
+    number: '3759 849201 62004', 
+    fullNumber: '3759 849201 62004',
+    balance: 500000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 500000000, 
+    cvv: '4201', 
+    dynamicCvv: '4201',
+    expiry: '11/29',
+    network: 'AMEX',
+    bsb: '021-000',
+    accountNumber: '8499210052',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'global_credit',
+    appleGooglePayEnrolled: true
+  },
+  { 
+    id: 'amex_au_corp_black', 
+    type: 'virtual', 
+    name: 'American Express Corporate Black Diamond (Valourian Treasury AU)', 
+    number: '3791 748291 93005', 
+    fullNumber: '3791 748291 93005',
+    balance: 2500000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 2500000000, 
+    cvv: '9305', 
+    dynamicCvv: '9305',
+    expiry: '12/31',
+    network: 'AMEX',
+    bsb: '021-000',
+    accountNumber: '8499210053',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'global_credit',
+    appleGooglePayEnrolled: true
+  },
+  { 
+    id: 'amex_au_qantas_ult', 
+    type: 'virtual', 
+    name: 'American Express Qantas Ultimate Corporate Card (Australia)', 
+    number: '3767 482910 84002', 
+    fullNumber: '3767 482910 84002',
+    balance: 1000000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 'unlimited', 
+    cvv: '3102', 
+    dynamicCvv: '3102',
+    expiry: '09/30',
+    network: 'AMEX',
+    bsb: '021-000',
+    accountNumber: '8499210054',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'global_credit',
+    appleGooglePayEnrolled: true
+  },
+  { 
     id: 'p1', 
     type: 'physical', 
     name: 'Valourian Physical Black Card (Primary Titanium)', 
@@ -271,6 +374,10 @@ export const VBankVirtualCreditCards: React.FC = () => {
             const key = card.id || `vcard-${idx}`;
             if (!map.has(key)) map.set(key, card);
           });
+          // Ensure newly added cards (like AMEX Australia suites) are merged
+          INITIAL_CARDS.forEach(c => {
+            if (!map.has(c.id)) map.set(c.id, normalizeCard(c));
+          });
           return Array.from(map.values());
         }
       }
@@ -284,6 +391,8 @@ export const VBankVirtualCreditCards: React.FC = () => {
     } catch {}
   }, [cards]);
 
+  const [selectedCopyModalCard, setSelectedCopyModalCard] = useState<any | null>(null);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedWalletCard, setSelectedWalletCard] = useState<any | null>(null);
@@ -565,6 +674,14 @@ export const VBankVirtualCreditCards: React.FC = () => {
           </div>
         </div>
 
+        {/* NumPy Card Operations Super Service Telemetry Widget */}
+        <NumpySuperServiceWidget 
+          onSelectCardForDetails={(c) => {
+            setSelectedCopyModalCard(c);
+            setIsCopyModalOpen(true);
+          }} 
+        />
+
         {/* Main Grid: Card Stack + Operations Panel */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Card Stack (2 Columns) */}
@@ -632,6 +749,18 @@ export const VBankVirtualCreditCards: React.FC = () => {
                               title="Copy Card Number"
                             >
                               <Copy className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const pkg = numpyCardSuperService.generateCopyableCardPackage(card);
+                                navigator.clipboard.writeText(pkg.formattedClipboardText);
+                                toast.success("Full Card Credentials Package Copied! Ready to paste into any checkout.");
+                              }}
+                              className="text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono flex items-center gap-1 font-bold cursor-pointer"
+                              title="Copy full checkout package"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>Copy All</span>
                             </button>
                           </div>
 
@@ -715,7 +844,35 @@ export const VBankVirtualCreditCards: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Copy Details for Online Merchants & POS Terminals */}
+                        <button
+                          onClick={() => {
+                            setSelectedCopyModalCard(card);
+                            setIsCopyModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-emerald-600/30 to-teal-600/30 hover:from-emerald-600/50 hover:to-teal-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
+                          title="Copy Card Details for Online Merchants & Physical POS Terminals"
+                        >
+                          <Copy className="w-3 h-3 text-emerald-400" />
+                          Copy Details & Merchant POS
+                        </button>
+
+                        {/* If AMEX, show AMEX App Sync */}
+                        {(card.network === 'AMEX' || String(card.fullNumber || card.number || '').startsWith('3')) && (
+                          <button
+                            onClick={() => {
+                              setSelectedCopyModalCard(card);
+                              setIsCopyModalOpen(true);
+                            }}
+                            className="text-[11px] bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
+                            title="Open AMEX Australia Official App Sync"
+                          >
+                            <ShieldCheck className="w-3 h-3 text-blue-400" />
+                            AMEX App Sync
+                          </button>
+                        )}
+
                         {/* Cross-Device Wallet Hub: Android, iOS, Windows, Mac */}
                         <button
                           onClick={() => {
@@ -886,6 +1043,12 @@ export const VBankVirtualCreditCards: React.FC = () => {
             )
           );
         }}
+      />
+
+      <CardDetailsCopyModal
+        card={selectedCopyModalCard}
+        isOpen={isCopyModalOpen}
+        onClose={() => setIsCopyModalOpen(false)}
       />
     </>
   );
