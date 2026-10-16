@@ -183,7 +183,7 @@ export function MarketMonitoringDashboard() {
                   <div className="flex flex-wrap gap-2">
                     {researchUrls.map((url, i) => (
                       <a 
-                        key={i} 
+                        key={`source-url-${url}-${i}`} 
                         href={url} 
                         target="_blank" 
                         rel="noreferrer"

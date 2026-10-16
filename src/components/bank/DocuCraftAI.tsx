@@ -278,12 +278,12 @@ export function DocuCraftAI({ onDocumentGenerated }: DocuCraftAIProps) {
         {/* Left Panel: Templates */}
         <div className="lg:col-span-3 flex flex-col gap-4">
           <div className="flex flex-col bg-slate-950 border border-slate-800 p-2 rounded-2xl gap-2">
-            {(Object.keys(categories) as Array<keyof typeof categories>).map((key) => {
+            {(Object.keys(categories) as Array<keyof typeof categories>).map((key, kIdx) => {
               const cat = categories[key];
               const Icon = cat.icon;
               return (
                 <button
-                  key={key}
+                  key={`docu-cat-${key}-${kIdx}`}
                   onClick={() => setActiveCategory(key)}
                   className={`flex items-center justify-start gap-3 px-4 py-3 rounded-xl transition-all ${
                     activeCategory === key
@@ -304,9 +304,9 @@ export function DocuCraftAI({ onDocumentGenerated }: DocuCraftAIProps) {
               Sovereign Templates
             </h3>
             
-            {categories[activeCategory].docs.map(doc => (
+            {categories[activeCategory].docs.map((doc, dIdx) => (
               <button
-                key={doc.id}
+                key={`docu-doc-${doc.id}-${dIdx}`}
                 onClick={() => handleGenerate(doc)}
                 className={`w-full text-left p-4 rounded-xl border transition-all group ${
                   activeDocument?.id === doc.id

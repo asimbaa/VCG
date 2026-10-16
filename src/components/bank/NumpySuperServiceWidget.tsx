@@ -151,9 +151,9 @@ export const NumpySuperServiceWidget: React.FC<NumpySuperServiceWidgetProps> = (
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {AMEX_AUSTRALIA_CREDIT_CARDS.map((amexCard) => (
+          {AMEX_AUSTRALIA_CREDIT_CARDS.map((amexCard, aIdx) => (
             <div
-              key={amexCard.id}
+              key={`numpy-amex-${amexCard.id}-${aIdx}`}
               className="bg-slate-950/80 hover:bg-slate-900 border border-blue-500/20 hover:border-blue-500/50 rounded-xl p-3.5 transition-all space-y-2.5 flex flex-col justify-between shadow-sm"
             >
               <div>
@@ -257,8 +257,8 @@ export const NumpySuperServiceWidget: React.FC<NumpySuperServiceWidgetProps> = (
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                {status.globalCorridors.map((corridor) => (
-                  <tr key={corridor.corridor} className="hover:bg-slate-800/30">
+                {status.globalCorridors.map((corridor, cIdx) => (
+                  <tr key={`${corridor.corridor}-${cIdx}`} className="hover:bg-slate-800/30">
                     <td className="py-2.5 px-3 font-bold text-white">{corridor.corridorName}</td>
                     <td className="py-2.5 px-3 text-slate-400 text-[11px]">{corridor.settlementRail}</td>
                     <td className="py-2.5 px-3 text-emerald-400 font-bold">{corridor.latencyMs} ms</td>

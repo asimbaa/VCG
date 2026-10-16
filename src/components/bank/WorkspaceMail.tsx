@@ -53,23 +53,6 @@ const mockEmails = [
     read: false,
     starred: true,
     attachments: [
-      { name: "valourian_founder_launch_guide.pdf", size: "12.8 MB" },
-      { name: "amex_provisioning_clearance.pdf", size: "3.2 MB" }
-    ]
-  },
-
-  {
-    id: 1515,
-    sender: "Valourian Postmaster & Provisioning",
-    email: "postmaster@valourian.com.au",
-    recipient: "asim.nsw@gmail.com",
-    subject: "ACTIVATED: valourian.com.au Mail & Global DNS",
-    preview: "Founder Login details & AMEX Global Provisioning activated for valourian.com.au",
-    body: "Dear Founder & CEO (Asim Aryal),\n\nValourian.com.au is now successfully securely launched and published!\n\nThe DNS MX records that previously bounced (NXDOMAIN) have been overwritten and mapped successfully.\n\nYour email systems are now inbuilt. The 'amexglobalprovisioning@valourian.com.au' routing is completely active and securely tunneling to your primary console.\n\nFOUNDER LOGIN CREDENTIALS:\n- Email: asim.nsw@gmail.com\n- Dashboard: valourian.com.au/login\n- Password: [SSO Bio-metric Bypass Active]\n\nIncluded are the complete guides for the world's best Fintech super-app.\n\nRegards,\nValourian AI System",
-    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    read: false,
-    starred: true,
-    attachments: [
       { name: "valourian_founder_launch_guide.pdf", size: "12.8 MB", content: "VALOURIAN FOUNDER LAUNCH GUIDE\n\nWelcome to your new enterprise.\n\n1. GLOBAL DNS\nAll primary routing maps are secured through AURA-9.\n\n2. CAPITAL POOL\nTreasury is initialized with multi-trillion dollar clearing capacity.\n\n3. ASSETS\nReal estate, global tech (Tesla, SpaceX) have been synchronized.\n\nEnd of secure transmission." },
       { name: "amex_provisioning_clearance.pdf", size: "3.2 MB", content: "AMEX CENTURION PROVISIONING CLEARANCE\n\nCardholder: ASIM ARYAL\nLimit: NO PRE-SET SPENDING LIMIT\nClearance: VALOURIAN TREASURY BACKED\n\nStatus: ACTIVATED." }
     ]
@@ -136,7 +119,7 @@ const mockEmails = [
     ]
   },
   {
-    id: 155,
+    id: 157,
     sender: "Lawpath Incorporator via Operations",
     email: "incorporation@lawpath.com.au",
     subject: "ASIC REGISTRATION COMPLETE via Lawpath",
@@ -1393,9 +1376,9 @@ export function WorkspaceMail({ user }: { user: any }) {
                 acc.name.toLowerCase().includes(loginEmail.toLowerCase()) || 
                 acc.email.toLowerCase().includes(loginEmail.toLowerCase()) || 
                 acc.designation.toLowerCase().includes(loginEmail.toLowerCase())
-              ).map((acc) => (
+              ).map((acc, aIdx) => (
                 <div 
-                  key={acc.email} 
+                  key={`${acc.email}-${aIdx}`} 
                   className="bg-slate-950/60 hover:bg-slate-950 border border-slate-850 p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all"
                 >
                   <div className="flex items-center gap-3">
@@ -1503,9 +1486,9 @@ export function WorkspaceMail({ user }: { user: any }) {
                    </div>
                    
                    <div className="border-t border-slate-100 pt-3 max-h-60 overflow-y-auto">
-                      {accounts.map(acc => (
+                      {accounts.map((acc, aIdx) => (
                         <button 
-                          key={acc.email}
+                          key={`${acc.email}-${aIdx}`}
                           onClick={() => { setSelectedAccount(acc); setShowAccountSelector(false); setSelectedEmail(null); }}
                           className={`w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors ${selectedAccount.email === acc.email ? 'bg-indigo-50 border border-indigo-100' : ''}`}
                         >
@@ -1727,8 +1710,8 @@ export function WorkspaceMail({ user }: { user: any }) {
                      acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
                      acc.designation.toLowerCase().includes(searchQuery.toLowerCase())
-                   ).map((acc) => (
-                     <div key={acc.email} className="bg-white border border-slate-200 p-5 rounded-[2rem] flex flex-col justify-between gap-4 hover:shadow-md hover:border-amber-300 transition-all">
+                   ).map((acc, aIdx) => (
+                     <div key={`${acc.email}-${aIdx}`} className="bg-white border border-slate-200 p-5 rounded-[2rem] flex flex-col justify-between gap-4 hover:shadow-md hover:border-amber-300 transition-all">
                        <div>
                          <div className="flex items-center justify-between mb-2">
                            <span className="text-[10px] bg-amber-50 text-amber-700 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -2190,6 +2173,37 @@ export function WorkspaceMail({ user }: { user: any }) {
                   className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-full border border-blue-200 transition-colors cursor-pointer font-semibold shrink-0"
                 >
                   🚀 Load ScotPac Pitch Template
+                </button>
+                <button
+                  onClick={() => {
+                     const toEl = document.getElementById('compose-to') as HTMLInputElement;
+                     const subjEl = document.getElementById('compose-subject') as HTMLInputElement;
+                     const bodyEl = document.getElementById('compose-body') as HTMLTextAreaElement;
+                     if (toEl) toEl.value = "asim.nsw@gmail.com";
+                     if (subjEl) subjEl.value = "VALOURIAN TREASURY: Monthly Executive Salary Payout - $14,000,000.00 AUD Cleared via NPP/Osko";
+                     if (bodyEl) bodyEl.value = `Dear Founder & CEO (Asim Aryal),\n\nThis is official electronic transmission confirming that your Monthly Executive Salary for the period of October 2026 has been successfully dispatched from Valourian Sovereign Treasury Core.\n\nSETTLEMENT BREAKDOWN:\n- Amount: $14,000,000.00 AUD\n- Destination Bank: Commonwealth Bank of Australia\n- Account Name: CommBank Smart Access (Everyday & Salary)\n- BSB / Account: 062-140 / 11680690\n- Account Holder: ASIM ARYAL\n- Clearing Rail: New Payments Platform (NPP) • Osko® 24/7 Real-Time\n- Execution Status: CLEARED & AVAILABLE IMMEDIATELY\n- APRA Direct Trace ID: NPP-SAL-2026-14M-ASYNC\n\nThe funds are credited to your CommBank account and are now visible across the External Bank Accounts Dashboard, ATM cash pickup networks, and online banking facilities.\n\nWarm regards,\nValourian Institutional Treasury & Payroll Desk`;
+                     toast.success("$14M Executive Salary Notice Template Loaded!");
+                  }}
+                  type="button"
+                  className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors cursor-pointer font-black shrink-0 flex items-center gap-1 shadow-sm"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
+                  <span>💼 $14M Salary Notice (CommBank)</span>
+                </button>
+                <button
+                  onClick={() => {
+                     const toEl = document.getElementById('compose-to') as HTMLInputElement;
+                     const subjEl = document.getElementById('compose-subject') as HTMLInputElement;
+                     const bodyEl = document.getElementById('compose-body') as HTMLTextAreaElement;
+                     if (toEl) toEl.value = "settlements@rba.gov.au, treasury@cba.com.au";
+                     if (subjEl) subjEl.value = "APRA / RBA Institutional Remittance Advice - Interbank Liquidity Facility";
+                     if (bodyEl) bodyEl.value = `ATTN: RBA Exchange Settlement System (ESS) & CBA Institutional Clearing,\n\nPlease find verified electronic remittance advice for unilateral liquidity dispatch from Valourian Capital Sovereign Core.\n\nAll funds are pre-funded with zero exposure across New Payments Platform (NPP) and RBA Exchange Settlement Core accounts.\n\nAuthorize immediate ledger crediting to beneficiary institutions upon packet verification.\n\nValourian Sovereign Treasury Protocol\nAuthorized by: ASIM ARYAL, Founder & CEO`;
+                     toast.success("RBA/CBA Interbank Remittance Advice Loaded!");
+                  }}
+                  type="button"
+                  className="bg-amber-50 text-amber-800 hover:bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 transition-colors cursor-pointer font-bold shrink-0"
+                >
+                  🏛️ RBA/CBA Remittance Advice
                 </button>
                 <button
                   onClick={() => {

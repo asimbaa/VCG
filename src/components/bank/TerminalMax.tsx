@@ -132,7 +132,7 @@ export const TerminalMax = ({ isOpen, onClose, onExecute }: { isOpen: boolean, o
                                 "Order Siciliano St Leonards"
                             ].map((suggestion, i) => (
                                 <button
-                                    key={i}
+                                    key={`term-sugg-${i}`}
                                     onClick={() => setInput(suggestion)}
                                     className="text-left p-2 rounded-lg bg-white/5 border border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/10 text-slate-400 hover:text-emerald-400 transition-all text-[10px] uppercase font-bold tracking-widest"
                                 >
@@ -143,7 +143,7 @@ export const TerminalMax = ({ isOpen, onClose, onExecute }: { isOpen: boolean, o
                     </div>
                 )}
                 {history.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'text-white' : 'text-emerald-400'}`}>
+                    <div key={`term-msg-${idx}-${msg.role}`} className={`flex ${msg.role === 'user' ? 'text-white' : 'text-emerald-400'}`}>
                         <span className="mr-2">{msg.role === 'user' ? '>' : '$'}</span>
                         <span className={`${msg.role === 'user' ? 'opacity-80' : 'opacity-100 font-bold'}`}>{msg.text}</span>
                     </div>

@@ -20,6 +20,7 @@ export interface LinkComCard {
   billingCity?: string;
   billingState?: string;
   billingAddress?: string;
+  billingPhone?: string;
   linkAccount: string; // "asim.nsw@gmail.com"
   linkStatus: "active_enrolled" | "synced" | "pending";
   linkPaymentMethodId: string;
@@ -57,7 +58,12 @@ export const TARGET_LINK_HOLDER = "ASIM ARYAL";
 export const LINK_COM_URL = "https://link.com";
 export const LINK_COM_APP_URL = "https://app.link.com";
 
-const AU_ADDRESS = "Unit 402, 90 Christie St, St Leonards, NSW 2065, Australia";
+export const FOUNDER_PRIMARY_ADDRESS = "Unit 712 15 Barton Rd Artarmon NSW 2064 Australia";
+export const FOUNDER_PHONE_NUMBER = "+61401044335";
+export const FOUNDER_PHONE_LOCAL = "0401044335";
+export const FOUNDER_POSTCODE = "2064";
+export const FOUNDER_SUBURB = "Artarmon";
+const AU_ADDRESS = FOUNDER_PRIMARY_ADDRESS;
 
 /**
  * Baseline institutional banking digital virtual credit cards across:
@@ -285,7 +291,7 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     name: "VBank Sovereign Centurion Uncapped",
     network: "AMEX",
     number: "3782 •••••• •7712",
-    fullNumber: "3782 8219 4410 7712",
+    fullNumber: "3782 821910 17712",
     last4: "7712",
     expiry: "06/30",
     cvv: "7712",
@@ -293,11 +299,12 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     limit: "Uncapped AUD",
     currency: "AUD",
     holder: "ASIM ARYAL",
-    billingZip: "2065",
+    billingZip: "2064",
     billingCountry: "AU",
-    billingCity: "Sydney",
+    billingCity: "Artarmon",
     billingState: "NSW",
     billingAddress: AU_ADDRESS,
+    billingPhone: "+61 401 044 335",
     bsb: "021-000",
     accountNumber: "8499210050",
     payId: "asim.nsw@gmail.com",
@@ -326,7 +333,7 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     name: "American Express Platinum Business Card (Australia)",
     network: "AMEX",
     number: "3760 •••••• •1008",
-    fullNumber: "3760 9182 3451 008",
+    fullNumber: "3760 918210 41008",
     last4: "1008",
     expiry: "08/29",
     cvv: "8819",
@@ -334,11 +341,12 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     limit: "$940,000,000.00 AUD",
     currency: "AUD",
     holder: "ASIM ARYAL",
-    billingZip: "2065",
+    billingZip: "2064",
     billingCountry: "AU",
-    billingCity: "Sydney",
+    billingCity: "Artarmon",
     billingState: "NSW",
     billingAddress: AU_ADDRESS,
+    billingPhone: "+61 401 044 335",
     bsb: "021-000",
     accountNumber: "8499210051",
     payId: "asim.nsw@gmail.com",
@@ -368,7 +376,7 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     name: "American Express Explorer Credit Card (Australia)",
     network: "AMEX",
     number: "3759 •••••• •2004",
-    fullNumber: "3759 8492 0162 004",
+    fullNumber: "3759 849210 62004",
     last4: "2004",
     expiry: "11/29",
     cvv: "4201",
@@ -376,11 +384,12 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     limit: "$500,000,000.00 AUD",
     currency: "AUD",
     holder: "ASIM ARYAL",
-    billingZip: "2065",
+    billingZip: "2064",
     billingCountry: "AU",
-    billingCity: "Sydney",
+    billingCity: "Artarmon",
     billingState: "NSW",
     billingAddress: AU_ADDRESS,
+    billingPhone: "+61 401 044 335",
     bsb: "021-000",
     accountNumber: "8499210052",
     payId: "asim.nsw@gmail.com",
@@ -410,7 +419,7 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     name: "American Express Corporate Black Diamond (Valourian Treasury AU)",
     network: "AMEX",
     number: "3791 •••••• •3005",
-    fullNumber: "3791 7482 9193 005",
+    fullNumber: "3791 748210 03005",
     last4: "3005",
     expiry: "12/31",
     cvv: "9305",
@@ -418,11 +427,12 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     limit: "$2,500,000,000.00 AUD",
     currency: "AUD",
     holder: "ASIM ARYAL",
-    billingZip: "2065",
+    billingZip: "2064",
     billingCountry: "AU",
-    billingCity: "Sydney",
+    billingCity: "Artarmon",
     billingState: "NSW",
     billingAddress: AU_ADDRESS,
+    billingPhone: "+61 401 044 335",
     bsb: "021-000",
     accountNumber: "8499210053",
     payId: "asim.nsw@gmail.com",
@@ -452,7 +462,7 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     name: "American Express Qantas Ultimate Corporate Card (Australia)",
     network: "AMEX",
     number: "3767 •••••• •4002",
-    fullNumber: "3767 4829 1084 002",
+    fullNumber: "3767 482910 84002",
     last4: "4002",
     expiry: "09/30",
     cvv: "3102",
@@ -460,11 +470,12 @@ export const BASE_BANKING_CREDIT_CARDS: LinkComCard[] = [
     limit: "Unlimited AUD",
     currency: "AUD",
     holder: "ASIM ARYAL",
-    billingZip: "2065",
+    billingZip: "2064",
     billingCountry: "AU",
-    billingCity: "Sydney",
+    billingCity: "Artarmon",
     billingState: "NSW",
     billingAddress: AU_ADDRESS,
+    billingPhone: "+61 401 044 335",
     bsb: "021-000",
     accountNumber: "8499210054",
     payId: "asim.nsw@gmail.com",

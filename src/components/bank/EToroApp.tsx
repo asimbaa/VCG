@@ -582,7 +582,7 @@ export function EToroApp() {
                                                 { label: "Validating Blockchain Confirmations", time: "est. 3m" },
                                                 { label: "Finalizing Vault Deposits", time: "est. 1s" }
                                             ].map((step, idx) => (
-                                                <div key={idx} className={`flex justify-between items-center pb-2 border-b border-slate-800 ${currentExecutionStep > idx ? 'text-emerald-400' : currentExecutionStep === idx ? 'text-white' : 'text-slate-600'}`}>
+                                                <div key={`etoro-step-${step.label}-${idx}`} className={`flex justify-between items-center pb-2 border-b border-slate-800 ${currentExecutionStep > idx ? 'text-emerald-400' : currentExecutionStep === idx ? 'text-white' : 'text-slate-600'}`}>
                                                     <div className="flex items-center gap-2">
                                                         {currentExecutionStep > idx ? (
                                                             <CheckCircle2 className="w-4 h-4" />

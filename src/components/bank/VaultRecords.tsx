@@ -252,14 +252,14 @@ export const GLOBAL_PROPERTIES_DATABASE = [
     id: "VEH-TESLA-002",
     address: "Tesla Lidcombe Delivery Centre, B1/29 Birnie Ave Lidcombe, NSW 2141",
     type: "Tesla Model Y Performance Dual Motor All-Wheel Drive",
-    folio: "RN119834827",
+    folio: "RN119834828",
     value: "$114,500 AUD",
     purchaseDate: "2026-08-20",
     proprietor: "ASIM ARYAL",
     zoning: "Electric Vehicle (Performance)",
-    lot: "VIN: LRWY232_a43d726b25932adabcf11bff2f15c070",
-    lrsReference: "RMS-NSW-REG-84729",
-    deedNumber: "TESLA-INV-AU-991283",
+    lot: "VIN: LRWY232_b79f831c36041bebcfe22cee3f26d181",
+    lrsReference: "RMS-NSW-REG-84730",
+    deedNumber: "TESLA-INV-AU-991284",
     stampDutyPaid: "$3,435 AUD",
     fundingSource: "Valourian Sovereign Fleet Reserve",
     tenureType: "Outright Corporate Ownership",
@@ -1163,9 +1163,9 @@ export function VaultRecords() {
             
             <div className="flex items-center gap-3 w-full md:w-auto">
                <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200/50">
-                  {propertyTypes.map(type => (
+                  {propertyTypes.map((type, idx) => (
                     <button
-                      key={type}
+                      key={`vault-prop-type-${type}-${idx}`}
                       onClick={() => setFilterType(type)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors capitalize ${
                         filterType === type 
@@ -1183,7 +1183,7 @@ export function VaultRecords() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              {filteredProperties.map((prop, i) => (
                 <div 
-                   key={prop.id}
+                   key={`vault-prop-${prop.id}-${i}`}
                    className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md flex flex-col justify-between hover:shadow-lg hover:border-indigo-500/40 transition-all duration-300 group"
                 >
                   <div>
@@ -1257,9 +1257,9 @@ export function VaultRecords() {
               </h3>
               
               <div className="space-y-4">
-                 {ancillaryAssets.map(asset => (
+                 {ancillaryAssets.map((asset, aIdx) => (
                     <div 
-                      key={asset.id}
+                      key={`ancillary-asset-${asset.id}-${aIdx}`}
                       className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
                     >
                       <div className="flex items-center gap-4">
@@ -1374,9 +1374,9 @@ export function VaultRecords() {
                
                <div className="flex overflow-x-auto w-full md:w-auto py-1">
                   <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200/50 whitespace-nowrap">
-                     {["all", "Property", "Business", "Government Grant", "Paid Tax History"].map(cat => (
+                     {["all", "Property", "Business", "Government Grant", "Paid Tax History"].map((cat, idx) => (
                         <button
-                          key={cat}
+                          key={`vault-reg-cat-${cat}-${idx}`}
                           onClick={() => setRegFilterCategory(cat)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
                             regFilterCategory === cat 
@@ -1421,8 +1421,8 @@ export function VaultRecords() {
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                        {filteredRegDocs.map((doc) => (
-                           <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors">
+                        {filteredRegDocs.map((doc, dIdx) => (
+                           <tr key={`${doc.id}-${dIdx}`} className="hover:bg-slate-50/50 transition-colors">
                               <td className="p-4 pl-6 font-mono font-bold text-slate-500 text-[11px]">{doc.id}</td>
                               <td className="p-4 font-black text-slate-900 text-sm">{doc.name}</td>
                               <td className="p-4">
@@ -1465,8 +1465,8 @@ export function VaultRecords() {
             </h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-sans">
-               {filteredRegDocs.map((doc) => (
-                  <div key={doc.id} className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col justify-between group">
+               {filteredRegDocs.map((doc, dIdx) => (
+                  <div key={`${doc.id}-${dIdx}`} className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col justify-between group">
                      <div>
                         <div className="flex justify-between items-start mb-4 font-sans">
                            <span className="text-[9px] bg-slate-900 text-indigo-300 font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -1644,7 +1644,7 @@ export function VaultRecords() {
                               "Automated Tesla fleet brings liquid margins",
                               "DSCR at historical 4.2x capacity"
                            ].map((item, idx) => (
-                              <li key={idx} className="flex items-center gap-2 text-xs font-semibold text-slate-700 font-sans">
+                              <li key={`scotpac-item-${idx}`} className="flex items-center gap-2 text-xs font-semibold text-slate-700 font-sans">
                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                                  <span>{item}</span>
                               </li>
@@ -1676,9 +1676,9 @@ export function VaultRecords() {
                           { id: "tech", label: "Tech Moats" },
                           { id: "businesses", label: "Enterprises" },
                           { id: "approval", label: "Underwriting" }
-                        ].map(subTab => (
+                        ].map((subTab, sIdx) => (
                            <button
-                             key={subTab.id}
+                             key={`scotpac-subtab-${subTab.id}-${sIdx}`}
                              onClick={() => setSelectedScotPacTab(subTab.id as any)}
                              className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
                                selectedScotPacTab === subTab.id 

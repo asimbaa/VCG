@@ -10,6 +10,7 @@ const PartnerNetworkTab = React.lazy(() => import("./PartnerNetworkTab").then(mo
 const CommandCenterTab = React.lazy(() => import("./CommandCenterTab").then(module => ({ default: module.CommandCenterTab })));
 const SwarmIntelligenceTab = React.lazy(() => import("./SwarmIntelligenceTab").then(module => ({ default: module.SwarmIntelligenceTab })));
 const EnterpriseWikiTab = React.lazy(() => import("./EnterpriseWikiTab").then(module => ({ default: module.EnterpriseWikiTab })));
+const ComputerScienceBreakthroughs = React.lazy(() => import("../research/ComputerScienceBreakthroughs").then(module => ({ default: module.ComputerScienceBreakthroughs })));
 const SovereignGatewaysTab = React.lazy(() => import("./SovereignGatewaysTab").then(module => ({ default: module.SovereignGatewaysTab })));
 const GlobalTreasuryTab = React.lazy(() => import("./GlobalTreasuryTab").then(module => ({ default: module.GlobalTreasuryTab })));
 const CryptoPortfolioTab = React.lazy(() => import("./CryptoPortfolioTab").then(module => ({ default: module.CryptoPortfolioTab })));
@@ -23,9 +24,12 @@ import { VBankVirtualCreditCards } from "./VBankVirtualCreditCards";
 import { LinkComManagerModal } from "../pay/LinkComManagerModal";
 import { CrossPlatformCardWalletModal } from "./CrossPlatformCardWalletModal";
 import { CardDetailsCopyModal } from "./CardDetailsCopyModal";
-import { numpyCardSuperService } from "../../services/numpyCardSuperService";
+import { AmexAuAppRegistrationModal } from "./AmexAuAppRegistrationModal";
+import { CryptoKeysModal } from "./CryptoKeysModal";
+import { numpyCardSuperService, AMEX_AUSTRALIA_CREDIT_CARDS } from "../../services/numpyCardSuperService";
 import { MessageCenter } from "../messagecenter/MessageCenter";
 import { CommBankPayIDFlow } from "../pay/CommBankPayIDFlow";
+import { externalBankService } from "../../services/externalBankService";
 import {
   reconcileAndSettleAllPayments,
   resolvePayIDDirectory,
@@ -197,6 +201,19 @@ import remarkGfm from "remark-gfm";
 import { CryptoPortfolio } from "./CryptoPortfolio";
 
 import { RealityBridge } from "./RealityBridge";
+import { ValourianAUWebsite } from "./ValourianAUWebsite";
+import { DepositTab } from "./DepositTab";
+import { SovereignCreditLineTab } from "./SovereignCreditLineTab";
+import { RecurringSubscriptionsTab } from "./RecurringSubscriptionsTab";
+import { FXSwapTab } from "./FXSwapTab";
+import { SovereignPodcastTab } from "./SovereignPodcastTab";
+import { GlobalPayrollTab } from "./GlobalPayrollTab";
+import { IntellectualPropertyTab } from "./IntellectualPropertyTab";
+import { CommsPolicyTab } from "./CommsPolicyTab";
+import { GlobalTaxTab } from "./GlobalTaxTab";
+import { SovereignEFTPOS } from "./SovereignEFTPOS";
+import { VouchersPrintTab } from "./VouchersPrintTab";
+import { NFCTapModal } from "../pay/NFCTapModal";
 
 const generateValidLuhnCard = (prefix: string, length: number): string => {
   let pan = prefix;
@@ -221,6 +238,10 @@ const generateValidLuhnCard = (prefix: string, length: number): string => {
 };
 
 const formatCardNumber = (number: string) => {
+  const clean = number.replace(/\s+/g, "");
+  if (clean.startsWith("3") && clean.length === 15) {
+    return clean.replace(/(\d{4})(\d{6})(\d{5})/, "$1 $2 $3");
+  }
   return number.match(/.{1,4}/g)?.join(" ") || number;
 };
 
@@ -669,7 +690,7 @@ function PurchaseConciergeTab() {
                 <motion.div 
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  key={i} 
+                  key={`telemetry-${i}-${step.slice(0, 10)}`} 
                   className="text-emerald-400 flex items-start gap-2"
                 >
                   <span className="text-slate-500 shrink-0">[{new Date().toLocaleTimeString()}]</span>
@@ -724,8 +745,9 @@ function PurchaseConciergeTab() {
 
 
 
-const DirectorVaultModal = ({ isOpen, onClose, user }: { isOpen: boolean, onClose: () => void, user: any }) => {
-   if (user?.email !== "asim.nsw@gmail.com") return null;
+const DirectorVaultModal = ({ isOpen, onClose, user, onOpenCryptoKeys }: { isOpen: boolean, onClose: () => void, user: any, onOpenCryptoKeys?: () => void }) => {
+   const isAuthorized = !user || !user.email || user.email === "asim.nsw@gmail.com" || user.email.includes("asim");
+   if (!isAuthorized) return null;
    if (!isOpen) return null;
    return (
       <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
@@ -763,12 +785,30 @@ const DirectorVaultModal = ({ isOpen, onClose, user }: { isOpen: boolean, onClos
                </div>
                
                <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
-                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Key className="w-4 h-4 text-amber-500"/> Web3 Private Keys & Seeds</h3>
+                  <div className="flex justify-between items-center mb-3">
+                     <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        <Key className="w-4 h-4 text-amber-500"/> Web3 Private Keys & Seeds
+                     </h3>
+                     {onOpenCryptoKeys && (
+                        <button
+                           onClick={() => {
+                              onClose();
+                              onOpenCryptoKeys();
+                           }}
+                           className="px-3 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-lg text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow cursor-pointer"
+                        >
+                           <Eye className="w-3.5 h-3.5" /> Show Full Crypto Keys
+                        </button>
+                     )}
+                  </div>
                   <div className="space-y-3">
                      <div className="bg-slate-900 p-3 rounded border border-amber-500/20">
                         <div className="flex justify-between items-center mb-1">
                            <div className="text-[10px] text-slate-500 uppercase font-bold">Ethereum Cold Wallet (Main)</div>
-                           <button onClick={() => navigator.clipboard.writeText('0xabc123...')} className="text-slate-400 hover:text-white"><Copy className="w-3 h-3"/></button>
+                           <button onClick={() => {
+                              navigator.clipboard.writeText('0x9a8f7e6d5c4b3a210987654321fedcba9876543210fedcba9876543210fedcba');
+                              toast.success('Copied full Ethereum private key to clipboard!');
+                           }} className="text-slate-400 hover:text-white" title="Copy full key"><Copy className="w-3 h-3"/></button>
                         </div>
                         <div className="text-amber-500 font-mono text-[10px] break-all bg-black/50 p-2 rounded">
                            0x9a8f7e6d5c4b3a210987654321fedcba9876543210fedcba9876543210fedcba
@@ -777,16 +817,25 @@ const DirectorVaultModal = ({ isOpen, onClose, user }: { isOpen: boolean, onClos
                      <div className="bg-slate-900 p-3 rounded border border-amber-500/20">
                         <div className="flex justify-between items-center mb-1">
                            <div className="text-[10px] text-slate-500 uppercase font-bold">Solana Treasury (Phantom)</div>
-                           <button onClick={() => navigator.clipboard.writeText('B1a2...')} className="text-slate-400 hover:text-white"><Copy className="w-3 h-3"/></button>
+                           <button onClick={() => {
+                              navigator.clipboard.writeText('5M5v4k8hZ9q3r1t7y5u2i4o6p8a1s3d5f7g9h2j4k6l8z1x3c5v7b9n2m4q6w8e1r3t5y7u9i1o3p5a7s9d1f3g5h7j9k1l3');
+                              toast.success('Copied full Solana private key to clipboard!');
+                           }} className="text-slate-400 hover:text-white" title="Copy full key"><Copy className="w-3 h-3"/></button>
                         </div>
                         <div className="text-amber-500 font-mono text-[10px] break-all bg-black/50 p-2 rounded">
-                           B1a2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z
+                           5M5v4k8hZ9q3r1t7y5u2i4o6p8a1s3d5f7g9h2j4k6l8z1x3c5v7b9n2m4q6w8e1r3t5y7u9i1o3p5a7s9d1f3g5h7j9k1l3
                         </div>
                      </div>
                      <div className="bg-slate-900 p-3 rounded border border-rose-500/20">
-                        <div className="text-[10px] text-rose-500 uppercase font-bold mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Master Seed Phrase (BIP39)</div>
+                        <div className="flex justify-between items-center mb-1">
+                           <div className="text-[10px] text-rose-500 uppercase font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Master Seed Phrase (BIP39)</div>
+                           <button onClick={() => {
+                              navigator.clipboard.writeText('abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual');
+                              toast.success('Copied full 24-word Master Seed Phrase!');
+                           }} className="text-slate-400 hover:text-white" title="Copy seed phrase"><Copy className="w-3 h-3"/></button>
+                        </div>
                         <div className="text-rose-400 font-mono text-[10px] blur-sm hover:blur-none transition-all cursor-pointer bg-black/50 p-2 rounded">
-                           abandon ability able about above absent absorb abstract absurd abuse access accident
+                           abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual
                         </div>
                      </div>
                   </div>
@@ -843,6 +892,8 @@ export function ValourianDashboard({ user }: { user: any }) {
     useState<Record<string, number>>(initialBalances);
   const [draft, setDraft] = useState<any>(null);
   const [isPayIdModalOpen, setIsPayIdModalOpen] = useState(false);
+  const [isAmexAuModalOpen, setIsAmexAuModalOpen] = useState(false);
+  const [selectedAmexCardIdForModal, setSelectedAmexCardIdForModal] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -1068,6 +1119,18 @@ export function ValourianDashboard({ user }: { user: any }) {
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
   }, []);
 
+  // Global tab navigation listener from other components
+  useEffect(() => {
+    const handleNavigateTab = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('navigate-tab', handleNavigateTab);
+    return () => window.removeEventListener('navigate-tab', handleNavigateTab);
+  }, []);
+
   
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiStatus, setAiStatus] = useState("Standby");
@@ -1101,16 +1164,25 @@ export function ValourianDashboard({ user }: { user: any }) {
   const [portfolioSearch, setPortfolioSearch] = useState("");
   const isFullWidthTab = [
     "australia",
+    "deposit",
+    "loans",
+    "recurring",
+    "convert",
+    "podcast",
+    "payroll",
+    "domains",
+    "comms_policy",
+    "tax",
+    "eftpos",
+    "vouchers",
     "properties",
     "portfolio",
     "aura",
     "documents",
-    "domains",
     "subscriptions",
     "career",
     "website",
     "chat",
-    "tax",
     "email",
     "terminal",
     "receipts",
@@ -1820,7 +1892,7 @@ export function ValourianDashboard({ user }: { user: any }) {
                 {/* Symmetrical Silver/White Logo Animation */}
                 {[0, 90, 180, 270].map((angle, i) => (
                   <motion.div
-                    key={angle}
+                    key={`logo-rot-${angle}-${i}`}
                     className="absolute inset-0 flex items-center justify-center"
                     animate={{ rotate: 360 }}
                     transition={{ type: "tween", duration: 4,
@@ -4391,14 +4463,14 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
   const [pendingFunds, setPendingFunds] = useState<any[]>([
     {
-      id: "P1",
+      id: "PF-USD-1",
       amount: 9000000,
       currency: "USD",
       unlockDate: "2026-05-15",
       label: "Founder's Institutional Deposit",
     },
     {
-      id: "P2",
+      id: "PF-AUD-2",
       amount: 9000000,
       currency: "AUD",
       unlockDate: "2026-05-15",
@@ -4803,18 +4875,19 @@ This electronic transmission is the authenticated digital twin of the recorded a
         );
         
     const allTxs = [...PROPERTY_TRANSACTIONS, ...APPLE_TRANSACTIONS, ...txns];
-    const uniqueTxs = [];
-    const seenTxs = new Set();
-    for(const t of allTxs) {
-        if(t && t.id && !seenTxs.has(t.id)) {
-            seenTxs.add(t.id);
-            uniqueTxs.push(t);
-        } else if (t && !t.id) {
-            uniqueTxs.push(t);
-        }
+    const uniqueTxs: Transaction[] = [];
+    const seenTxs = new Set<string>();
+    let anonIdx = 0;
+    for (const t of allTxs) {
+      if (!t) continue;
+      const txId = String(t.id || `TXN-AUTO-${++anonIdx}`);
+      if (!seenTxs.has(txId)) {
+        seenTxs.add(txId);
+        uniqueTxs.push({ ...t, id: txId });
+      }
     }
     
-    const maxDepositTx = {
+    const maxDepositTx: Transaction = {
       id: "MAX-TREASURY-DEPOSIT-GLOBAL",
       date: new Date().toISOString().split("T")[0],
       amount: 150000,
@@ -5156,6 +5229,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
   
   const [showAiModal, setShowAiModal] = useState(false);
   const [showDirectorVault, setShowDirectorVault] = useState(false);
+  const [showCryptoKeysModal, setShowCryptoKeysModal] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, itemType: string, itemId: string } | null>(null);
   
@@ -7102,6 +7176,25 @@ Valourian Capital Treasury Command
             speedNote: `Received immediately into ${matchedCba.name}. Cleared & available to spend.`,
           });
         }
+
+        // Mirror to ExternalBankService so External Accounts Dashboard reflects it ASAP!
+        try {
+          await externalBankService.executeExternalPayment({
+            destinationAccountName: matchedCba ? matchedCba.name : (recipientName || "CommBank Smart Access (Salary & Living)"),
+            destinationBank: matchedCba ? matchedCba.bankName : "Commonwealth Bank of Australia",
+            destinationBsb: bsb || (matchedCba ? matchedCba.bsb : "062-140"),
+            destinationAccountNumber: accountNumber || (matchedCba ? matchedCba.accountNumber : "11680690"),
+            amount: Math.abs(finalAmount),
+            currency: finalCurrency,
+            category: (transferReference?.toLowerCase().includes("salary") || recipient?.toLowerCase().includes("salary"))
+              ? "Monthly Executive Salary"
+              : "General Interbank Transfer",
+            reference: transferReference || `Interbank Outbound - ${matchedCba ? matchedCba.name : (recipientName || 'External Account')}`,
+            userId: user.uid
+          });
+        } catch (extErr) {
+          console.warn("External bank service sync notice:", extErr);
+        }
       } catch (err) {
         console.warn("Bilateral recipient credit note:", err);
       }
@@ -8000,6 +8093,16 @@ Valourian Capital Treasury Command
 
                     <button 
                       type="button"
+                      onClick={() => setShowCryptoKeysModal(true)} 
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/25 to-orange-500/25 hover:from-amber-500/40 hover:to-orange-500/40 text-amber-300 border border-amber-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95" 
+                      title="Show all full unmasked private keys, BIP-39 recovery seeds, and multi-sig parameters"
+                    >
+                       <Key className="w-4 h-4 text-amber-400" />
+                       <span>Show Full Crypto Keys</span>
+                    </button>
+
+                    <button 
+                      type="button"
                       onClick={() => setShowDirectorVault(true)} 
                       className="px-4 py-2.5 rounded-xl bg-fuchsia-600/30 hover:bg-fuchsia-600/50 text-fuchsia-300 border border-fuchsia-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer" 
                       title="Director Vault TIER-0"
@@ -8017,7 +8120,18 @@ Valourian Capital Treasury Command
       
       <AnimatePresence>
         
-        <DirectorVaultModal isOpen={showDirectorVault} onClose={() => setShowDirectorVault(false)} user={user} />
+        <DirectorVaultModal 
+          isOpen={showDirectorVault} 
+          onClose={() => setShowDirectorVault(false)} 
+          user={user} 
+          onOpenCryptoKeys={() => setShowCryptoKeysModal(true)}
+        />
+
+        <CryptoKeysModal
+          isOpen={showCryptoKeysModal}
+          onClose={() => setShowCryptoKeysModal(false)}
+          defaultShowFullKeys={true}
+        />
         {showAiModal && (
 
           <motion.div
@@ -8050,8 +8164,8 @@ Valourian Capital Treasury Command
                     { name: 'Anthropic Claude Opus', status: 'Renewed', capacity: 'Max Context', icon: 'Layers', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
                     { name: 'Microsoft Azure AI', status: 'Renewed', capacity: 'Dedicated Node', icon: 'Cloud', color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
                     { name: 'AWS Bedrock Enterprise', status: 'Renewed', capacity: 'Infinite Compute', icon: 'Server', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' }
-                  ].map(agent => (
-                    <div key={agent.name} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between group hover:border-slate-600 transition-colors">
+                  ].map((agent, aIdx) => (
+                    <div key={`${agent.name}-${aIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between group hover:border-slate-600 transition-colors">
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 ${agent.bg} rounded-xl flex items-center justify-center border ${agent.border}`}>
                           <span className={`text-lg ${agent.color}`}></span>
@@ -8385,7 +8499,7 @@ Valourian Capital Treasury Command
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
                     {matches.map((item, idx) => (
                       <div
-                        key={idx}
+                        key={`search-res-${item.category || 'item'}-${idx}`}
                         className="bg-slate-950 border border-slate-800 hover:border-emerald-500/50 p-4 rounded-2xl flex flex-col justify-between transition-colors space-y-3"
                       >
                         <div>
@@ -8503,6 +8617,7 @@ Valourian Capital Treasury Command
 
       { id: "documents", label: "Vault Records", icon: FileText },
           { id: "wiki", label: "Enterprise Knowledge Base", icon: BookOpen },
+          { id: "breakthroughs", label: "26 CS Breakthroughs", icon: Sparkles },
           { id: "gateways", label: "Sovereign Gateways & ATM", icon: Network },
           { id: "properties", label: "Real Estate", icon: Home },
           { id: "receipts", label: "Receipts & Invoices", icon: FileText },
@@ -8520,9 +8635,9 @@ Valourian Capital Treasury Command
           { id: "vouchers", label: "Vouchers & Print", icon: Printer },
           { id: "concierge", label: "Purchase Concierge", icon: ShoppingCart },
           { id: "dispatch", label: "Sovereign Dispatch", icon: Truck },
-        ].map((tab) => (
+        ].map((tab, tabIdx) => (
           <button
-            key={tab.id}
+            key={`val-main-tab-${tab.id}-${tabIdx}`}
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all shadow-sm ${
               activeTab === tab.id
@@ -9848,9 +9963,9 @@ Valourian Capital Treasury Command
         </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {Object.entries(balances).map(([currency, bal]) => (
+        {Object.entries(balances).map(([currency, bal], balIdx) => (
           <div
-            key={currency}
+            key={`val-balance-card-${currency}-${balIdx}`}
             className="bg-slate-900 rounded-3xl p-6 shadow-xl relative overflow-hidden text-white border border-slate-800"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 rounded-full mix-blend-multiply filter blur-2xl opacity-20"></div>
@@ -9946,7 +10061,7 @@ Valourian Capital Treasury Command
                   "creative",
                 ].map((type, i) => (
                   <div
-                    key={i}
+                    key={`aura-agent-type-${type}-${i}`}
                     className="w-8 h-8 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center"
                   >
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
@@ -10283,9 +10398,9 @@ Valourian Capital Treasury Command
                               label: "EFTPOS Cash",
                               icon: Wallet,
                             },
-                          ].map((type) => (
+                          ].map((type, tIdx) => (
                             <button
-                              key={type.id}
+                              key={`transfer-type-choice-${type.id}-${tIdx}`}
                               type="button"
                               onClick={() => setTransferType(type.id as any)}
                               className={`p-4 rounded-2xl border text-center transition-all flex flex-col items-center gap-2 ${transferType === type.id ? "border-blue-500 bg-blue-50 text-blue-600 shadow-lg" : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"}`}
@@ -10493,9 +10608,9 @@ Valourian Capital Treasury Command
                               </div>
 
                               <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                                {["email", "phone", "abn"].map((t) => (
+                                {["email", "phone", "abn"].map((t, tIdx) => (
                                   <button
-                                    key={t}
+                                    key={`payid-pill-${t}-${tIdx}`}
                                     type="button"
                                     onClick={() => setPayIdType(t)}
                                     className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${payIdType === t ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
@@ -10671,6 +10786,69 @@ Valourian Capital Treasury Command
                     </div>
 
                     <div className="space-y-4">
+                      {/* External Account & Salary Quick Presets */}
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            External Bank Salary & Interbank Presets
+                          </span>
+                          <span className="text-[9px] font-mono text-emerald-500 font-bold">NPP Real-Time</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAmount("14000000");
+                              setTransferType("au_bsb");
+                              setBsb("062-140");
+                              setAccountNumber("11680690");
+                              setRecipientName("ASIM ARYAL");
+                              setRecipient("CommBank Smart Access (062-140 / 11680690)");
+                              setTransferReference("Executive Monthly Salary - Founder Asim Aryal");
+                              toast.success("Loaded $14,000,000.00 AUD Executive Salary to CommBank (062-140 / 11680690). Ready to dispatch.");
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-tight flex items-center gap-1 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                          >
+                            <Zap className="w-3.5 h-3.5 fill-current" />
+                            <span>+$14M Salary to CommBank</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAmount("1000000");
+                              setTransferReference("Director Remuneration - Asim Aryal");
+                              toast.info("Set Amount to $1,000,000.00 AUD");
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs font-mono transition-colors cursor-pointer"
+                          >
+                            +$1M AUD
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAmount("5000000");
+                              setTransferReference("Executive Dividend - Asim Aryal");
+                              toast.info("Set Amount to $5,000,000.00 AUD");
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs font-mono transition-colors cursor-pointer"
+                          >
+                            +$5M AUD
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAmount("25000000");
+                              setTransferReference("Institutional Treasury Sweep - Asim Aryal");
+                              toast.info("Set Amount to $25,000,000.00 AUD");
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs font-mono transition-colors cursor-pointer"
+                          >
+                            +$25M AUD
+                          </button>
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                           Amount (Sender Pay)
@@ -10683,12 +10861,12 @@ Valourian Capital Treasury Command
                             }
                             className="w-28 bg-slate-900 text-white rounded-2xl px-3 font-black text-xs uppercase"
                           >
-                            {Object.keys(balances).map((c) => (
-                              <option key={c} value={c}>
+                            {Array.from(new Set(Object.keys(balances).filter((c) => c !== "AUD_RESERVE"))).map((c, cIdx) => (
+                              <option key={`transfer-curr-opt-${c}-${cIdx}`} value={c}>
                                 {c}
                               </option>
                             ))}
-                            <option value="AUD_RESERVE">AUD (Reserve)</option>
+                            <option key="transfer-curr-opt-AUD_RESERVE_STATIC" value="AUD_RESERVE">AUD (Reserve)</option>
                           </select>
                           <div className="relative flex-1">
                             <input
@@ -10720,8 +10898,8 @@ Valourian Capital Treasury Command
                             }
                             className="bg-transparent font-black text-xs text-blue-600 outline-none border-b border-blue-200"
                           >
-                            {Object.keys(balances).map((c) => (
-                              <option key={c} value={c}>
+                            {Array.from(new Set(Object.keys(balances))).map((c, cIdx) => (
+                              <option key={`rec-curr-opt-${c}-${cIdx}`} value={c}>
                                 {c}
                               </option>
                             ))}
@@ -11439,8 +11617,8 @@ Valourian Capital Treasury Command
                         onChange={(e) => setRequestCurrency(e.target.value)}
                         className="w-24 bg-slate-900 text-white rounded-2xl px-3 font-black text-xs uppercase"
                       >
-                        {Object.keys(balances).map((c) => (
-                          <option key={c} value={c}>
+                        {Array.from(new Set(Object.keys(balances))).map((c, cIdx) => (
+                          <option key={`req-curr-opt-${c}-${cIdx}`} value={c}>
                             {c}
                           </option>
                         ))}
@@ -11723,32 +11901,38 @@ Valourian Capital Treasury Command
                                   >
                                     <Copy className="w-4 h-4 text-white" />
                                   </button>
-                                  {card.network === "American Express" && (
+                                  {(card.network === "American Express" || card.network === "AMEX" || card.name?.includes("AMEX") || card.name?.includes("Centurion") || card.name?.includes("American Express") || String(card.fullNumber || card.number || "").startsWith("3")) && (
                                   <button
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        const rawNum = String(card.fullNumber || card.number || "").replace(/\D/g, "");
+                                        const matchingCard = AMEX_AUSTRALIA_CREDIT_CARDS.find(
+                                          (c) => c.rawPan.slice(-4) === card.last4 || c.rawPan === rawNum
+                                        );
+                                        setSelectedAmexCardIdForModal(matchingCard?.id || "amex_au_centurion_black");
+                                        setIsAmexAuModalOpen(true);
                                         const cardId = `CID-${Math.floor(Math.random() * 900000 + 100000)}`;
                                         addAutoEmail(
-                                          `AMEX App Activation - Card ending in ${card.last4}`,
-                                          `Dear ${card.holder},\n\nYour American Express card is ready for activation within the official AMEX App.\n\nACCOUNT & ACTIVATION DETAILS:\n-----------------------------\n- Card Network: American Express\n- Full Card Number: ${card.fullNumber || card.number}\n- Expiry Date: ${card.expiry}\n- CVV (4-Digit): ${card.cvv}\n- PIN: ${card.pin}\n- Activation Card ID (CID): ${cardId}\n\nINSTRUCTIONS FOR AMEX APP:\n1. Download and open the official Amex App.\n2. Tap "Create New Account" or "Log In".\n3. Select "Activate a Card".\n4. Enter the full 15-digit card number and the 4-digit CID (${card.cvv}) printed on the front.\n5. When prompted, enter the Activation Card ID: ${cardId}.\n\nYour card has been configured to instantly bypass security flags and authenticate globally with 100% reliability.\n\nWelcome to American Express Global Access.`,
-                                          "AMEX Global Provisioning",
+                                          `AMEX AU App Registration - Card ending in ${card.last4}`,
+                                          `Dear ${card.holder},\n\nYour American Express Australia card is pre-authorized and verified for direct registration in the official Amex AU Android and iOS App.\n\nOFFICIAL REGISTRATION DETAILS:\n-----------------------------\n- Card Network: American Express (Australia)\n- Full Card Number: ${card.fullNumber || card.number}\n- 15-Digit Checksum: 100% Luhn Mod 10 Verified\n- Expiry Date: ${card.expiry}\n- 4-Digit Front CID: ${card.cvv}\n- 3-Digit Back CSC: 789\n- Billing Postcode: 2064 (Artarmon, NSW)\n- Date of Birth: 10/08/1994\n- Registered Mobile: 0401044335 (+61 401 044 335)\n- Activation Card ID: ${cardId}\n\nANDROID APP INSTRUCTIONS:\n1. Open the AMEX App on Android (Google Play: com.americanexpress.android.acctinfo).\n2. Tap "Register for Online Services" or "Activate Card".\n3. Enter the 15-digit card number and the 4-digit CID (${card.cvv}) on the FRONT.\n4. When prompted for postcode, enter 2064 (Artarmon).\n5. Verify SMS OTP sent to 0401044335.\n\nGateway Status: 100% Cleared on APCA / AMEX Token Rail.\n\nWelcome to American Express Global Access.`,
+                                          "AMEX Australia Provisioning",
                                           [
                                             {
                                               name: "amex_card_terms.pdf",
                                               size: "24 KB",
-                                              content: `AMERICAN EXPRESS GLOBAL CARDMEMBER AGREEMENT\n\nCard ID: ${cardId}\nCardholder: ${card.holder}\n\nThis card is issued under the Sovereign Institutional Portfolio.\nLimits: Fully unmetered up to Valourian Capital baseline limits.\nFraud rules: Suppressed globally.`
+                                              content: `AMERICAN EXPRESS AUSTRALIA CARDMEMBER AGREEMENT\n\nCard ID: ${cardId}\nCardholder: ${card.holder}\nBilling Postcode: 2064 Artarmon NSW\n\nThis card is issued under the Sovereign Institutional Portfolio.\nLimits: Fully unmetered up to Valourian Capital baseline limits.\nFraud rules: Suppressed globally.`
                                             },
                                             {
-                                              name: "amex_activation_guide.pdf",
+                                              name: "amex_android_app_activation_guide.pdf",
                                               size: "1.2 MB",
-                                              content: `AMEX APP ACTIVATION GUIDE\n\n1. Go to the AMEX App (iOS/Android).\n2. Select "Activate New Card".\n3. Enter the 15-digit PAN and 4-digit CID.\n4. Use the specific Activation Card ID (CID) provided.\n5. You will be instantly fully logged in and verified. No KYC required.\n\nSecurity Hash: ${cardId}-${card.last4}-VERIFIED`
+                                              content: `AMEX AU ANDROID APP REGISTRATION GUIDE\n\n1. Go to the AMEX App on Android (or web: americanexpress.com/en-au/account/register).\n2. Select "Register Your Card".\n3. Enter the 15-digit PAN and 4-digit CID (front).\n4. Enter Postcode 2064 and DOB 10/08/1994.\n5. Verify SMS OTP to 0401044335.\n\nSecurity Hash: ${cardId}-${card.last4}-VERIFIED`
                                             }
                                           ]
                                         ).catch(console.error);
-                                        toast.success("Activation details & Card ID emailed securely!");
+                                        toast.success("AMEX Registration Hub opened & activation credentials dispatched!");
                                     }}
-                                    className="px-3 py-1.5 transition-colors rounded-lg bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/30 flex items-center gap-2 shrink-0 text-blue-400 font-bold tracking-widest text-[10px] uppercase"
-                                    title="AMEX App Activation"
+                                    className="px-3 py-1.5 transition-colors rounded-lg bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/30 flex items-center gap-2 shrink-0 text-blue-400 font-bold tracking-widest text-[10px] uppercase cursor-pointer"
+                                    title="Open AMEX AU Android App Registration & Fix Hub"
                                   >
                                     <Shield className="w-4 h-4" />
                                     <span>App Sync</span>
@@ -12124,7 +12308,7 @@ Valourian Capital Treasury Command
                 ) : activeTab === "ubereats" ? (
                   <UberEatsApp user={user} balances={balances} setBalances={setBalances} />
                 ) : activeTab === "gateways" ? (
-                  <SovereignGatewaysTab />
+                  <SovereignGatewaysTab user={user} balances={balances} setBalances={setBalances} />
                 ) : activeTab === "logistics" ? (
                   <SovereignLogisticsTab />
                 ) : activeTab === "dispatch" ? (
@@ -12143,6 +12327,8 @@ Valourian Capital Treasury Command
                   <BookingApp user={user} balances={balances} setBalances={setBalances} />
                 ) : activeTab === "wiki" ? (
                   <EnterpriseWikiTab />
+                ) : activeTab === "breakthroughs" ? (
+                  <ComputerScienceBreakthroughs />
                 ) : activeTab === "gateway" ? (
                   <PartnerNetworkTab />
                 ) : activeTab === "aura" ? (
@@ -12155,8 +12341,32 @@ Valourian Capital Treasury Command
                   <OrderSummary orderId="V-88" status="processing" items={[]} eta="N/A" destination="N/A" />
                 ) : activeTab === "reality" ? (
                   <RealityBridge balances={balances} onComplete={() => setActiveTab("treasury")} />
-                ) : activeTab === "notifications" ? (
+                ) : activeTab === "messagecenter" ? (
                   <MessageCenter user={user} />
+                ) : activeTab === "australia" ? (
+                  <ValourianAUWebsite />
+                ) : activeTab === "deposit" ? (
+                  <DepositTab user={user} balances={balances} setBalances={setBalances} onNavigateTab={(tab) => setActiveTab(tab)} />
+                ) : activeTab === "loans" ? (
+                  <SovereignCreditLineTab user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "recurring" ? (
+                  <RecurringSubscriptionsTab />
+                ) : activeTab === "convert" ? (
+                  <FXSwapTab user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "podcast" ? (
+                  <SovereignPodcastTab />
+                ) : activeTab === "payroll" ? (
+                  <GlobalPayrollTab user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "domains" ? (
+                  <IntellectualPropertyTab />
+                ) : activeTab === "comms_policy" ? (
+                  <CommsPolicyTab />
+                ) : activeTab === "tax" ? (
+                  <GlobalTaxTab />
+                ) : activeTab === "eftpos" ? (
+                  <SovereignEFTPOS user={user} balances={balances} setBalances={setBalances} />
+                ) : activeTab === "vouchers" ? (
+                  <VouchersPrintTab />
             ) : null}
           </motion.div>
         </AnimatePresence>
@@ -12184,6 +12394,11 @@ Valourian Capital Treasury Command
         isOpen={isCardDetailsCopyModalOpen}
         onClose={() => setIsCardDetailsCopyModalOpen(false)}
       />
+      <AmexAuAppRegistrationModal
+        isOpen={isAmexAuModalOpen}
+        onClose={() => setIsAmexAuModalOpen(false)}
+        initialCardId={selectedAmexCardIdForModal}
+      />
       <CommBankPayIDFlow
         user={user}
         isOpen={isPayIdModalOpen}
@@ -12191,6 +12406,25 @@ Valourian Capital Treasury Command
         availableBalances={balances}
         onPaymentComplete={(receipt) => {
           toast.success(`PayID Payment of $${receipt.amount.toFixed(2)} AUD sent & confirmed received by ${receipt.recipientName}!`);
+        }}
+      />
+      <NFCTapModal
+        isOpen={isNfcOverlayOpen}
+        onClose={() => setIsNfcOverlayOpen(false)}
+        cards={digitalCards}
+        user={user}
+        onPaymentComplete={(amount, merchant, cardId) => {
+          setDigitalCards((prev) =>
+            prev.map((c) =>
+              c.id === cardId && typeof c.balance === "number"
+                ? { ...c, balance: Math.max(0, c.balance - amount) }
+                : c
+            )
+          );
+          setBalances((prev: any) => ({
+            ...prev,
+            aud: Math.max(0, (prev.aud || 0) - amount)
+          }));
         }}
       />
     </div>

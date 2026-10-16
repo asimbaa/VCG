@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Landmark, ShieldCheck, LogOut, Loader2, FileText, Globe, Send, Mail, Bot, Sparkles, X, Database, RefreshCw, Package, Menu } from "lucide-react";
+import { Landmark, ShieldCheck, LogOut, Loader2, FileText, Globe, Send, Mail, Bot, Sparkles, X, Database, RefreshCw, Package, Menu, ShoppingCart, Cpu, Grid, Layers, ChevronUp, ChevronRight } from "lucide-react";
 import { Logo3D } from "./components/ui/Logo3D";
 const BankDashboard = React.lazy(() => import("./components/bank/BankDashboard").then(m => ({ default: m.BankDashboard })));
 const ValourianDashboard = React.lazy(() => import("./components/bank/ValourianDashboard").then(m => ({ default: m.ValourianDashboard })));
@@ -11,6 +11,10 @@ import { doc, getDocFromServer } from "firebase/firestore";
 import { startPeriodicBackup } from "./services/BackupService";
 const Deployments = React.lazy(() => import("./components/deployments/Deployments").then(m => ({ default: m.Deployments })));
 const RapidPay = React.lazy(() => import("./components/pay/RapidPay").then(m => ({ default: m.RapidPay })));
+import { SovereignNotificationsBar } from "./components/shared/SovereignNotificationsBar";
+import { UnifiedSovereignAcquisitionsHub } from "./components/bank/UnifiedSovereignAcquisitionsHub";
+import { AutonomousSmartTechConsole } from "./components/bank/AutonomousSmartTechConsole";
+import { QuickExecutiveDock } from "./components/shared/QuickExecutiveDock";
 import { ValourianAuth } from "./components/ValourianAuth";
 import { ValourianLogo } from "./components/bank/ValourianLogo";
 import { VoiceInputButton } from './components/shared/VoiceInputButton';
@@ -19,6 +23,7 @@ import { toast } from 'sonner';
 import { AIGuide } from "./components/AIGuide";
 import { ThresholdAlerts } from "./components/bank/ThresholdAlerts";
 import { ValourianAI } from "./components/bank/ValourianAI";
+import { AutoBugCatcherConsole } from "./components/shared/AutoBugCatcherConsole";
 import { FloatingSpeedDial } from "./components/FloatingSpeedDial";
 import { MessageCenter } from "./components/messagecenter/MessageCenter";
 import LogisticsDashboard from "./components/logistics/LogisticsDashboard";
@@ -34,10 +39,12 @@ if (typeof window !== 'undefined') {
 const TABS = [
   { id: "bank", label: "Core", icon: Landmark },
   { id: "commbank", label: "OS", icon: ShieldCheck },
+  { id: "smarttech", label: "SmartTech", icon: Cpu },
+  { id: "acquisitions", label: "Acquire", icon: ShoppingCart },
+  { id: "payments", label: "Pay", icon: Send },
   { id: "docucraft", label: "DocuCraft", icon: FileText },
   { id: "websites", label: "Websites", icon: Globe },
   { id: "messagecenter", label: "Messages", icon: Mail },
-  { id: "payments", label: "Pay", icon: Send },
   { id: "logistics", label: "Logistics", icon: Package }
 ];
 
@@ -67,8 +74,10 @@ const CEO_USER = {
 
 export default function App() {
   const [torrensSyncState, setTorrensSyncState] = useState<'synced' | 'syncing'>('synced');
-  const [activeTab, setActiveTab] = useState<"bank" | "docucraft" | "websites" | "payments" | "commbank" | "messagecenter" | "logistics">("commbank");
+  const [activeTab, setActiveTab] = useState<"bank" | "docucraft" | "websites" | "payments" | "commbank" | "messagecenter" | "logistics" | "acquisitions" | "smarttech">("commbank");
+  const [acquisitionsInitialTab, setAcquisitionsInitialTab] = useState<"properties" | "flights" | "domains" | "stocks">("properties");
   const [user, setUser] = useState<User | null>(null);
+  const [mobileAppsDrawerOpen, setMobileAppsDrawerOpen] = useState(false);
   
   const effectiveUser = user || CEO_USER;
   const [loading, setLoading] = useState(true);
@@ -167,11 +176,11 @@ export default function App() {
           
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto hide-scrollbar pb-6">
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 px-2 mt-4">Applications</div>
-            {TABS.map(tab => {
+            {TABS.map((tab, idx) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
-                  key={tab.id}
+                  key={`app-tab-${tab.id}-${idx}`}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`w-full relative px-4 py-3 text-sm font-bold rounded-xl transition-all flex items-center gap-3 ${
                     isActive 
@@ -237,6 +246,25 @@ export default function App() {
              </div>
           </header>
 
+          {/* Sovereign Notifications & Command Bar */}
+          <SovereignNotificationsBar 
+            onOpenAcquisitions={(subTab) => {
+              setAcquisitionsInitialTab(subTab || "properties");
+              setActiveTab("acquisitions");
+            }}
+            onOpenSmartTech={() => setActiveTab("smarttech")}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
+          />
+
+          {/* Quick Executive Usability Dock (Card Copy, Address, Phone, Quick Nav) */}
+          <QuickExecutiveDock 
+            onNavigate={(tab, sub) => {
+              if (sub) setAcquisitionsInitialTab(sub);
+              setActiveTab(tab as any);
+            }} 
+            activeTab={activeTab} 
+          />
+
           {/* Banner */}
           <AnimatePresence>
             {showBanner && (
@@ -260,10 +288,23 @@ export default function App() {
           </AnimatePresence>
 
           {/* Content Area */}
-          <main className="flex-1 overflow-y-auto scroll-smooth pb-20 md:pb-0 relative">
+          <main className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-0 relative">
             <React.Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-emerald-500" /></div>}>
               {activeTab === "bank" && <BankDashboard user={effectiveUser} />}
               {activeTab === "commbank" && <ValourianDashboard user={effectiveUser} />}
+              {activeTab === "smarttech" && (
+                <div className="p-4 sm:p-8">
+                  <AutonomousSmartTechConsole />
+                </div>
+              )}
+              {activeTab === "acquisitions" && (
+                <div className="p-4 sm:p-8">
+                  <UnifiedSovereignAcquisitionsHub 
+                    initialTab={acquisitionsInitialTab} 
+                    onClose={() => setActiveTab("commbank")}
+                  />
+                </div>
+              )}
               {activeTab === "docucraft" && <DocuCraft user={effectiveUser} />}
               {activeTab === "websites" && <Deployments user={effectiveUser} />}
               {activeTab === "payments" && <RapidPay user={effectiveUser} />}
@@ -272,35 +313,179 @@ export default function App() {
             </React.Suspense>
           </main>
 
-          {/* Mobile Bottom Navigation */}
+          {/* Streamlined Mobile Bottom 5-Button Dock */}
           <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center justify-around px-2 py-2 overflow-x-auto hide-scrollbar gap-1">
-              {TABS.map(tab => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex flex-col items-center justify-center p-2 min-w-[4rem] rounded-xl transition-all relative ${
-                      isActive 
-                        ? "text-emerald-400" 
-                        : "text-slate-500 hover:text-slate-300"
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.div 
-                        layoutId="mobile-nav-bubble" 
-                        className="absolute inset-0 bg-emerald-500/10 border border-emerald-500/20 rounded-xl -z-10"
-                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                      />
-                    )}
-                    <tab.icon className={`w-5 h-5 mb-1 ${isActive ? "scale-110" : ""}`} />
-                    <span className="text-[9px] font-bold tracking-wide truncate w-full text-center">{tab.label}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center justify-around px-2 py-1.5">
+              <button
+                onClick={() => { setActiveTab("commbank"); setMobileAppsDrawerOpen(false); }}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
+                  activeTab === "commbank" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <ShieldCheck className={`w-5 h-5 mb-1 ${activeTab === "commbank" ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-bold">OS</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("payments"); setMobileAppsDrawerOpen(false); }}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
+                  activeTab === "payments" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <Send className={`w-5 h-5 mb-1 ${activeTab === "payments" ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-bold">Pay</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("acquisitions"); setMobileAppsDrawerOpen(false); }}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
+                  activeTab === "acquisitions" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <ShoppingCart className={`w-5 h-5 mb-1 ${activeTab === "acquisitions" ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-bold">Acquire</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("smarttech"); setMobileAppsDrawerOpen(false); }}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
+                  activeTab === "smarttech" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <Cpu className={`w-5 h-5 mb-1 ${activeTab === "smarttech" ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-bold">Tech</span>
+              </button>
+
+              <button
+                onClick={() => setMobileAppsDrawerOpen(!mobileAppsDrawerOpen)}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
+                  mobileAppsDrawerOpen || ["bank", "docucraft", "websites", "messagecenter", "logistics"].includes(activeTab)
+                    ? "text-cyan-400" 
+                    : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <Grid className={`w-5 h-5 mb-1 ${mobileAppsDrawerOpen ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-bold">Apps</span>
+              </button>
             </div>
           </nav>
+
+          {/* Mobile Slide-Up Apps Drawer */}
+          <AnimatePresence>
+            {mobileAppsDrawerOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end"
+                onClick={() => setMobileAppsDrawerOpen(false)}
+              >
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 space-y-4 max-h-[75vh] overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Grid className="w-5 h-5 text-cyan-400" />
+                      <h3 className="text-base font-black text-white">Sovereign Applications</h3>
+                    </div>
+                    <button onClick={() => setMobileAppsDrawerOpen(false)} className="p-1.5 text-slate-400 hover:text-white">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => { setActiveTab("bank"); setMobileAppsDrawerOpen(false); }}
+                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                        activeTab === "bank" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Landmark className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Core Bank</div>
+                        <div className="text-[10px] text-slate-400">Global Treasury & Yield</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("messagecenter"); setMobileAppsDrawerOpen(false); }}
+                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                        activeTab === "messagecenter" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Mail className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Messages</div>
+                        <div className="text-[10px] text-slate-400">Secure Comms & Mail</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("logistics"); setMobileAppsDrawerOpen(false); }}
+                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                        activeTab === "logistics" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Package className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Logistics</div>
+                        <div className="text-[10px] text-slate-400">Fleet & Dispatches</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("docucraft"); setMobileAppsDrawerOpen(false); }}
+                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                        activeTab === "docucraft" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <FileText className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">DocuCraft</div>
+                        <div className="text-[10px] text-slate-400">AI Document Engine</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("websites"); setMobileAppsDrawerOpen(false); }}
+                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors col-span-2 ${
+                        activeTab === "websites" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Globe className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Websites & Deployments</div>
+                        <div className="text-[10px] text-slate-400">Production URLs & Cloud Run instances</div>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                    <button
+                      onClick={handleForceBatchExport}
+                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Export Torrens Ledger</span>
+                    </button>
+
+                    <button
+                      onClick={logOut}
+                      className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
         </div>
 
@@ -386,6 +571,9 @@ export default function App() {
           </motion.div>
         )}
         </AnimatePresence>
+
+        {/* Sovereign Auto Bug Catcher & Human Flourishing Resilience Console */}
+        <AutoBugCatcherConsole />
       </div>
     </ErrorBoundary>
   );

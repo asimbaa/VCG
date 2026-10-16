@@ -47,7 +47,7 @@ export const OrderSummary: React.FC<OrderSummaryProps> = ({ orderId, status, ite
             const isCompleted = idx <= currentStepIndex;
             const isCurrent = idx === currentStepIndex;
             return (
-              <div key={step.id} className="flex flex-col items-center gap-2 relative z-10">
+              <div key={`order-step-${step.id}-${idx}`} className="flex flex-col items-center gap-2 relative z-10">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
                   isCompleted 
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
@@ -90,7 +90,7 @@ export const OrderSummary: React.FC<OrderSummaryProps> = ({ orderId, status, ite
           <AnimatePresence>
             {items.map((item, idx) => (
               <motion.div 
-                key={idx}
+                key={`summary-item-${item.name || 'item'}-${idx}`}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.1 }}

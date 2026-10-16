@@ -134,7 +134,7 @@ export function CryptoPortfolioWidget({ totalEquity }: CryptoPortfolioWidgetProp
         </h3>
         <div className="space-y-3">
           {allHoldings.map((asset, idx) => (
-            <div key={idx} className="bg-slate-800/50 p-4 rounded-xl flex items-center justify-between border border-slate-700">
+            <div key={`combo-asset-${asset.symbol}-${idx}`} className="bg-slate-800/50 p-4 rounded-xl flex items-center justify-between border border-slate-700">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center font-bold text-white">
                   {asset.symbol}
@@ -194,8 +194,8 @@ export function CryptoPortfolioWidget({ totalEquity }: CryptoPortfolioWidgetProp
                   onChange={(e) => setTransferAsset(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-emerald-500/50 font-medium"
                 >
-                  {allHoldings.map(h => (
-                    <option key={h.symbol} value={h.symbol}>{h.name} ({h.symbol})</option>
+                  {allHoldings.map((h, idx) => (
+                    <option key={`crypto-opt-${h.symbol}-${idx}`} value={h.symbol}>{h.name} ({h.symbol})</option>
                   ))}
                 </select>
               </div>

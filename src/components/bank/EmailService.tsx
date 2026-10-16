@@ -158,7 +158,7 @@ export function EmailPreviewModal({ data, onClose }: { data: EmailData | null; o
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Attachments</h4>
                 <div className="flex gap-3 flex-wrap">
                   {data.attachments.map((att, i) => (
-                    <div key={i} onClick={() => setActiveAttachment(att)} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 cursor-pointer transition-colors">
+                    <div key={`email-att-${att.name || 'att'}-${i}`} onClick={() => setActiveAttachment(att)} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 cursor-pointer transition-colors">
                       <div className="bg-red-100 text-red-600 p-2 rounded-lg">
                         <FileText className="w-5 h-5" />
                       </div>

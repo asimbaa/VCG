@@ -250,9 +250,9 @@ export function ValourianStrategicAssets({ setActiveTab }: { setActiveTab?: (tab
             </div>
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2 md:pb-0 w-full md:w-auto">
               <Filter className="w-4 h-4 text-slate-500 mr-2 shrink-0" />
-              {categories.map(cat => (
+              {categories.map((cat, idx) => (
                 <button
-                  key={cat}
+                  key={`strat-cat-${cat}-${idx}`}
                   onClick={() => setActiveCategory(cat)}
                   className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shrink-0 ${
                     activeCategory === cat 
@@ -267,8 +267,8 @@ export function ValourianStrategicAssets({ setActiveTab }: { setActiveTab?: (tab
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredAssets.map((asset) => (
-              <div key={asset.id} className="bg-slate-900/80 backdrop-blur-sm border border-slate-800 rounded-3xl p-6 hover:bg-slate-800 transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_10px_40px_-10px_rgba(16,185,129,0.1)] group relative overflow-hidden flex flex-col justify-between">
+            {filteredAssets.map((asset, aIdx) => (
+              <div key={`strat-asset-${asset.id}-${aIdx}`} className="bg-slate-900/80 backdrop-blur-sm border border-slate-800 rounded-3xl p-6 hover:bg-slate-800 transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_10px_40px_-10px_rgba(16,185,129,0.1)] group relative overflow-hidden flex flex-col justify-between">
                 <div className={`absolute top-0 right-0 w-32 h-32 bg-${asset.color}-500/10 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-${asset.color}-500/20 transition-all`}></div>
                 
                 <div className="flex items-center justify-between mb-4 relative z-10">

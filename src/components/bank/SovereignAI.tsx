@@ -320,9 +320,9 @@ export const SovereignAI: React.FC<{
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
               <h3 className="px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4">Neural History</h3>
-              {sessions.map(session => (
+              {sessions.map((session, sIdx) => (
                 <div 
-                  key={session.id}
+                  key={`ai-sess-${session.id}-${sIdx}`}
                   onClick={() => setActiveSessionId(session.id)}
                   className={`group relative flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all ${
                     activeSessionId === session.id 
@@ -413,9 +413,9 @@ export const SovereignAI: React.FC<{
                     { id: 'financier', icon: <TrendingDown className="w-3.5 h-3.5" />, label: "Fiscal" },
                     { id: 'strategist', icon: <Globe className="w-3.5 h-3.5" />, label: "Global" },
                     { id: 'risk', icon: <Lock className="w-3.5 h-3.5" />, label: "Security" }
-                ].map(agent => (
+                ].map((agent, aIdx) => (
                     <button 
-                        key={agent.id}
+                        key={`ai-agent-${agent.id}-${aIdx}`}
                         onClick={() => setActiveAgent(agent.id as any)}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeAgent === agent.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
                     >
@@ -541,9 +541,9 @@ export const SovereignAI: React.FC<{
               { label: "Treasury Sync", icon: <Zap className="w-3 h-3" /> },
               { label: "Asset Audit", icon: <Globe className="w-3 h-3" /> },
               { label: "Identity Hash", icon: <Cpu className="w-3 h-3" /> }
-            ].map(action => (
+            ].map((action, aIdx) => (
               <button 
-                key={action.label}
+                key={`ai-act-${action.label}-${aIdx}`}
                 onClick={() => handleSend(action.label)}
                 className="whitespace-nowrap px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all flex items-center gap-2"
               >

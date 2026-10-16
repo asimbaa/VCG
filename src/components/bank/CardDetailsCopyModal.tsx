@@ -7,6 +7,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import { numpyCardSuperService, AU_DEFAULT_BILLING } from '../../services/numpyCardSuperService';
+import { AmexAuAppRegistrationModal } from './AmexAuAppRegistrationModal';
 
 interface CardDetailsCopyModalProps {
   card: any | null;
@@ -24,6 +25,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
   const [isSimulatingCheckout, setIsSimulatingCheckout] = useState(false);
   const [simulatedReceipt, setSimulatedReceipt] = useState<any | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState('Amazon.com.au / Amazon US');
+  const [isAmexAuRegistrationOpen, setIsAmexAuRegistrationOpen] = useState(false);
 
   if (!isOpen || !card) return null;
 
@@ -481,13 +483,22 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
                       Complete pre-provisioned activation profile for the official Amex App (iOS / Android) and American Express Australia web portal.
                     </p>
                   </div>
-                  <button
-                    onClick={() => window.open('https://www.americanexpress.com/en-au/', '_blank')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer shrink-0"
-                  >
-                    <span>Launch Amex Australia</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setIsAmexAuRegistrationOpen(true)}
+                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>AMEX AU Android App Registration Hub</span>
+                    </button>
+                    <button
+                      onClick={() => window.open('https://www.americanexpress.com/en-au/', '_blank')}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <span>Web Portal</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -497,7 +508,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
                   <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest block">Step 1</span>
                   <h5 className="text-xs font-bold text-white">Download & Open Amex App</h5>
                   <p className="text-[11px] text-slate-400">
-                    Open the official American Express App on your iPhone or Android, and tap <strong>"Activate a Card"</strong> or <strong>"Add Card"</strong>.
+                    Open the official American Express App on Android or iOS, and tap <strong>"Activate a Card"</strong> or <strong>"Register for Online Services"</strong>.
                   </p>
                 </div>
 
@@ -505,7 +516,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
                   <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest block">Step 2</span>
                   <h5 className="text-xs font-bold text-white">Enter 15-Digit PAN & 4-Digit CID</h5>
                   <p className="text-[11px] text-slate-400">
-                    Copy the 15-digit card number and 4-digit CID below. Billing address matches your Australian residency (2065 NSW).
+                    Enter the 15-digit PAN and front 4-digit CID. Billing address matches your Australian residency: <strong>Postcode 2064 (Artarmon, NSW)</strong>.
                   </p>
                 </div>
 
@@ -641,6 +652,11 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
           </button>
         </div>
       </motion.div>
+
+      <AmexAuAppRegistrationModal
+        isOpen={isAmexAuRegistrationOpen}
+        onClose={() => setIsAmexAuRegistrationOpen(false)}
+      />
     </div>
   );
 };

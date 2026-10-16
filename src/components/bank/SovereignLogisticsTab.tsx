@@ -66,9 +66,9 @@ export function SovereignLogisticsTab() {
               { id: 'map', icon: MapPin, label: 'Live Map' },
               { id: 'fleet', icon: Car, label: 'Fleet Status' },
               { id: 'assets', icon: Package, label: 'Asset Tracker' }
-            ].map(tab => (
+            ].map((tab, tIdx) => (
               <button
-                key={tab.id}
+                key={`log-tab-${tab.id}-${tIdx}`}
                 onClick={() => setActiveView(tab.id as any)}
                 className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl transition-all ${
                   activeView === tab.id
@@ -89,9 +89,9 @@ export function SovereignLogisticsTab() {
                 <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <Crosshair className="w-4 h-4 text-blue-400" /> Active Tracking Vectors
                 </h3>
-                {fleet.filter(f => f.status === 'ACTIVE').map(vehicle => (
+                {fleet.filter(f => f.status === 'ACTIVE').map((vehicle, vIdx) => (
                   <button 
-                    key={vehicle.id}
+                    key={`veh-btn-${vehicle.id}-${vIdx}`}
                     onClick={() => setSelectedVehicle(vehicle)}
                     className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedVehicle?.id === vehicle.id ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'}`}
                   >
@@ -114,8 +114,8 @@ export function SovereignLogisticsTab() {
                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <Car className="w-4 h-4 text-blue-400" /> Global Fleet Roster
                 </h3>
-                {fleet.map(vehicle => (
-                  <div key={vehicle.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col gap-3">
+                {fleet.map((vehicle, vIdx) => (
+                  <div key={`veh-item-${vehicle.id}-${vIdx}`} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col gap-3">
                     <div className="flex justify-between items-center">
                       <span className="text-white font-bold text-sm">{vehicle.id}</span>
                       <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
@@ -142,8 +142,8 @@ export function SovereignLogisticsTab() {
                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-blue-400" /> Secure Transport Ledger
                 </h3>
-                {highValueAssets.map(asset => (
-                  <div key={asset.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                {highValueAssets.map((asset, aIdx) => (
+                  <div key={`asset-item-${asset.id}-${aIdx}`} className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
                     <div className="flex justify-between items-center mb-3">
                       <div className="text-[10px] font-mono font-bold text-slate-400">{asset.id}</div>
                       <div className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${

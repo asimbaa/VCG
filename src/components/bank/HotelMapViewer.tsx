@@ -281,7 +281,7 @@ function MapContent({
 
       {/* Scenic Waypoints Markers when Scenic Route is Active */}
       {scenicRoute && scenicWaypoints.map((wp, i) => (
-        <AdvancedMarker key={wp.id} position={{ lat: wp.lat, lng: wp.lng }} title={wp.name} zIndex={95}>
+        <AdvancedMarker key={`scenic-wp-${wp.id}-${i}`} position={{ lat: wp.lat, lng: wp.lng }} title={wp.name} zIndex={95}>
           <div className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white flex items-center justify-center animate-bounce">
             <Camera className="w-3.5 h-3.5 fill-white text-cyan-200" />
           </div>
@@ -355,7 +355,7 @@ function MapContent({
               Randomized Waypoints ({scenicWaypoints.length})
             </span>
             {scenicWaypoints.map((wp, i) => (
-              <div key={wp.id} className="text-[10px] bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">
+              <div key={`scenic-wp-desc-${wp.id}-${i}`} className="text-[10px] bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">
                 <span className="font-bold text-cyan-300 flex items-center gap-1">
                   <Camera className="w-2.5 h-2.5" /> Stop {i + 1}: {wp.name}
                 </span>

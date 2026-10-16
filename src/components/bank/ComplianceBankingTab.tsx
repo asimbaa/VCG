@@ -50,7 +50,7 @@ export function ComplianceBankingTab() {
             </p>
             <div className="space-y-3">
               {partners.map((p, i) => (
-                <div key={i} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl hover:border-indigo-200 transition-colors">
+                <div key={`partner-${p.name}-${i}`} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl hover:border-indigo-200 transition-colors">
                   <div>
                     <div className="font-bold text-slate-900 text-sm">{p.name}</div>
                     <div className="text-xs text-slate-500">{p.type}</div>

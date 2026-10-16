@@ -92,17 +92,17 @@ const RESTAURANTS = [
   {
     id: 1001, name: "Quay Restaurant (Direct Dispatch)", cuisine: "Contemporary Australian & Fine Dining", rating: 5.0, deliveryTime: "VIP Courier", image: "https://images.unsplash.com/photo-1544148103-0773bf10d330?w=800&q=80", is24Hours: true,
     menu: [
-      { id: "q1", name: "Eight-Course Tasting Menu for Two", price: 750 },
-      { id: "q2", name: "White Coral Dessert (Signature)", price: 85 },
-      { id: "q3", name: "Caviar & Crumpets Supplement", price: 210 }
+      { id: "quay_vip_1", name: "Eight-Course Tasting Menu for Two", price: 750 },
+      { id: "quay_vip_2", name: "White Coral Dessert (Signature)", price: 85 },
+      { id: "quay_vip_3", name: "Caviar & Crumpets Supplement", price: 210 }
     ]
   },
   {
     id: 1002, name: "Tetsuya's (Sovereign Escort)", cuisine: "Japanese-French Degustation", rating: 4.9, deliveryTime: "Chilled Fleet", image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=80", is24Hours: true,
     menu: [
-      { id: "t1", name: "Confit of Ocean Trout (Signature)", price: 120 },
-      { id: "t2", name: "Wagyu Beef with Braised Leeks", price: 155 },
-      { id: "t3", name: "Full Degustation Experience (At Home)", price: 650 }
+      { id: "tets_vip_1", name: "Confit of Ocean Trout (Signature)", price: 120 },
+      { id: "tets_vip_2", name: "Wagyu Beef with Braised Leeks", price: 155 },
+      { id: "tets_vip_3", name: "Full Degustation Experience (At Home)", price: 650 }
     ]
   },
   {
@@ -2332,10 +2332,10 @@ Thank you for choosing Uber Eats Sovereign.`,
                       <h4 className="font-extrabold text-[#06C167] text-xs uppercase tracking-widest mb-1.5">
                         Gastronomy List
                       </h4>
-                      {selectedRestaurant.menu.map((item: any) => (
+                      {selectedRestaurant.menu.map((item: any, idx: number) => (
                         // Precise Framer Motion subtle hover animation implemented as requested by user
                         <motion.div
-                          key={item.id}
+                          key={`${item.id}-${idx}`}
                           whileHover={{ scale: 1.02, y: -2 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{
@@ -2376,7 +2376,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                         </span>
                         {cart.length > 0 && (
                           <motion.span
-                            key={cart.length}
+                            key={`eats-cart-badge-${cart.length}`}
                             initial={{ scale: 0.6, opacity: 0 }}
                             animate={{ scale: [1, 1.5, 1], opacity: 1 }}
                             transition={{
@@ -2433,7 +2433,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                           <div className="pt-3 flex justify-between font-black text-base text-slate-900">
                             <span>Order Total</span>
                             <motion.span
-                              key={cartTotal}
+                              key={`eats-cart-total-${cartTotal}`}
                               initial={{ scale: 0.8, opacity: 0.5 }}
                               animate={{ scale: [1, 1.1, 1], opacity: 1 }}
                               transition={{
@@ -2539,10 +2539,10 @@ Thank you for choosing Uber Eats Sovereign.`,
                               SAVED ADDRESSES (SELECT ONE)
                             </label>
                             <div className="flex flex-col gap-1.5">
-                              {savedAddresses.map((addr) => {
+                              {savedAddresses.map((addr, aIdx) => {
                                 const isSelected = deliveryAddress === addr;
                                 return (                                  <div
-                                    key={addr}
+                                    key={`eats-addr-${addr}-${aIdx}`}
 
                                     onClick={() => setDeliveryAddress(addr)}
                                     className={`w-full text-left p-2.5 text-xs rounded-xl border transition-all flex items-start gap-2 cursor-pointer ${
@@ -2684,7 +2684,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                                     </div>
                                     {addressSuggestions.map((item, idy) => (
                                       <button
-                                        key={idy}
+                                        key={`amas-sugg-${item.dpid || idy}-${idy}`}
                                         onClick={() => {
                                           setNewAddressInput(item.full);
                                           setAddressDpid(item.dpid);
@@ -3418,9 +3418,9 @@ Thank you for choosing Uber Eats Sovereign.`,
                       <div className="flex gap-3 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200">
                         {RESTAURANTS.filter((r) =>
                           favorites.includes(r.id),
-                        ).map((r) => (
+                        ).map((r, fIdx) => (
                           <div
-                            key={r.id}
+                            key={`fav-rest-${r.id}-${fIdx}`}
                             onClick={() => setSelectedRestaurant(r)}
                             className="bg-white hover:border-emerald-200 border border-slate-200 p-3 rounded-xl flex items-center gap-3 cursor-pointer shrink-0 hover:shadow-sm transition-all select-none"
                           >
@@ -3453,9 +3453,9 @@ Thank you for choosing Uber Eats Sovereign.`,
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredRestaurants.map((r) => (
+                      {filteredRestaurants.map((r, rIdx) => (
                         <div
-                          key={r.id}
+                          key={`filtered-rest-${r.id}-${rIdx}`}
                           onClick={() => setSelectedRestaurant(r)}
                           className="bg-white rounded-2xl border border-slate-200 overflow-hidden cursor-pointer hover:shadow-xl transition-all hover:-translate-y-1 group flex flex-col justify-between"
                         >
@@ -3595,8 +3595,8 @@ Thank you for choosing Uber Eats Sovereign.`,
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {myVouchers.map((v) => (
-                            <div key={v.id} className="bg-slate-900 border border-slate-700/50 rounded-xl p-4 flex gap-4 items-center">
+                          {myVouchers.map((v, vIdx) => (
+                            <div key={`my-voucher-${v.id}-${vIdx}`} className="bg-slate-900 border border-slate-700/50 rounded-xl p-4 flex gap-4 items-center">
                               <div className="bg-white p-1 rounded-lg shrink-0 shadow-sm">
                                 <QRCodeSVG value={v.code} size={50} level="Q" />
                               </div>
@@ -4467,7 +4467,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                   }
 
                   return (                    <div className="space-y-3">
-                      {filteredOrders.map((order) => {
+                      {filteredOrders.map((order, idx) => {
                         const orderDate = new Date(
                           order.date,
                         ).toLocaleDateString("en-AU", {
@@ -4479,7 +4479,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                         });
 
                         return (                          <div
-                            key={order.id}
+                            key={`past-order-${order.id}-${idx}`}
                             className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3"
                           >
                             <div className="flex justify-between items-start">
@@ -4627,7 +4627,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                                 <div className="space-y-1">
                                   {order.items.map((it: any, idx: number) => (
                                     <div
-                                      key={idx}
+                                      key={`order-it-${it.name || 'item'}-${idx}`}
                                       className="flex justify-between text-xs text-slate-600"
                                     >
                                       <span>{it.name}</span>
@@ -4680,7 +4680,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                                   </span>
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <button
-                                      key={star}
+                                      key={`order-${order.id}-star-${star}`}
                                       onClick={async () => {
                                         try {
                                           await updateDoc(

@@ -108,7 +108,7 @@ export function RealityBridge({ balances, onComplete }: { balances: any, onCompl
           <AnimatePresence>
             {logs.map((log, i) => (
               <motion.div 
-                key={i}
+                key={`reality-log-${i}`}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-start gap-3"

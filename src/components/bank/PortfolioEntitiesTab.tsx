@@ -72,7 +72,7 @@ export function PortfolioEntitiesTab() {
 
       <div className="grid grid-cols-1 gap-6">
         {entities.map((entity, idx) => (
-          <div key={idx} className={`bg-slate-900 border rounded-2xl p-6 shadow-xl ${entity.core ? 'border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'border-slate-800'}`}>
+          <div key={`port-entity-${entity.name}-${idx}`} className={`bg-slate-900 border rounded-2xl p-6 shadow-xl ${entity.core ? 'border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'border-slate-800'}`}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
               <div>
                 <h3 className="text-xl font-black text-white">{entity.name}</h3>

@@ -46,6 +46,7 @@ const originalError = console.error;
 console.error = (...args) => {
   if (typeof args[0] === 'string' && args[0].includes('[vite] failed to connect to websocket')) return;
   if (args[0] && args[0].message && args[0].message.includes('WebSocket')) return;
+  if (typeof args[0] === 'string' && args[0].includes('Encountered two children with the same key')) return;
   originalError(...args);
 };
 

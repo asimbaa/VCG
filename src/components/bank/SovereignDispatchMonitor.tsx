@@ -207,8 +207,8 @@ export const SovereignDispatchMonitor = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                        {fleet.map((vehicle) => (
-                            <div key={vehicle.id} className="bg-slate-950/80 rounded-3xl p-6 border border-slate-800 flex flex-col justify-between group hover:border-emerald-500/50 transition-all shadow-xl">
+                        {fleet.map((vehicle, vIdx) => (
+                            <div key={`dispatch-veh-${vehicle.id}-${vIdx}`} className="bg-slate-950/80 rounded-3xl p-6 border border-slate-800 flex flex-col justify-between group hover:border-emerald-500/50 transition-all shadow-xl">
                                 <div>
                                     <div className="flex justify-between items-start mb-6">
                                         <div className="flex items-center gap-3">

@@ -87,7 +87,7 @@ export function AIGuide() {
 
             <div className="flex-1 p-4 overflow-y-auto max-h-[40vh] space-y-4">
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'ai' ? 'justify-start' : 'justify-end'}`}>
+                <div key={`guide-msg-${i}-${msg.role}`} className={`flex ${msg.role === 'ai' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${
                     msg.role === 'ai' 
                       ? 'bg-slate-900 text-slate-300 border border-slate-800 rounded-tl-sm' 

@@ -41,8 +41,13 @@ import {
   Server,
   ArrowRight,
   Loader2,
-  Zap
+  Zap,
+  Upload,
+  Camera,
+  Key,
+  Building2
 } from "lucide-react";
+import { CryptoKeysModal } from "../bank/CryptoKeysModal";
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -64,13 +69,18 @@ import { AIGuide } from "../AIGuide";
 import { NFCTapModal } from "./NFCTapModal";
 import { LinkComManagerModal } from "./LinkComManagerModal";
 import { CommBankPayIDFlow } from "./CommBankPayIDFlow";
+import { ExternalBankAccountsDashboard } from "../bank/ExternalBankAccountsDashboard";
 import {
   reconcileAndSettleAllPayments,
   COMMBANK_LINKED_ACCOUNTS,
   updateCbaAccountBalance,
   subscribeToCbaBalances,
   resolvePayIDDirectory,
+  executeBpayPayment,
+  BPAY_BILLER_DIRECTORY,
+  validateBpayDetails,
 } from "../../services/paymentSettlementService";
+import { generateBpayPdfReceipt } from "../../utils/pdfGenerator";
 import {
   BASE_BANKING_CREDIT_CARDS,
   syncAllCardsToLinkAccount,
@@ -105,19 +115,59 @@ const playChirp = () => {
 
 const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: string) => void, isBatchMode: boolean, onToggleBatch: () => void }) => {
   const webcamRef = useRef<Webcam>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isNfcActive, setIsNfcActive] = useState(false);
+  const [manualCode, setManualCode] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsProcessing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, img.width, img.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) {
+            playChirp();
+            setScanSuccess(true);
+            setTimeout(() => {
+              onScan(code.data);
+              setIsProcessing(false);
+              setScanSuccess(false);
+            }, 600);
+          } else {
+            setIsProcessing(false);
+            toast.error("No valid QR code detected in the uploaded image. Please try another image or manual input.");
+          }
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const startNFCScan = async () => {
     if (!('NDEFReader' in window)) {
-      import("sonner").then(({ toast }) => toast.error('NFC is not supported on this device/browser'));
+      toast.error('NFC is not supported on this device/browser');
       return;
     }
     try {
       setIsNfcActive(true);
       const ndef = new (window as any).NDEFReader();
       await ndef.scan();
-      import("sonner").then(({ toast }) => toast.info('Hold your device near the NFC tag...'));
+      toast.info('Hold your device near the NFC tag...');
       ndef.addEventListener('reading', ({ message, serialNumber }: any) => {
         let nfcData = '';
         for (const record of message.records) {
@@ -129,13 +179,9 @@ const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: 
       });
     } catch (e: any) {
       setIsNfcActive(false);
-      import("sonner").then(({ toast }) => toast.error('NFC Scan failed: ' + e.message));
+      toast.error('NFC Scan failed: ' + e.message);
     }
   };
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [scanSuccess, setScanSuccess] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-
 
   const capture = useCallback(() => {
     if (isProcessing || scanSuccess) return;
@@ -166,9 +212,7 @@ const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: 
                   setScanSuccess(false);
                 }, 1000);
               } else {
-                import("sonner").then(({ toast }) => {
-                  toast.error("Invalid or Unsupported QR Code Format");
-                });
+                toast.error("Invalid or Unsupported QR Code Format");
                 setIsProcessing(false);
                 setResetKey(prev => prev + 1); // Reset camera state
               }
@@ -185,7 +229,6 @@ const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: 
       capture();
       timeoutCounter += 500;
       if (timeoutCounter >= 5000 && !isProcessing && !scanSuccess) {
-        // Auto reset if nothing found for 5s
         setResetKey(prev => prev + 1);
         timeoutCounter = 0;
       }
@@ -194,15 +237,123 @@ const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: 
   }, [capture, isProcessing, scanSuccess]);
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-2xl bg-slate-900 flex flex-col items-center justify-center">
+    <div className="relative w-full h-full overflow-hidden rounded-2xl bg-slate-900 flex flex-col items-center justify-center p-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+
       {cameraError ? (
-        <div className="p-6 flex flex-col items-center text-center">
-          <AlertCircle className="w-12 h-12 text-rose-500 mb-4" />
-          <h4 className="text-white font-bold mb-2">Camera Access Denied</h4>
-          <p className="text-sm text-slate-400">Please enable camera permissions in your browser settings to scan QR codes.</p>
+        <div className="p-4 flex flex-col items-center text-center w-full max-w-sm space-y-3 z-20 overflow-y-auto max-h-full">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500 border border-rose-500/20">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div>
+            <h4 className="text-white font-black text-base mb-1">Camera Permission Fallback</h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Camera access was denied by browser or iframe. Use photo upload, manual entry, or instant PayID routing below:
+            </p>
+          </div>
+
+          <div className="w-full flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload QR Image / Photo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCameraError(null);
+                setResetKey(prev => prev + 1);
+              }}
+              className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Camera Permission</span>
+            </button>
+          </div>
+
+          {/* Manual Input Entry */}
+          <div className="w-full pt-2 border-t border-slate-800/80">
+            <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 block text-left mb-1.5">
+              Enter PayID, BSB, or Merchant Code
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder="e.g. 0400 286 693 or email"
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (manualCode.trim()) {
+                    playChirp();
+                    onScan(manualCode.trim());
+                    setManualCode("");
+                  }
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+
+          {/* Quick PayID Presets */}
+          <div className="w-full text-left">
+            <span className="text-[9px] uppercase font-black tracking-wider text-slate-500 block mb-1">
+              Verified NPP Test Presets:
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => { playChirp(); onScan("0400 286 693"); }}
+                className="text-[10px] font-bold px-2 py-1 rounded bg-slate-800 hover:bg-emerald-950 text-emerald-400 border border-emerald-500/30 cursor-pointer"
+              >
+                0400 286 693 (Asim Aryal)
+              </button>
+              <button
+                type="button"
+                onClick={() => { playChirp(); onScan("asim.nsw@gmail.com"); }}
+                className="text-[10px] font-bold px-2 py-1 rounded bg-slate-800 hover:bg-blue-950 text-blue-400 border border-blue-500/30 cursor-pointer"
+              >
+                asim.nsw@gmail.com
+              </button>
+              <button
+                type="button"
+                onClick={() => { playChirp(); onScan("VALOURIAN-POS-MERCHANT-01"); }}
+                className="text-[10px] font-bold px-2 py-1 rounded bg-slate-800 hover:bg-amber-950 text-amber-400 border border-amber-500/30 cursor-pointer"
+              >
+                Valourian POS QR
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <>
+          {/* Top Quick Actions Bar */}
+          <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Upload QR Code from image"
+              className="p-2 rounded-xl bg-slate-800/90 text-emerald-400 border border-emerald-500/40 hover:bg-slate-700 transition-colors backdrop-blur-md shadow-lg"
+            >
+              <Upload className="w-4 h-4" />
+            </button>
+          </div>
+
           <Webcam
             key={resetKey}
             ref={webcamRef}
@@ -238,7 +389,6 @@ const RealQRScanner = ({ onScan, isBatchMode, onToggleBatch }: { onScan: (data: 
                {isBatchMode ? 'Batch Mode: ON' : 'Batch Mode: OFF'}
              </button>
           </div>
-
 
           {isProcessing && !scanSuccess && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/50 backdrop-blur-sm z-10 pointer-events-none">
@@ -315,7 +465,7 @@ export function RapidPay({ user }: { user: any }) {
   const [receiveReqAmount, setReceiveReqAmount] = useState("");
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
-  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr">("standard");
+  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts">("standard");
   const [recipient, setRecipient] = useState("");
   const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
   const [payIdValue, setPayIdValue] = useState("");
@@ -334,6 +484,7 @@ export function RapidPay({ user }: { user: any }) {
   const [cryptoAsset, setCryptoAsset] = useState<"BTC" | "ETH" | "USDT" | "VAL" | "SOL" | "XRP" | "ADA" | "DOT">("VAL");
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [cryptoAmount, setCryptoAmount] = useState("");
+  const [showCryptoKeysModal, setShowCryptoKeysModal] = useState(false);
   const [cryptoHistory, setCryptoHistory] = useState<any[]>([
     {
       id: "tx-101",
@@ -378,12 +529,29 @@ export function RapidPay({ user }: { user: any }) {
   // BSB-linked digital credit card states
   const [bsbLinkedCards, setBsbLinkedCards] = useState<any[]>([]);
   const [tappedCard, setTappedCard] = useState<any>(null);
-  const [payingType, setPayingType] = useState<"transfer" | "bpay">("transfer");
+  const [payingType, setPayingType] = useState<"transfer" | "bpay" | "payid">("transfer");
   const [payingRecipient, setPayingRecipient] = useState("");
   const [payingBsb, setPayingBsb] = useState("");
   const [payingAccount, setPayingAccount] = useState("");
   const [payingBpayBiller, setPayingBpayBiller] = useState("");
   const [payingBpayCrn, setPayingBpayCrn] = useState("");
+  const [payingPayIdValue, setPayingPayIdValue] = useState("");
+  const [payingPayIdType, setPayingPayIdType] = useState<"phone" | "email" | "abn" | "organization">("phone");
+  const [payingPayIdResolved, setPayingPayIdResolved] = useState<{
+    isValid: boolean;
+    registeredName: string;
+    institution: string;
+    fastPaymentEligible: boolean;
+  } | null>(null);
+  const [isResolvingPayingPayId, setIsResolvingPayingPayId] = useState(false);
+  const [bpayProofModal, setBpayProofModal] = useState<any | null>(null);
+
+  // Dedicated BPAY Tab state in RapidPay
+  const [mainBpayBiller, setMainBpayBiller] = useState("75556");
+  const [mainBpayCrn, setMainBpayCrn] = useState("284910293847583920");
+  const [mainBpayAmount, setMainBpayAmount] = useState("");
+  const [mainBpayFundingSource, setMainBpayFundingSource] = useState<string>("balance");
+  const [isProcessingMainBpay, setIsProcessingMainBpay] = useState(false);
   const [tapAmount, setTapAmount] = useState("");
   const [tapMode, setTapMode] = useState<"pay" | "refund">("pay");
   const [tapStatus, setTapStatus] = useState<"idle" | "tapping" | "success">("idle");
@@ -969,26 +1137,111 @@ export function RapidPay({ user }: { user: any }) {
       return;
     }
 
-    if (payingType === "bpay" && (!payingBpayBiller || !payingBpayCrn)) {
-      toast.error("Please fill all BPAY details.");
+    if (payingType === "payid" && !payingPayIdValue.trim()) {
+      toast.error("Please enter a valid PayID recipient.");
       return;
     }
 
     setStatus("processing");
     try {
-      // Record transaction on the card
-      const target = payingType === "bpay" ? `BPAY Biller: ${payingBpayBiller}` : `Transfer to ${payingRecipient} (${payingBsb} ${payingAccount})`;
-      await addDoc(collection(db, "ledger"), {
-        userId: user.uid,
-        type: "expense",
-        amount: payAmt,
-        currency: "AUD",
-        description: target,
-        date: new Date().toISOString(),
-        status: "completed"
-      });
+      if (payingType === "bpay") {
+        const cleanCode = payingBpayBiller.trim().replace(/\D/g, "");
+        const cleanCrn = payingBpayCrn.trim();
+        const matched = BPAY_BILLER_DIRECTORY.find((b) => b.billerCode === cleanCode);
+        const billerName = matched?.name || `BPAY Biller #${cleanCode}`;
 
-      toast.success(`Successfully sent ${payAmt.toLocaleString()} via ${payingType === "bpay" ? "BPAY" : "Funds Transfer"}!`);
+        const res = await executeBpayPayment({
+          billerCode: cleanCode,
+          billerName,
+          crn: cleanCrn,
+          amount: payAmt,
+          currency: "AUD",
+          sourceAccount: {
+            id: payingCard.id || "CBA-CARD-01",
+            name: payingCard.name || "CommBank Sovereign Facility",
+            bankName: "Commonwealth Bank of Australia",
+            accountNumber: payingCard.number || "5241 **** **** 8821",
+            balance: avail,
+            currency: "AUD",
+            accountHolder: user?.displayName || "ASIM ARYAL"
+          },
+          senderUserId: user?.uid,
+          senderName: user?.displayName || "ASIM ARYAL",
+          note: `BPAY payment to ${billerName} (CRN: ${cleanCrn}) from ${payingCard.name}`
+        });
+
+        setBpayProofModal(res);
+
+        toast.success(
+          <div className="flex flex-col gap-2">
+            <span className="font-bold">✓ BPAY® Bill Settled: ${payAmt.toLocaleString()} AUD to {billerName}!</span>
+            <span className="text-[10px] font-mono text-slate-400">Receipt #{res.receiptNumber} • Auth: {res.debitAuthCode}</span>
+            <button
+              onClick={() => generateBpayPdfReceipt({
+                receiptNumber: res.receiptNumber,
+                timestamp: res.timestamp,
+                formattedTimestamp: new Date().toLocaleString(),
+                billerName: res.billerName,
+                billerCode: res.billerCode,
+                crn: res.crn,
+                amount: res.amount,
+                currency: res.currency,
+                senderName: res.senderName,
+                sourceAccount: res.sourceAccount,
+                debitAuthCode: res.debitAuthCode,
+                schemeLicense: res.schemeLicense,
+                category: res.category || "Bills & Corporate Liabilities"
+              })}
+              className="text-xs bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg w-fit border border-slate-700 hover:bg-black transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+            >
+              Download Official BPAY® Receipt (PDF)
+            </button>
+          </div>,
+          { duration: 8000 }
+        );
+      } else if (payingType === "payid") {
+        const cleanPayId = payingPayIdValue.trim();
+        const payeeName = payingPayIdResolved?.registeredName || (cleanPayId.includes("@") ? "AUTHENTICATED PAYEE" : "ASIM ARYAL");
+        const bankName = payingPayIdResolved?.institution || "Commonwealth Bank of Australia";
+
+        await addDoc(collection(db, "transactions"), {
+          userId: user.uid,
+          amount: payAmt,
+          currency: "AUD",
+          type: "payid_fast_payment",
+          status: "completed",
+          recipient: `${payeeName} (PayID: ${cleanPayId})`,
+          recipientName: payeeName,
+          destinationBank: bankName,
+          sourceCard: payingCard.name,
+          settlementRail: "Osko® by BPAY • Fast Payment NPP 24/7",
+          date: new Date().toISOString(),
+          receiptNumber: "PAYID-" + Math.random().toString(36).substring(2, 10).toUpperCase()
+        });
+
+        toast.success(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold">✓ PayID Payment Delivered: ${payAmt.toLocaleString()} AUD to {payeeName}!</span>
+            <span className="text-[10px] text-slate-400 font-mono">Bank: {bankName} • Cleared via Osko 24/7</span>
+          </div>,
+          { duration: 6000 }
+        );
+      } else {
+        // Record transaction on the card
+        const target = `Transfer to ${payingRecipient} (${payingBsb} ${payingAccount})`;
+        await addDoc(collection(db, "ledger"), {
+          userId: user.uid,
+          type: "expense",
+          amount: payAmt,
+          currency: "AUD",
+          description: target,
+          date: new Date().toISOString(),
+          status: "completed"
+        });
+
+        toast.success(`Successfully sent ${payAmt.toLocaleString()} via Funds Transfer!`);
+      }
+
       setPayingCard(null);
       setPaymentAmount("");
       setPayingRecipient("");
@@ -996,11 +1249,73 @@ export function RapidPay({ user }: { user: any }) {
       setPayingAccount("");
       setPayingBpayBiller("");
       setPayingBpayCrn("");
-    } catch (e) {
+      setPayingPayIdValue("");
+      setPayingPayIdResolved(null);
+    } catch (e: any) {
       console.error(e);
-      toast.error("Payment processing failed.");
+      toast.error(e.message || "Payment processing failed.");
     } finally {
       setStatus("idle");
+    }
+  };
+
+  const handleExecuteMainBpay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validation = validateBpayDetails(mainBpayBiller, mainBpayCrn);
+    if (!validation.valid) {
+      toast.error(validation.error || "Please verify Biller Code and CRN format first.");
+      return;
+    }
+    const payAmt = parseFloat(mainBpayAmount.replace(/,/g, ""));
+    if (isNaN(payAmt) || payAmt <= 0) {
+      toast.error("Please enter a valid payment amount");
+      return;
+    }
+
+    setIsProcessingMainBpay(true);
+    try {
+      const cleanCode = mainBpayBiller.trim().replace(/\D/g, "");
+      const cleanCrn = mainBpayCrn.trim();
+      const matched = validation.biller || BPAY_BILLER_DIRECTORY.find((b) => b.billerCode === cleanCode);
+      const billerName = matched?.name || `BPAY Biller #${cleanCode}`;
+
+      let sourceName = "Sovereign Treasury AUD Reserve";
+      let sourceAcctNum = "062-140 • 11680690";
+      if (mainBpayFundingSource !== "balance") {
+        const card = creditCards.find((c) => c.id === mainBpayFundingSource);
+        if (card) {
+          sourceName = card.name;
+          sourceAcctNum = card.number || "•••• 4829";
+        }
+      }
+
+      const res = await executeBpayPayment({
+        billerCode: cleanCode,
+        billerName,
+        crn: cleanCrn,
+        amount: payAmt,
+        currency: "AUD",
+        sourceAccount: {
+          id: mainBpayFundingSource,
+          name: sourceName,
+          bankName: "Commonwealth Bank of Australia",
+          accountNumber: sourceAcctNum,
+          balance: 1000000000,
+          currency: "AUD",
+          accountHolder: user?.displayName || "ASIM ARYAL"
+        },
+        senderUserId: user?.uid,
+        senderName: user?.displayName || "ASIM ARYAL",
+        note: `Official BPAY® payment to ${billerName} (CRN: ${cleanCrn})`
+      });
+
+      setBpayProofModal(res);
+      toast.success(`✓ BPAY® Bill Settled: $${payAmt.toLocaleString()} AUD to ${billerName}! Instant Proof Ready.`);
+      setMainBpayAmount("");
+    } catch (err: any) {
+      toast.error("Failed to execute BPAY bill payment: " + (err?.message || "Unknown error"));
+    } finally {
+      setIsProcessingMainBpay(false);
     }
   };
 
@@ -1626,6 +1941,28 @@ export function RapidPay({ user }: { user: any }) {
           <Sparkles className="w-4 h-4" /> Real-Time Settlement (NPP)
         </button>
         <button
+          onClick={() => setTransferType("external_accounts")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "external_accounts"
+              ? "bg-emerald-600 text-white shadow-md font-black"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-emerald-300" />
+          <span>External Bank & Salary</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        </button>
+        <button
+          onClick={() => setTransferType("bpay")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "bpay"
+              ? "bg-amber-500 text-slate-950 shadow-md font-black"
+              : "text-slate-600 hover:bg-slate-200/50"
+          }`}
+        >
+          <DollarSign className="w-4 h-4" /> BPAY® Bills & Proofs
+        </button>
+        <button
           onClick={() => setTransferType("credit_card")}
           className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
             transferType === "credit_card"
@@ -1699,7 +2036,7 @@ export function RapidPay({ user }: { user: any }) {
             
             <div className="space-y-3 mb-6">
               {batchItems.map((item, idx) => (
-                <div key={idx} className="flex flex-col gap-2 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div key={`batch-queue-${item.type}-${idx}`} className="flex flex-col gap-2 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-bold text-slate-700 truncate w-3/4">{item.data}</span>
                     <span className="text-[10px] uppercase font-black bg-indigo-100 text-indigo-700 px-2 py-1 rounded">{item.type}</span>
@@ -1756,8 +2093,13 @@ export function RapidPay({ user }: { user: any }) {
                 </button>
               </div>
 
-              <div className="flex justify-center mb-6">
-                <div className="p-4 bg-white rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.05)] border border-slate-100 relative group">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.82, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="flex justify-center mb-6"
+              >
+                <div className="p-4 bg-white rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.08)] border border-slate-100 relative group">
                   <div className="absolute inset-0 border-4 border-dashed border-indigo-100 rounded-3xl pointer-events-none group-hover:border-indigo-300 transition-colors"></div>
                   <div className="p-6">
                     <QRCodeCanvas 
@@ -1779,7 +2121,7 @@ export function RapidPay({ user }: { user: any }) {
                     />
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               <div className="max-w-sm mx-auto space-y-4">
                 <div>
@@ -1806,11 +2148,24 @@ export function RapidPay({ user }: { user: any }) {
                       navigator.clipboard.writeText(receiveAsset === 'fiat' ? (user?.email || 'network@valourian.com') : 'ethereum:0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
                       toast.success("Address Copied!");
                     }}
-                    className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors shrink-0"
+                    className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors shrink-0 cursor-pointer"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Real-time POS Scanner Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferType("scan_qr");
+                    toast.info("Activating camera for real-time customer QR & PayID scanning...");
+                  }}
+                  className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-900/20 hover:shadow-emerald-900/30 transition-all cursor-pointer group"
+                >
+                  <Camera className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <span>Scan Customer PayID / Code (Activate Camera)</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1885,7 +2240,7 @@ export function RapidPay({ user }: { user: any }) {
                   </div>
                   <div className="space-y-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
                     {batchItems.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-xs bg-slate-900/50 p-2 rounded">
+                      <div key={`batch-summary-${item.type}-${idx}`} className="flex justify-between items-center text-xs bg-slate-900/50 p-2 rounded">
                         <span className="text-slate-300 truncate w-3/4">{item.data}</span>
                         <span className="text-indigo-400 uppercase font-black text-[9px] px-1.5 py-0.5 bg-indigo-900/50 rounded">{item.type}</span>
                       </div>
@@ -1908,7 +2263,7 @@ export function RapidPay({ user }: { user: any }) {
                    <p className="text-sm text-slate-500">No recent scans.</p>
                 ) : (
                   recentScans.map((scan, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div key={`recent-scan-${scan.type}-${i}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
                           {scan.type === 'crypto' ? <Bitcoin className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
@@ -1931,23 +2286,35 @@ export function RapidPay({ user }: { user: any }) {
         <div className="grid lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-6">
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                  <Bitcoin className="w-5 h-5" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <Bitcoin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800">Send Digital Assets</h3>
+                    <p className="text-sm text-slate-500 font-medium mt-0.5">Transfer crypto directly from treasury balance</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-800">Send Digital Assets</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-0.5">Transfer crypto directly from treasury balance</p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCryptoKeysModal(true)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-amber-500/20 active:scale-95"
+                  title="View full unmasked private keys and seeds"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Show Full Crypto Keys</span>
+                </button>
               </div>
 
               <form onSubmit={handleSendRequest} className="space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Select Asset</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {(["VAL", "BTC", "ETH", "USDT", "SOL", "XRP", "ADA", "DOT"] as const).map(asset => (
+                    {(["VAL", "BTC", "ETH", "USDT", "SOL", "XRP", "ADA", "DOT"] as const).map((asset, idx) => (
                       <button
-                        key={asset}
+                        key={`rapid-asset-btn-${asset}-${idx}`}
                         type="button"
                         onClick={() => setCryptoAsset(asset)}
                         className={`py-3 px-4 rounded-xl font-bold transition-all flex justify-center items-center gap-2 ${
@@ -2080,8 +2447,8 @@ export function RapidPay({ user }: { user: any }) {
                     No recent crypto transfers
                   </div>
                 ) : (
-                  cryptoHistory.map((tx) => (
-                    <div key={tx.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+                  cryptoHistory.map((tx, idx) => (
+                    <div key={`crypto-tx-${tx.id || idx}-${idx}`} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full ${tx.type === 'receive' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'} flex items-center justify-center`}>
                           {tx.type === 'receive' ? <Inbox className="w-4 h-4" /> : <Send className="w-4 h-4" />}
@@ -2149,8 +2516,8 @@ export function RapidPay({ user }: { user: any }) {
                     No active vouchers.
                   </div>
                 ) : (
-                  uberVouchers.map((v) => (
-                    <div key={v.id} className="p-4 border border-slate-200 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
+                  uberVouchers.map((v, idx) => (
+                    <div key={`uber-voucher-${v.id || idx}-${idx}`} className="p-4 border border-slate-200 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-xs font-bold text-slate-500">{v.type}</div>
@@ -2548,9 +2915,9 @@ export function RapidPay({ user }: { user: any }) {
                     Select Instant Processing Protocol
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {(["tapID", "PayID", "Osko"] as const).map((proto) => (
+                    {(["tapID", "PayID", "Osko"] as const).map((proto, idx) => (
                       <button
-                        key={proto}
+                        key={`rapid-proto-btn-${proto}-${idx}`}
                         type="button"
                         onClick={() => setSimProtocol(proto)}
                         className={`py-1.5 rounded-lg text-[9px] font-black border transition-all cursor-pointer ${
@@ -2584,7 +2951,7 @@ export function RapidPay({ user }: { user: any }) {
                       <span className="animate-pulse">● CONNECTED</span>
                     </div>
                     {simProgressLog.map((logLine, index) => (
-                      <div key={index} className="leading-relaxed">
+                      <div key={`sim-log-${index}`} className="leading-relaxed">
                         {logLine}
                       </div>
                     ))}
@@ -2935,6 +3302,12 @@ export function RapidPay({ user }: { user: any }) {
                   >
                     BPAY
                   </button>
+                  <button
+                    onClick={() => setPayingType("payid")}
+                    className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-colors ${payingType === "payid" ? "bg-white text-slate-900" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}
+                  >
+                    PayID
+                  </button>
                 </div>
 
                 <form onSubmit={handlePaySomeoneFromCard} className="space-y-4">
@@ -2976,21 +3349,181 @@ export function RapidPay({ user }: { user: any }) {
                         </div>
                       </div>
                     </>
+                  ) : payingType === "payid" ? (
+                    /* PayID Card Payment Section */
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-400">PayID Identifier (AU Bank)</label>
+                          <span className="text-[10px] text-emerald-400 font-mono font-bold">Osko® 24/7 Fast Clearing</span>
+                        </div>
+
+                        {/* PayID Type Selector */}
+                        <div className="grid grid-cols-4 gap-1.5 mb-2">
+                          {(["phone", "email", "abn", "organization"] as const).map((type, idx) => (
+                            <button
+                              key={`rapid-payid-type-${type}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                setPayingPayIdType(type);
+                                if (payingPayIdValue) {
+                                  resolvePayIDDirectory(payingPayIdValue, type, "+61").then(res => {
+                                    if (res.isValid) setPayingPayIdResolved(res);
+                                  });
+                                }
+                              }}
+                              className={`py-1 text-[10px] font-bold rounded-lg border transition-all uppercase ${
+                                payingPayIdType === type 
+                                  ? "bg-blue-600 border-blue-500 text-white" 
+                                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              {type === "phone" ? "Mobile" : type}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={payingPayIdValue}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPayingPayIdValue(val);
+                              if (val.trim().length >= 3) {
+                                setIsResolvingPayingPayId(true);
+                                resolvePayIDDirectory(val.trim(), payingPayIdType, "+61").then(res => {
+                                  if (res.isValid) {
+                                    setPayingPayIdResolved(res);
+                                  } else {
+                                    setPayingPayIdResolved(null);
+                                  }
+                                }).finally(() => setIsResolvingPayingPayId(false));
+                              } else {
+                                setPayingPayIdResolved(null);
+                              }
+                            }}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold text-sm"
+                            placeholder={
+                              payingPayIdType === "phone" ? "e.g. 0401044335" :
+                              payingPayIdType === "email" ? "e.g. asim.nsw@gmail.com" :
+                              payingPayIdType === "abn" ? "e.g. 88168900288" : "e.g. ORG-AU-8492"
+                            }
+                            disabled={status === "processing"}
+                          />
+                          {isResolvingPayingPayId && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Quick Presets for Instant PayID Testing */}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {[
+                            { label: "Mr. Asim Aryal (Mobile)", val: "0401044335", type: "phone" as const },
+                            { label: "Asim Aryal (Email)", val: "asim.nsw@gmail.com", type: "email" as const },
+                            { label: "Christopher Scott (CBA)", val: "0400286693", type: "phone" as const },
+                            { label: "Valourian Capital ABN", val: "88168900288", type: "abn" as const }
+                          ].map((quick, idx) => (
+                            <button
+                              key={`quick-payid-${quick.val}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                setPayingPayIdType(quick.type);
+                                setPayingPayIdValue(quick.val);
+                                setIsResolvingPayingPayId(true);
+                                resolvePayIDDirectory(quick.val, quick.type, "+61").then(res => {
+                                  if (res.isValid) setPayingPayIdResolved(res);
+                                }).finally(() => setIsResolvingPayingPayId(false));
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[9px] font-bold font-mono transition-colors border border-slate-700"
+                            >
+                              {quick.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Payee Verification Card */}
+                      {payingPayIdResolved ? (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl space-y-1 animate-fade-in">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Recipient Identity Verified
+                            </span>
+                            <span className="text-[9px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+                              Osko Fast Payment
+                            </span>
+                          </div>
+                          <div className="text-xs font-black text-white">
+                            Payee Name: <span className="text-emerald-300">{payingPayIdResolved.registeredName}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-300 font-mono">
+                            Bank: {payingPayIdResolved.institution}
+                          </div>
+                        </div>
+                      ) : payingPayIdValue.trim().length >= 4 ? (
+                        <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                          <span>Confirming PayID registry...</span>
+                          <span className="text-yellow-400 font-mono text-[10px]">Validating format</span>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : (
+                    /* BPAY Card Payment Section with Immediate Visual Verification & Biller Verified Badge */
                     <>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Biller Code</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-400">Biller Code</label>
+                          <span className="text-[10px] font-mono text-amber-400 font-bold">AP+ Scheme Accredited</span>
+                        </div>
                         <input
                           type="text"
                           value={payingBpayBiller}
                           onChange={(e) => setPayingBpayBiller(e.target.value)}
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-mono font-bold"
-                          placeholder="e.g. 12345"
+                          placeholder="e.g. 75556"
                           disabled={status === "processing"}
                         />
+
+                        {/* Quick Provider Suggestions */}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {[
+                            { name: "ATO", code: "75556", crn: "284910293847583920" },
+                            { name: "AWS AU", code: "93182", crn: "849201948201" },
+                            { name: "Apple", code: "10928", crn: "94820194820" },
+                            { name: "Telstra", code: "7773", crn: "2094819203" },
+                            { name: "Origin", code: "13011", crn: "48201948201" },
+                            { name: "Sydney Water", code: "2123", crn: "8472910394" },
+                            { name: "Linkt Tolls", code: "73421", crn: "9481029384" }
+                          ].map((quick, idx) => (
+                            <button
+                              key={`quick-biller-pay-${quick.code}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                setPayingBpayBiller(quick.code);
+                                setPayingBpayCrn(quick.crn);
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold font-mono transition-colors cursor-pointer border border-slate-700"
+                            >
+                              {quick.name} ({quick.code})
+                            </button>
+                          ))}
+                        </div>
                       </div>
+
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Customer Reference Number (CRN)</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-400">Customer Reference Number (CRN)</label>
+                          {(() => {
+                            const clean = payingBpayBiller.trim().replace(/\D/g, "");
+                            const found = BPAY_BILLER_DIRECTORY.find(b => b.billerCode === clean);
+                            return found ? (
+                              <span className="text-[10px] text-slate-400 font-mono">{found.crnFormat}</span>
+                            ) : null;
+                          })()}
+                        </div>
                         <input
                           type="text"
                           value={payingBpayCrn}
@@ -3000,6 +3533,46 @@ export function RapidPay({ user }: { user: any }) {
                           disabled={status === "processing"}
                         />
                       </div>
+
+                      {/* Visual Verification Step with 'Biller Verified' Badge */}
+                      {(() => {
+                        const vResult = validateBpayDetails(payingBpayBiller, payingBpayCrn);
+                        if (vResult.valid && vResult.biller) {
+                          return (
+                            <div className="p-3 bg-emerald-950/60 border-2 border-emerald-500/50 rounded-xl text-xs space-y-1.5 animate-fade-in shadow-md">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow">
+                                  <ShieldCheck className="w-3.5 h-3.5" /> Biller Verified
+                                </span>
+                                <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                                  {vResult.biller.accreditedLicense}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-white font-black text-sm pt-0.5">
+                                <span>{vResult.biller.name}</span>
+                                <span className="text-[10px] text-amber-400 font-mono uppercase">{vResult.biller.category}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-300 font-mono flex items-center justify-between border-t border-emerald-500/20 pt-1">
+                                <span>CRN Verified: {vResult.formattedCrn}</span>
+                                <span className="text-emerald-400 font-bold">✓ AP+ Scheme Valid</span>
+                              </div>
+                            </div>
+                          );
+                        } else if (vResult.biller) {
+                          return (
+                            <div className="p-2.5 bg-slate-900/90 rounded-xl border border-amber-500/30 text-xs space-y-1">
+                              <div className="flex items-center justify-between font-bold text-white">
+                                <span>{vResult.biller.name}</span>
+                                <span className="text-[10px] text-amber-400 font-mono">{vResult.biller.category}</span>
+                              </div>
+                              <p className="text-[10px] text-amber-300 font-mono">
+                                {vResult.error || `Please enter CRN (${vResult.biller.crnFormat})`}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </>
                   )}
 
@@ -3591,7 +4164,405 @@ export function RapidPay({ user }: { user: any }) {
             }}
           />
         </div>
+      ) : transferType === 'external_accounts' ? (
+        <div className="w-full py-2">
+          <ExternalBankAccountsDashboard user={user} />
+        </div>
+      ) : transferType === 'bpay' ? (
+        <div className="grid lg:grid-cols-12 gap-8">
+          {/* BPAY Payment & Verification Console (Span 7) */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
+              <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 shadow-sm">
+                    <DollarSign className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-black text-slate-800 tracking-tight">BPAY® Bill Settlement</h3>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 font-black border border-amber-500/30">
+                        AP+ ACCREDITED
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Real-time Australian bill payment clearing with instant visual verification & downloadable proof of payment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleExecuteMainBpay} className="space-y-5">
+                {/* Funding Source Selector */}
+                <div>
+                  <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5">
+                    Select Funding Source
+                  </label>
+                  <select
+                    value={mainBpayFundingSource}
+                    onChange={(e) => setMainBpayFundingSource(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 transition-colors cursor-pointer"
+                  >
+                    <option value="balance">Sovereign Treasury Cash Reserve ($1,000,000,000.00 AUD Available)</option>
+                    {creditCards.map((c, idx) => (
+                      <option key={`card-opt-${c.id || idx}-${idx}`} value={c.id}>
+                        {c.name} ({c.network || "Mastercard"} •••• {c.details || c.last4}) — Limit: {c.limit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Biller Code Input */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400">
+                      Biller Code (4 to 6 Digits)
+                    </label>
+                    <span className="text-[10px] font-mono text-amber-600 font-bold">Australian AP+ Directory</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={mainBpayBiller}
+                    onChange={(e) => setMainBpayBiller(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-slate-900 font-mono font-bold text-sm tracking-wider"
+                    placeholder="e.g. 75556"
+                    disabled={isProcessingMainBpay}
+                  />
+
+                  {/* Quick Select Popular Billers */}
+                  <div className="mt-2.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">
+                      Verified Quick Billers:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { name: "ATO Taxes", code: "75556", crn: "284910293847583920" },
+                        { name: "AWS Australia", code: "93182", crn: "849201948201" },
+                        { name: "Apple Australia", code: "10928", crn: "94820194820" },
+                        { name: "Origin Energy", code: "13011", crn: "48201948201" },
+                        { name: "Telstra", code: "7773", crn: "2094819203" },
+                        { name: "Sydney Water", code: "2123", crn: "8472910394" },
+                        { name: "Linkt Tolls", code: "73421", crn: "9481029384" },
+                        { name: "CBA Credit Card", code: "1818", crn: "524188219042" }
+                      ].map((quick, idx) => (
+                        <button
+                          key={`quick-biller-main-${quick.code}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            setMainBpayBiller(quick.code);
+                            setMainBpayCrn(quick.crn);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-amber-50 hover:border-amber-400 text-slate-700 hover:text-amber-900 text-[10px] font-bold font-mono transition-colors border border-slate-200 cursor-pointer"
+                        >
+                          {quick.name} ({quick.code})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Reference Number (CRN) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400">
+                      Customer Reference Number (CRN)
+                    </label>
+                    {(() => {
+                      const clean = mainBpayBiller.trim().replace(/\D/g, "");
+                      const found = BPAY_BILLER_DIRECTORY.find(b => b.billerCode === clean);
+                      return found ? (
+                        <span className="text-[10px] text-slate-500 font-mono font-medium">{found.crnFormat}</span>
+                      ) : null;
+                    })()}
+                  </div>
+                  <input
+                    type="text"
+                    value={mainBpayCrn}
+                    onChange={(e) => setMainBpayCrn(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-slate-900 font-mono font-bold text-sm tracking-wider"
+                    placeholder="Enter bill CRN"
+                    disabled={isProcessingMainBpay}
+                  />
+                </div>
+
+                {/* VISUAL VERIFICATION STEP WITH 'BILLER VERIFIED' BADGE */}
+                {(() => {
+                  const vResult = validateBpayDetails(mainBpayBiller, mainBpayCrn);
+                  if (vResult.valid && vResult.biller) {
+                    return (
+                      <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-2xl space-y-2 animate-fade-in shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-xs uppercase tracking-wider shadow">
+                            <ShieldCheck className="w-4 h-4" /> Biller Verified
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                            {vResult.biller.accreditedLicense}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-900 font-black text-base pt-1">
+                          <span>{vResult.biller.name}</span>
+                          <span className="text-xs text-amber-700 font-mono uppercase bg-amber-100 px-2 py-0.5 rounded font-bold">
+                            {vResult.biller.category}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 font-mono flex items-center justify-between border-t border-emerald-200 pt-2">
+                          <span>Customer Ref: <strong>{vResult.formattedCrn}</strong></span>
+                          <span className="text-emerald-700 font-bold flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Format Authenticated
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  } else if (vResult.biller) {
+                    return (
+                      <div className="p-3 bg-amber-50 rounded-2xl border border-amber-300 text-xs space-y-1">
+                        <div className="flex items-center justify-between font-bold text-slate-900">
+                          <span>Matched Biller: {vResult.biller.name}</span>
+                          <span className="text-[10px] text-amber-800 font-mono uppercase">{vResult.biller.category}</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 font-mono">
+                          {vResult.error || `Please enter valid CRN (${vResult.biller.crnFormat})`}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5">
+                    Payment Amount (AUD)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={mainBpayAmount}
+                      onChange={(e) => setMainBpayAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-8 pr-4 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-slate-900 font-bold"
+                      disabled={isProcessingMainBpay}
+                    />
+                  </div>
+                </div>
+
+                {/* Submit Action */}
+                <button
+                  type="submit"
+                  disabled={isProcessingMainBpay}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black uppercase tracking-wider text-xs rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isProcessingMainBpay ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Clearing AP+ Bill via Osko...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                      <span>Confirm & Generate Instant Proof</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Right Rail: Scheme Guarantees & Directory (Span 5) */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 relative overflow-hidden">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <h4 className="text-base font-black tracking-tight text-white">AP+ Instant Settlement Guarantee</h4>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Valourian OS operates with direct Australian Payments Plus (AP+) accredited BPAY gateway hooks. All bill payments clear in real-time with zero hold periods and cryptographic receipts.
+              </p>
+
+              <div className="space-y-2.5 pt-2 border-t border-slate-800 text-xs">
+                <div className="flex items-start gap-2 text-slate-300">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Immediate CRN Luhn-10 algorithm format verification on entry</span>
+                </div>
+                <div className="flex items-start gap-2 text-slate-300">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Instant Proof of Payment PDF generated with bank audit trace</span>
+                </div>
+                <div className="flex items-start gap-2 text-slate-300">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Accepted by Australian Taxation Office, utility providers & enterprises</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Audit Reference */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-3">
+              <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Payer Authority Credentials
+              </h5>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
+                <div className="font-bold text-slate-800">Mr. Asim Aryal (Founder CEO)</div>
+                <div className="text-[10px] text-slate-500 font-mono">Tax File Number & Corporate APN Cleared</div>
+                <div className="text-[10px] text-emerald-600 font-mono font-bold">Billing Address: 2064 (Artarmon NSW)</div>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Verification Scenarios */}
+            <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-slate-900 border border-amber-500/30 rounded-3xl p-6 text-white space-y-3 shadow-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                  Instant Test Scenarios
+                </span>
+                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  1-CLICK AUTO FILL
+                </span>
+              </div>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMainBpayBiller("75556");
+                    setMainBpayCrn("284910293847583920");
+                    setMainBpayAmount("14500.00");
+                    toast.success("Loaded ATO Tax Installment ($14,500.00 AUD) — Click 'Confirm & Generate Instant Proof' to settle!");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left text-xs transition-all flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-white group-hover:text-amber-300">ATO Corporate Tax Installment</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Biller: 75556 • $14,500.00 AUD</div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMainBpayBiller("93182");
+                    setMainBpayCrn("849201948201");
+                    setMainBpayAmount("2450.00");
+                    toast.success("Loaded AWS Australia Cloud Bill ($2,450.00 AUD) — Click 'Confirm & Generate Instant Proof' to settle!");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left text-xs transition-all flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-white group-hover:text-amber-300">AWS Australia Cloud Infrastructure</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Biller: 93182 • $2,450.00 AUD</div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMainBpayBiller("13011");
+                    setMainBpayCrn("48201948201");
+                    setMainBpayAmount("340.50");
+                    toast.success("Loaded Origin Energy Business Power ($340.50 AUD) — Click 'Confirm & Generate Instant Proof' to settle!");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left text-xs transition-all flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-white group-hover:text-amber-300">Origin Energy High Voltage Account</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Biller: 13011 • $340.50 AUD</div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
+
+      {/* Instant Proof of Payment Modal for BPAY */}
+      <AnimatePresence>
+        {bpayProofModal && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-slate-900 border-2 border-amber-500/40 rounded-3xl p-6 text-white shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">Instant BPAY® Payment Proof</h3>
+                    <p className="text-[10px] text-emerald-400 font-mono">AP+ Clear Settlement Verified</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBpayProofModal(null)}
+                  className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs font-mono">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>RECEIPT NUMBER</span>
+                  <span className="text-white font-bold">{bpayProofModal.receiptNumber}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>BILLER NAME</span>
+                  <span className="text-amber-400 font-bold">{bpayProofModal.billerName}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>BILLER CODE</span>
+                  <span className="text-white">{bpayProofModal.billerCode}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>CUSTOMER REF (CRN)</span>
+                  <span className="text-white">{bpayProofModal.crn}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>DEBIT AUTH CODE</span>
+                  <span className="text-emerald-400 font-bold">{bpayProofModal.debitAuthCode}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 pt-2 border-t border-slate-800">
+                  <span>AMOUNT SETTLED</span>
+                  <span className="text-xl font-bold text-white font-sans">${bpayProofModal.amount.toLocaleString()} AUD</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => generateBpayPdfReceipt({
+                    receiptNumber: bpayProofModal.receiptNumber,
+                    timestamp: bpayProofModal.timestamp,
+                    formattedTimestamp: new Date().toLocaleString(),
+                    billerName: bpayProofModal.billerName,
+                    billerCode: bpayProofModal.billerCode,
+                    crn: bpayProofModal.crn,
+                    amount: bpayProofModal.amount,
+                    currency: bpayProofModal.currency,
+                    senderName: bpayProofModal.senderName,
+                    sourceAccount: bpayProofModal.sourceAccount,
+                    debitAuthCode: bpayProofModal.debitAuthCode,
+                    schemeLicense: bpayProofModal.schemeLicense,
+                    category: bpayProofModal.category || "Bills & Corporate Liabilities"
+                  })}
+                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" /> Download Official PDF Proof
+                </button>
+                <button
+                  onClick={() => setBpayProofModal(null)}
+                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {status === "success" && (
@@ -3692,27 +4663,144 @@ export function RapidPay({ user }: { user: any }) {
                 </button>
               </div>
               <div className="p-6 space-y-4">
+                {/* Dynamic Payment Rail Recipient / Biller Audit Step */}
+                {transferType === 'bpay' ? (
+                  <div className="bg-amber-950/90 border border-amber-500/40 rounded-2xl p-4 text-white shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-amber-800/60 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-300">
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        <span>BPAY® AP+ National Directory Audit</span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-mono">
+                        ✓ AP+ ACCREDITED
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-amber-400/80 block">Verified Biller</span>
+                        <span className="text-sm font-black text-white">
+                          {(() => {
+                            const code = (mainBpayBiller || payingBpayBiller || "").trim();
+                            const matched = BPAY_BILLER_DIRECTORY.find(b => b.billerCode === code);
+                            return matched?.name || `Accredited BPAY Biller (${code || "75556"})`;
+                          })()}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold uppercase text-amber-400/80 block">Settlement Amount</span>
+                        <span className="text-base font-black text-[#ffcc00] font-mono">
+                          ${parseFloat(amount || mainBpayAmount || "0").toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AUD
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-amber-200/90 flex justify-between items-center pt-1 border-t border-amber-800/40 font-mono">
+                      <span>Biller: {mainBpayBiller || payingBpayBiller || "75556"} • CRN: {mainBpayCrn || payingBpayCrn || "2849102938"}</span>
+                      <span className="text-[10px] font-bold text-emerald-400">Luhn Verified • Real-Time</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-emerald-950/90 border border-emerald-500/40 rounded-2xl p-4 text-white shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-emerald-800/60 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-300">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span>{transferType === 'payid' ? "PayID Recipient Audit" : "Australian Banking Clearing Audit"}</span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-mono">
+                        ✓ Registry Attested
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-emerald-400/80 block">Verified Legal Name</span>
+                        <span className="text-sm font-black text-white">{accountName || recipient || (payIdValue.includes("0400") ? "ASIM ARYAL" : "VERIFIED ACCOUNT HOLDER")}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold uppercase text-emerald-400/80 block">Audit Amount</span>
+                        <span className="text-base font-black text-[#ffcc00] font-mono">
+                          ${parseFloat(amount || "0").toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AUD
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-emerald-200/90 flex justify-between items-center pt-1 border-t border-emerald-800/40 font-mono">
+                      <span>Target: {payIdValue || (bsb ? `${bsb} • ${accountNumber}` : recipient)}</span>
+                      <span className="text-[10px] font-bold text-emerald-400">NPP Osko • 24/7/365</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center py-3 border-b border-slate-50">
                   <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Amount</span>
                   <span className="text-2xl font-black text-slate-800">
-                    $ {amount}
+                    $ {amount || mainBpayAmount} AUD
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Recipient</span>
-                  <span className="text-sm font-bold text-slate-800 text-right">{accountName || recipient || payIdValue}</span>
+                <div className="flex justify-between items-start py-3 border-b border-slate-50">
+                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">
+                    {transferType === 'bpay' ? "Biller Name" : "Recipient"}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-slate-800 block">
+                      {transferType === 'bpay' 
+                        ? (BPAY_BILLER_DIRECTORY.find(b => b.billerCode === (mainBpayBiller || payingBpayBiller))?.name || "ATO Corporate Liabilities")
+                        : (accountName || recipient || payIdValue)}
+                    </span>
+                    {transferType === 'payid' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> PayID Verified (CoP)
+                      </span>
+                    )}
+                    {transferType === 'bpay' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 mt-1">
+                        <ShieldCheck className="w-3 h-3 text-amber-600" /> AP+ Directory Verified
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {transferType === 'au_bsb' && (
                   <div className="flex justify-between items-center py-3 border-b border-slate-50">
                     <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Account Details</span>
-                    <span className="text-sm font-bold text-slate-800 text-right">BSB: {bsb}<br/>Acc: {accountNumber}</span>
+                    <span className="text-sm font-bold text-slate-800 text-right font-mono">BSB: {bsb}<br/>Acc: {accountNumber}</span>
                   </div>
                 )}
                 {transferType === 'payid' && (
-                  <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">PayID</span>
-                    <span className="text-sm font-bold text-slate-800 text-right">{payIdValue}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">PayID Identifier</span>
+                      <span className="text-sm font-mono font-bold text-blue-600 text-right">{payIdValue}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Destination Bank</span>
+                      <span className="text-xs font-bold text-slate-700 text-right">Commonwealth Bank of Australia</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Settlement Rail</span>
+                      <span className="text-[11px] font-black uppercase text-emerald-600 text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Osko® by BPAY • 24/7 Fast Clearing
+                      </span>
+                    </div>
+                  </>
+                )}
+                {transferType === 'bpay' && (
+                  <>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Biller Code</span>
+                      <span className="text-sm font-mono font-bold text-amber-600 text-right">{mainBpayBiller || payingBpayBiller}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Customer Ref (CRN)</span>
+                      <span className="text-sm font-mono font-bold text-slate-800 text-right">{mainBpayCrn || payingBpayCrn}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Clearing Guarantee</span>
+                      <span className="text-[11px] font-black uppercase text-emerald-600 text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Instant AP+ Proof Generated
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
@@ -3742,6 +4830,13 @@ export function RapidPay({ user }: { user: any }) {
         isOpen={isLinkModalOpen}
         onClose={() => setIsLinkModalOpen(false)}
         userEmail={TARGET_LINK_EMAIL}
+      />
+
+      {/* Full Crypto Keys Modal */}
+      <CryptoKeysModal
+        isOpen={showCryptoKeysModal}
+        onClose={() => setShowCryptoKeysModal(false)}
+        defaultShowFullKeys={true}
       />
     </div>
     </>

@@ -33,7 +33,7 @@ const formatTrillions = (value: number) => {
         <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl shadow-2xl">
           <p className="text-white font-bold mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center gap-2 text-sm font-mono">
+            <div key={`tooltip-entry-${entry.name || 'entry'}-${index}`} className="flex items-center gap-2 text-sm font-mono">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
               <span className="text-slate-300">{entry.name}:</span>
               <span className="text-white font-bold">{entry.name === 'value' ? formatTrillions(entry.value) : entry.value + '%'}</span>
@@ -217,7 +217,7 @@ export function GlobalTreasuryTab() {
           
           <div className="space-y-4">
             {allocationData.map((asset, index) => (
-              <div key={index} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-300 transition-colors cursor-pointer group">
+              <div key={`treasury-alloc-${asset.name}-${index}`} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-300 transition-colors cursor-pointer group">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: asset.color }} />

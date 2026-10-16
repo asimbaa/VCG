@@ -1083,7 +1083,7 @@ export function BookingApp({ user, balances, setBalances }: {
               </div>
             ) : (
               <div className="space-y-4">
-                {bookingHistory.map(b => {
+                {bookingHistory.map((b, bIdx) => {
                   const hotelNameClean = b.recipient?.replace("Booking.com - ", "") || b.hotelName || "Sovereign Luxury Stay";
                   const isCrownSydney = hotelNameClean.toLowerCase().includes("crown towers sydney") || b.id === "crown-sydney-78d-ledger";
                   
@@ -1094,7 +1094,7 @@ export function BookingApp({ user, balances, setBalances }: {
                   const attachmentSize = b.isSeeded ? "12.4 MB" : "4.2 MB";
 
                   return (
-                    <div key={b.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md hover:shadow-lg transition-all space-y-4">
+                    <div key={`${b.id || 'booking'}-${bIdx}`} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md hover:shadow-lg transition-all space-y-4">
                       {/* Top Header Row with status badges */}
                       <div className="flex flex-wrap justify-between items-start gap-2 border-b pb-3 border-slate-100">
                         <div className="space-y-1">
@@ -1594,7 +1594,7 @@ export function BookingApp({ user, balances, setBalances }: {
                             <span className="text-[10px] text-slate-400 font-medium block">{selectedHotel.reviews} user reviews</span>
                             <div className="flex gap-0.5 mt-1.5 justify-end">
                               {[...Array(selectedHotel.stars || 5)].map((_, i) => (
-                                <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                <Star key={`hotel-star-${i}`} className="w-3 h-3 text-amber-400 fill-amber-400" />
                               ))}
                             </div>
                          </div>
@@ -1605,7 +1605,7 @@ export function BookingApp({ user, balances, setBalances }: {
                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Standard Included Amenities</span>
                         <div className="flex flex-wrap gap-2">
                           {selectedHotel.amenities?.map((amenity: string, index: number) => (
-                            <span key={index} className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                            <span key={`hotel-amenity-${amenity}-${index}`} className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
                               {amenity.includes("Pool") && <Waves className="w-3 h-3 text-cyan-500" />}
                               {!amenity.includes("Pool") && <ShieldCheck className="w-3 h-3 text-emerald-500" />}
                               {amenity}
@@ -2223,7 +2223,7 @@ export function BookingApp({ user, balances, setBalances }: {
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.28, delay: idx * 0.03 }}
                         whileHover={{ y: -3, boxShadow: '0 12px 28px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06)' }} 
-                        key={item.id} 
+                        key={`${item.id || 'booking'}-${idx}`} 
                         className="bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300"
                       >
                         <div className="w-full sm:w-64 h-48 bg-slate-100 relative overflow-hidden shrink-0">
@@ -2243,7 +2243,7 @@ export function BookingApp({ user, balances, setBalances }: {
                               <h4 className="text-base font-black text-[#003580] leading-none">{item.name}</h4>
                               <div className="flex shrink-0">
                                 {[...Array(item.stars || 5)].map((_, i) => (
-                                  <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                  <Star key={`item-star-${item.id || 'hotel'}-${i}`} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                                 ))}
                               </div>
                             </div>

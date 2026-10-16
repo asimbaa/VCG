@@ -84,7 +84,7 @@ export function CommandCenterTab() {
         {/* Terminal Output */}
         <div className="flex-1 p-6 bg-[#0a0f16] overflow-y-auto font-mono text-sm space-y-3">
             {logs.map((log, i) => (
-                <div key={i} className={`flex gap-4 ${log.type === 'user' ? 'text-white' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                <div key={`cmd-log-${i}-${log.time}`} className={`flex gap-4 ${log.type === 'user' ? 'text-white' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-400'}`}>
                     <span className="opacity-50 shrink-0">[{log.time}]</span>
                     {log.type === 'user' ? (
                         <span className="font-bold">{log.msg}</span>

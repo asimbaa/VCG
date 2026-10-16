@@ -276,9 +276,9 @@ export function DocuCraft({ user }: DocuCraftProps) {
             Select Your Agent
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-            {AGENTS.map((agent) => (
+            {AGENTS.map((agent, aIdx) => (
               <button
-                key={agent.id}
+                key={`docucraft-agent-${agent.id}-${aIdx}`}
                 onClick={() => setActiveAgent(agent.id)}
                 className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
                   activeAgent === agent.id
@@ -317,7 +317,7 @@ export function DocuCraft({ user }: DocuCraftProps) {
                 {isCollaborationMode ? (
                   <div className="flex -space-x-2">
                     {AGENTS.map((a, i) => (
-                      <div key={i} className={`w-10 h-10 rounded-full border-2 border-white ${a.bgColor} ${a.color} flex items-center justify-center`}>
+                      <div key={`doc-agent-${a.id}-${i}`} className={`w-10 h-10 rounded-full border-2 border-white ${a.bgColor} ${a.color} flex items-center justify-center`}>
                         {React.cloneElement(a.icon as any, { className: "w-4 h-4" })}
                       </div>
                     ))}

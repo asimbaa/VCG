@@ -92,12 +92,12 @@ export function SwarmIntelligenceTab() {
                 </h3>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {agents.map((agent) => {
+                  {agents.map((agent, aIdx) => {
                     const isActive = activeAgents.includes(agent.id);
                     const isDone = completion || activeAgents.indexOf(agent.id) < activeAgents.length - 1;
                     
                     return (
-                      <div key={agent.id} className={`p-4 rounded-xl border transition-all duration-500 ${isActive ? agent.bg + ' ' + agent.border : 'bg-slate-950 border-slate-800 opacity-40'}`}>
+                      <div key={`swarm-agent-${agent.id}-${aIdx}`} className={`p-4 rounded-xl border transition-all duration-500 ${isActive ? agent.bg + ' ' + agent.border : 'bg-slate-950 border-slate-800 opacity-40'}`}>
                         <agent.icon className={`w-8 h-8 mb-3 ${isActive ? agent.color : 'text-slate-600'}`} />
                         <div className={`font-bold text-sm ${isActive ? 'text-white' : 'text-slate-500'}`}>{agent.name}</div>
                         <div className={`text-xs mt-1 font-mono ${isActive ? agent.color : 'text-slate-600'}`}>

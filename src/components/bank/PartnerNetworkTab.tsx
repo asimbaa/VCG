@@ -43,7 +43,7 @@ export function PartnerNetworkTab() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            key={i} 
+            key={`partner-card-${partner.name}-${i}`} 
             className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden group"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -83,7 +83,7 @@ export function PartnerNetworkTab() {
         <p className="text-slate-400 mb-6 text-sm">Live stream of incoming and outgoing payload events from partner integrations.</p>
         <div className="bg-slate-950 rounded-xl border border-slate-800 p-4 h-48 overflow-y-auto font-mono text-xs space-y-2">
             {[...Array(5)].map((_, i) => (
-               <div key={i} className="flex gap-4 border-b border-slate-900 pb-2 text-slate-300">
+               <div key={`webhook-event-${i}`} className="flex gap-4 border-b border-slate-900 pb-2 text-slate-300">
                   <span className="text-emerald-500">[{new Date(Date.now() - i * 14000).toISOString()}]</span>
                   <span className="text-blue-400">POST /v1/treasury/inbound_transfer</span>
                   <span>{"{"} "amount": 500000000, "currency": "USD", "status": "settled" {"}"}</span>

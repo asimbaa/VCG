@@ -176,8 +176,8 @@ export const ThresholdAlerts: React.FC = () => {
                     onChange={(e) => setNewAsset(e.target.value)}
                     className="bg-slate-950 border border-slate-800 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-emerald-500"
                   >
-                    {ASSETS.map(a => (
-                      <option key={a.symbol} value={a.symbol}>{a.symbol}</option>
+                    {ASSETS.map((a, idx) => (
+                      <option key={`thresh-asset-opt-${a.symbol}-${idx}`} value={a.symbol}>{a.symbol}</option>
                     ))}
                   </select>
                   <select 
@@ -217,8 +217,8 @@ export const ThresholdAlerts: React.FC = () => {
                     <p className="text-slate-500 text-xs">No active alerts configured.</p>
                   </div>
                 ) : (
-                  rules.map(rule => (
-                    <div key={rule.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  rules.map((rule, rIdx) => (
+                    <div key={`thresh-rule-${rule.id}-${rIdx}`} className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
                       <div className="flex items-center gap-3">
                         <button 
                           onClick={() => toggleRule(rule.id)}

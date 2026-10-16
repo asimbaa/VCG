@@ -143,7 +143,7 @@ export default function LogisticsDashboard({ user }: { user: any }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            key={item.id} 
+            key={`logistics-key-${item.id}-${idx}`} 
             className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-[#ffcc00]/30 transition-all flex flex-col md:flex-row gap-6 justify-between items-center"
           >
             <div className="flex items-start gap-4 w-full md:w-auto">
@@ -194,7 +194,7 @@ export default function LogisticsDashboard({ user }: { user: any }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            key={item.id} 
+            key={`logistics-item-${item.id}-${idx}`} 
             className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-[#ffcc00]/30 transition-all flex flex-col md:flex-row gap-6 justify-between items-center"
           >
             <div className="flex items-start gap-4 w-full md:w-auto">

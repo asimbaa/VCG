@@ -3376,8 +3376,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         <option value="" disabled>
                           -- Use Saved Favorite Route (One-Click) --
                         </option>
-                        {favoriteRoutes.map((route) => (
-                          <option key={route.id} value={route.id}>
+                        {favoriteRoutes.map((route, rIdx) => (
+                          <option key={`fav-route-${route.id}-${rIdx}`} value={route.id}>
                             {route.name} ({route.pickup.split(",")[0]} ➔{" "}
                             {route.destination.split(",")[0]})
                           </option>
@@ -3503,7 +3503,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     <div className="grid grid-cols-2 gap-1.5">
                       {PRESETS.map((p, i) => (
                         <button
-                          key={p.name}
+                          key={`preset-${p.name}-${i}`}
                           onClick={() => {
                             if (i === 0 || i === 1) {
                               setPickup(p.address);
@@ -3588,9 +3588,9 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           </div>
                           <div className="grid grid-cols-3 gap-1">
                             {(["low", "moderate", "heavy"] as const).map(
-                              (lvl) => (
+                              (lvl, lIdx) => (
                                 <button
-                                  key={lvl}
+                                  key={`traffic-lvl-${lvl}-${lIdx}`}
                                   type="button"
                                   onClick={() => setTrafficFactor(lvl)}
                                   className={`py-1 text-[9px] font-bold uppercase rounded-md border transition-all cursor-pointer ${
@@ -3630,9 +3630,9 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 "afternoon",
                                 "late_night",
                               ] as const
-                            ).map((tod) => (
+                            ).map((tod, tIdx) => (
                               <button
-                                key={tod}
+                                key={`time-tod-${tod}-${tIdx}`}
                                 type="button"
                                 onClick={() => setTimeOfDayFactor(tod)}
                                 className={`py-1 text-[8px] font-bold uppercase rounded-md border transition-all cursor-pointer px-0.5 truncate ${
@@ -3751,13 +3751,13 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     <span className="text-[10px] text-slate-450 font-bold block">
                       SELECT CHAUFFEUR TIER:
                     </span>
-                    {VEHICLE_OPTIONS.map((opt) => {
+                    {VEHICLE_OPTIONS.map((opt, oIdx) => {
                       const optPrice = calculatedPrice(opt.priceEstimate);
                       const isSelected = selectedVehicle.id === opt.id;
                       const OptIcon = opt.icon;
                       return (
                         <div
-                          key={opt.id}
+                          key={`veh-tier-${opt.id}-${oIdx}`}
                           onClick={() => setSelectedVehicle(opt)}
                           className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                             isSelected
@@ -4046,11 +4046,11 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       </div>
                     ) : (
                       <div className="space-y-2 overflow-y-auto max-h-[220px] pr-1">
-                        {scheduledRides.map((ride) => {
+                        {scheduledRides.map((ride, rIdx) => {
                           const schedDate = new Date(ride.scheduledTime);
                           return (
                             <div
-                              key={ride.id}
+                              key={`sched-ride-${ride.id}-${rIdx}`}
                               className="bg-slate-950 p-2.5 rounded-xl border border-slate-850 hover:border-slate-750 transition-all flex justify-between items-center group relative gap-2"
                             >
                               <div className="min-w-0 flex-1">
@@ -4240,9 +4240,9 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 mt-1">
-                    {(["normal", "express", "instant"] as const).map((sp) => (
+                    {(["normal", "express", "instant"] as const).map((sp, sIdx) => (
                       <button
-                        key={sp}
+                        key={`warp-speed-${sp}-${sIdx}`}
                         onClick={() => setWarpSpeed(sp)}
                         className={`py-1 px-1.5 rounded text-[9px] font-bold uppercase transition-all border-none cursor-pointer text-center ${
                           warpSpeed === sp
@@ -4960,7 +4960,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   <div className="flex gap-2 mb-3">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
-                        key={star}
+                        key={`star-rating-btn-${star}`}
                         type="button"
                         onClick={() => setRating(star)}
                         className="focus:outline-none transition-transform hover:scale-125 cursor-pointer"
@@ -4999,14 +4999,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                     {/* Percentage buttons */}
                     <div className="grid grid-cols-4 gap-2">
-                      {[15, 20, 25].map((pct) => {
+                      {[15, 20, 25].map((pct, pIdx) => {
                         const amt =
                           calculatedPrice(selectedVehicle.priceEstimate) *
                           (pct / 100);
                         const isPctSelected = tipPercentage === pct;
                         return (
                           <button
-                            key={pct}
+                            key={`tip-pct-${pct}-${pIdx}`}
                             type="button"
                             onClick={() => {
                               setTipPercentage(pct);
@@ -5286,7 +5286,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                   {/* Lists of cars */}
                   <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[380px] pr-1">
-                    {ACTIVE_FLEET.map((fleetCar) => {
+                    {ACTIVE_FLEET.map((fleetCar, fIdx) => {
                       const correspondsActiveOption = VEHICLE_OPTIONS.find(
                         (v) => v.id === fleetCar.tier,
                       );
@@ -5294,7 +5294,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                       return (
                         <div
-                          key={fleetCar.id}
+                          key={`fleet-car-${fleetCar.id}-${fIdx}`}
                           className="bg-slate-900 p-3 rounded-xl border border-slate-850 hover:border-slate-750 transition-all flex justify-between items-center gap-4"
                         >
                           <div className="min-w-0 flex-1">
@@ -5475,7 +5475,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {completedTrips.map((trip) => {
+                    {completedTrips.map((trip, idx) => {
                       const startDate = new Date(trip.startTime);
                       const endDate = new Date(trip.endTime);
                       const formattedDate = startDate.toLocaleDateString(
@@ -5493,7 +5493,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                       return (
                         <div
-                          key={trip.id}
+                          key={`completed-trip-${trip.id || 't'}-${idx}`}
                           className="bg-slate-950 p-4 rounded-2xl border border-slate-850 hover:border-slate-800 transition-all flex flex-col gap-2 relative group"
                         >
                           <div className="flex justify-between items-start gap-2">
@@ -5544,7 +5544,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               </span>
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <button
-                                  key={star}
+                                  key={`trip-${trip.id || idx}-star-${star}`}
                                   type="button"
                                   onClick={async (e) => {
                                     e.stopPropagation();

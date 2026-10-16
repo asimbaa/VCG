@@ -80,9 +80,9 @@ export function ReserveArbitrageWidget() {
             { name: 'RBA Bonds', yield: 4.35, icon: ShieldCheck },
             { name: 'US Treasuries', yield: 4.25, icon: Globe },
             { name: 'UK Gilts', yield: 3.95, icon: Activity }
-          ].map(asset => (
+          ].map((asset, idx) => (
             <div 
-              key={asset.name}
+              key={`reserve-asset-${asset.name}-${idx}`}
               className={`p-4 rounded-2xl border-2 transition-all ${activeAsset === asset.name ? 'bg-fuchsia-500/10 border-fuchsia-500 shadow-[0_0_20px_rgba(217,70,239,0.2)]' : 'bg-slate-950 border-slate-800'}`}
             >
               <div className="flex items-center gap-2 mb-2">

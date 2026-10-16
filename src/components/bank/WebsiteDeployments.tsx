@@ -108,8 +108,8 @@ export function WebsiteDeployments() {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        {websites.map(site => (
-          <div key={site.domain} className="bg-slate-950 border border-slate-800 p-6 rounded-2xl hover:border-indigo-500/50 transition-all flex flex-col justify-between group">
+        {websites.map((site, sIdx) => (
+          <div key={`${site.domain}-${sIdx}`} className="bg-slate-950 border border-slate-800 p-6 rounded-2xl hover:border-indigo-500/50 transition-all flex flex-col justify-between group">
             <div>
               <div className="flex justify-between items-start mb-4">
                 <div>

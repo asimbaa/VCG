@@ -80,9 +80,9 @@ export const SpaceXTelemetry: React.FC<{
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {assets.map(asset => (
+          {assets.map((asset, aIdx) => (
             <div 
-              key={asset.id}
+              key={`spacex-asset-${asset.id}-${aIdx}`}
               onClick={() => setSelectedAsset(asset)}
               className={`p-4 rounded-xl cursor-pointer transition-all border ${selectedAsset?.id === asset.id ? 'bg-slate-800 border-slate-600 shadow-lg' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800'}`}
             >

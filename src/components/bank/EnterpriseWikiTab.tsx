@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { BookOpen, Building2, ShieldCheck, FileText, Globe, Hash, Briefcase, Database, Network, Server, Zap, Lock, Eye, Download } from 'lucide-react';
+import { BookOpen, Building2, ShieldCheck, FileText, Globe, Hash, Briefcase, Database, Network, Server, Zap, Lock, Eye, Download, Sparkles, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ComputerScienceBreakthroughs } from '../research/ComputerScienceBreakthroughs';
 
 export function EnterpriseWikiTab() {
+  const [wikiSection, setWikiSection] = useState<'breakthroughs' | 'entities'>('breakthroughs');
   const [activeEntity, setActiveEntity] = useState('valourian');
 
   const entities = {
@@ -63,126 +65,165 @@ export function EnterpriseWikiTab() {
   const current = entities[activeEntity as keyof typeof entities];
 
   return (
-    <div className="w-full max-w-7xl mx-auto flex flex-col md:flex-row gap-6 h-[800px]">
-      {/* Sidebar Navigation */}
-      <div className="w-full md:w-80 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shrink-0 shadow-xl">
-        <div className="p-6 border-b border-slate-800">
-          <h2 className="text-xl font-black text-white tracking-widest uppercase flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-indigo-500" />
-            Enterprise Wiki
-          </h2>
-          <p className="text-xs text-slate-400 mt-2 font-mono">Central Knowledge Base & Proofs</p>
+    <div className="w-full max-w-7xl mx-auto space-y-6">
+      {/* Top Section Selector Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2 flex items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setWikiSection('breakthroughs')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              wikiSection === 'breakthroughs'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            26 CS Breakthroughs (By Asim Aryal)
+          </button>
+          <button
+            onClick={() => setWikiSection('entities')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              wikiSection === 'entities'
+                ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-indigo-400" />
+            Corporate Entities & Legal Proofs
+          </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {Object.entries(entities).map(([key, entity]) => {
-            const Icon = entity.icon;
-            const isActive = activeEntity === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setActiveEntity(key)}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all ${
-                  isActive ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 border' : 'bg-transparent text-slate-400 hover:bg-slate-800 hover:text-white border border-transparent'
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                <span className="font-bold text-sm truncate">{entity.name}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="p-4 bg-slate-950 border-t border-slate-800">
-          <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold uppercase tracking-widest">
-            <Database className="w-4 h-4" />
-            AI Swarm Synced
-          </div>
+
+        <div className="hidden sm:flex items-center gap-2 pr-2 text-xs font-mono text-slate-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Sovereign Knowledge Base</span>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex flex-col">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeEntity}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex-1 overflow-y-auto p-8 space-y-8"
-          >
-            {/* Header */}
-            <div>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl">
-                  <current.icon className="w-8 h-8 text-indigo-500" />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-black text-white">{current.name}</h1>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Verified Entity
-                    </span>
-                    <span className="text-slate-400 text-sm font-mono flex items-center gap-1">
-                      <Hash className="w-4 h-4" /> D-U-N-S: {current.duns}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <p className="text-slate-300 text-lg leading-relaxed">{current.description}</p>
+      {wikiSection === 'breakthroughs' ? (
+        <ComputerScienceBreakthroughs />
+      ) : (
+        <div className="w-full flex flex-col md:flex-row gap-6 h-[800px]">
+          {/* Sidebar Navigation */}
+          <div className="w-full md:w-80 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shrink-0 shadow-xl">
+            <div className="p-6 border-b border-slate-800">
+              <h2 className="text-xl font-black text-white tracking-widest uppercase flex items-center gap-2">
+                <BookOpen className="w-6 h-6 text-indigo-500" />
+                Enterprise Wiki
+              </h2>
+              <p className="text-xs text-slate-400 mt-2 font-mono">Central Knowledge Base & Proofs</p>
             </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {Object.entries(entities).map(([key, entity], eIdx) => {
+                const Icon = entity.icon;
+                const isActive = activeEntity === key;
+                return (
+                  <button
+                    key={`wiki-entity-${key}-${eIdx}`}
+                    onClick={() => setActiveEntity(key)}
+                    className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all ${
+                      isActive ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 border' : 'bg-transparent text-slate-400 hover:bg-slate-800 hover:text-white border border-transparent'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 shrink-0" />
+                    <span className="font-bold text-sm truncate">{entity.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="p-4 bg-slate-950 border-t border-slate-800">
+              <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold uppercase tracking-widest">
+                <Database className="w-4 h-4" />
+                AI Swarm Synced
+              </div>
+            </div>
+          </div>
 
-            {/* Proof Documents */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Proof Documents & Certifications
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {current.documents.map((doc, idx) => (
-                  <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-indigo-500/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-900 rounded-lg">
-                        {doc.type === "PDF" ? <FileText className="w-5 h-5 text-red-400" /> : <Lock className="w-5 h-5 text-emerald-400" />}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-200 text-sm">{doc.name}</div>
-                        <div className="text-xs font-mono text-slate-500 mt-0.5 flex items-center gap-1">
-                          {doc.verified && <ShieldCheck className="w-3 h-3 text-emerald-500" />} Cryptographically Verified
-                        </div>
+          {/* Main Content Area */}
+          <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex flex-col">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeEntity}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex-1 overflow-y-auto p-8 space-y-8"
+              >
+                {/* Header */}
+                <div>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl">
+                      <current.icon className="w-8 h-8 text-indigo-500" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-black text-white">{current.name}</h1>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> Verified Entity
+                        </span>
+                        <span className="text-slate-400 text-sm font-mono flex items-center gap-1">
+                          <Hash className="w-4 h-4" /> D-U-N-S: {current.duns}
+                        </span>
                       </div>
                     </div>
-                    <button className="text-slate-500 hover:text-indigo-400 transition-colors">
-                      <Eye className="w-5 h-5" />
-                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <p className="text-slate-300 text-lg leading-relaxed">{current.description}</p>
+                </div>
 
-            {/* AI Playbook & Architecture */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-              <div className="bg-indigo-950/20 border border-indigo-900/50 p-6 rounded-2xl">
-                <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-4">
-                  <Zap className="w-4 h-4" />
-                  AI Agent Playbook
-                </h3>
-                <p className="text-slate-300 text-sm leading-relaxed">
-                  {current.playbook}
-                </p>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-6 rounded-2xl">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
-                  <Server className="w-4 h-4" />
-                  Core Infrastructure
-                </h3>
-                <p className="text-slate-300 text-sm font-mono leading-relaxed">
-                  {current.techStack}
-                </p>
-              </div>
-            </div>
+                {/* Proof Documents */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Proof Documents & Certifications
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {current.documents.map((doc, idx) => (
+                      <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-indigo-500/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-slate-900 rounded-lg">
+                            {doc.type === "PDF" ? <FileText className="w-5 h-5 text-red-400" /> : <Lock className="w-5 h-5 text-emerald-400" />}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-200 text-sm">{doc.name}</div>
+                            <div className="text-xs font-mono text-slate-500 mt-0.5 flex items-center gap-1">
+                              {doc.verified && <ShieldCheck className="w-3 h-3 text-emerald-500" />} Cryptographically Verified
+                            </div>
+                          </div>
+                        </div>
+                        <button className="text-slate-500 hover:text-indigo-400 transition-colors">
+                          <Eye className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-          </motion.div>
-        </AnimatePresence>
-      </div>
+                {/* AI Playbook & Architecture */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                  <div className="bg-indigo-950/20 border border-indigo-900/50 p-6 rounded-2xl">
+                    <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <Zap className="w-4 h-4" />
+                      AI Agent Playbook
+                    </h3>
+                    <p className="text-slate-300 text-sm leading-relaxed">
+                      {current.playbook}
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-6 rounded-2xl">
+                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <Server className="w-4 h-4" />
+                      Core Infrastructure
+                    </h3>
+                    <p className="text-slate-300 text-sm font-mono leading-relaxed">
+                      {current.techStack}
+                    </p>
+                  </div>
+                </div>
+
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

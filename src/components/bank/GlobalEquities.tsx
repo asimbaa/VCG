@@ -55,7 +55,7 @@ export function GlobalEquities() {
           <div className="grid gap-4">
             {portfolio.map((item, idx) => (
               <motion.div 
-                key={item.ticker}
+                key={`${item.ticker}-${idx}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
@@ -96,7 +96,7 @@ export function GlobalEquities() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {researchQueue.map((item, idx) => (
               <motion.div
-                key={item.target}
+                key={`${item.target}-${idx}`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.1 }}

@@ -349,9 +349,9 @@ export function LinkComManagerModal({
                   { id: "australian_banking", label: "Australian Institutional (CBA, Westpac, ANZ, NAB, Macquarie)" },
                   { id: "rapidpay", label: "RapidPay Sovereign" },
                   { id: "valourian_treasury", label: "Valourian Treasury" },
-                ].map((cat) => (
+                ].map((cat, cIdx) => (
                   <button
-                    key={cat.id}
+                    key={`link-cat-${cat.id}-${cIdx}`}
                     onClick={() => setSelectedCategory(cat.id as any)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                       selectedCategory === cat.id

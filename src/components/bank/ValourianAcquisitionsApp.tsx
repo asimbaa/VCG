@@ -66,7 +66,7 @@ export function ValourianAcquisitionsApp({ appName, ticker, ownedShares, valuati
               { label: "API Rate Limits", status: "Bypassed (Sovereign Authority)", color: "text-amber-600" },
               { label: "App UI/UX Override", status: "Injecting Dark Mode Themes", color: "text-indigo-600" },
             ].map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div key={`acq-item-${item.label}-${idx}`} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <span className="font-bold text-slate-700 text-sm">{item.label}</span>
                 <span className={`font-black text-xs uppercase tracking-wider ${item.color}`}>{item.status}</span>
               </div>

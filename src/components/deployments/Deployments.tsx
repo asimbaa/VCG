@@ -292,9 +292,9 @@ export function Deployments({ user }: { user: any }) {
             </h3>
 
             <div className="space-y-4">
-              {activeSites.map(site => (
+              {activeSites.map((site, sIdx) => (
                 <motion.div 
-                   key={site.id} 
+                   key={`deploy-site-${site.id}-${sIdx}`} 
                    initial={{ opacity: 0, x: -10 }}
                    animate={{ opacity: 1, x: 0 }}
                    className="flex items-center justify-between p-5 rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group bg-white"

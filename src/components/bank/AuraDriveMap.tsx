@@ -325,8 +325,8 @@ export const AuraDriveMap = ({ localFleet = [] }: { localFleet?: any[] }) => {
             routeSegments={routeSegments}
           />
 
-          {filteredRoutes.map((route) => (
-            <Fragment key={route.id}>
+          {filteredRoutes.map((route, rIdx) => (
+            <Fragment key={`${route.id}-${rIdx}`}>
               <Polyline
                 positions={route.positions as [number, number][]}
                 pathOptions={{
@@ -391,8 +391,8 @@ export const AuraDriveMap = ({ localFleet = [] }: { localFleet?: any[] }) => {
             />
           ))}
 
-          {annotations.map(ann => (
-              <Marker key={ann.id} position={[ann.lat, ann.lng]}>
+          {annotations.map((ann, aIdx) => (
+              <Marker key={`ann-marker-${ann.id}-${aIdx}`} position={[ann.lat, ann.lng]}>
                   <Popup>{ann.text}</Popup>
               </Marker>
           ))}
@@ -549,9 +549,9 @@ export const AuraDriveMap = ({ localFleet = [] }: { localFleet?: any[] }) => {
         <div className="flex-1 overflow-y-auto pr-1">
             <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2 block">Active Routes ({filteredRoutes.length})</span>
             <div className="flex flex-col gap-2">
-                {filteredRoutes.map(route => (
+                {filteredRoutes.map((route, rIdx) => (
                     <div 
-                        key={route.id}
+                        key={`${route.id}-${rIdx}`}
                         onMouseEnter={() => setHoveredRouteId(route.id)}
                         onMouseLeave={() => setHoveredRouteId(null)}
                         className={`p-3 rounded-xl border transition-all cursor-pointer ${selectedRouteIds.includes(route.id) ? "bg-slate-800/80 border-emerald-500/50" : "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800"}`}

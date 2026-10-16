@@ -654,7 +654,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
           <div className="space-y-1 bg-white/5 p-2 rounded-lg border border-white/5">
             <span className="text-[7px] font-black uppercase text-slate-400 tracking-wider block">Traffic Condition Mode</span>
             <div className="grid grid-cols-3 gap-1">
-              {(['free-flowing', 'minor-delays', 'accident-ahead'] as const).map((level) => {
+              {(['free-flowing', 'minor-delays', 'accident-ahead'] as const).map((level, lIdx) => {
                 const isSelected = trafficLevel === level;
                 let label = "Free";
                 if (level === 'minor-delays') label = "Minor";
@@ -662,7 +662,7 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
                 
                 return (
                   <button
-                    key={level}
+                    key={`traffic-mode-${level}-${lIdx}`}
                     type="button"
                     onClick={() => setTrafficLevel(level)}
                     className={`py-1 text-[8px] font-bold rounded border transition-all cursor-pointer ${

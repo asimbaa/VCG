@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bitcoin, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote, Activity } from "lucide-react";
+import { Bitcoin, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Download, FileJson, FileText, ArrowRightLeft, Wallet, Copy, ExternalLink, QrCode, Building2, Banknote, Activity, Key } from "lucide-react";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
+import { CryptoKeysModal } from "./CryptoKeysModal";
 
 interface CryptoPrice {
   id: string;
@@ -32,7 +33,7 @@ export function CryptoPortfolio() {
   ]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"fiat" | "crypto">("crypto");
-
+  const [showCryptoKeysModal, setShowCryptoKeysModal] = useState(false);
 
   const [showTransfer, setShowTransfer] = useState<"send" | "receive" | null>(null);
   
@@ -193,14 +194,22 @@ const [isProcessing, setIsProcessing] = useState(false);
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-4 mt-8 relative z-10">
-            <button onClick={() => setShowTransfer("receive")} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl transition-colors border border-slate-700 flex items-center justify-center gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-8 relative z-10">
+            <button onClick={() => setShowTransfer("receive")} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl transition-colors border border-slate-700 flex items-center justify-center gap-2 cursor-pointer">
                 <ArrowDownRight className="w-5 h-5" />
                 {viewMode === 'crypto' ? 'RECEIVE CRYPTO' : 'DEPOSIT FIAT'}
             </button>
-            <button onClick={() => setShowTransfer("send")} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
+            <button onClick={() => setShowTransfer("send")} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 cursor-pointer">
                 <Send className="w-5 h-5" />
                 {viewMode === 'crypto' ? 'SEND TO COINBASE' : 'SEND TO BANK'}
+            </button>
+            <button 
+                onClick={() => setShowCryptoKeysModal(true)} 
+                className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-98"
+                title="Inspect unmasked private keys and master seed"
+            >
+                <Key className="w-5 h-5" />
+                SHOW FULL CRYPTO KEYS
             </button>
         </div>
       </div>
@@ -239,8 +248,8 @@ const [isProcessing, setIsProcessing] = useState(false);
           
           <div className="space-y-3">
             {viewMode === 'crypto' ? (
-                prices.map((coin) => (
-                  <div key={coin.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-slate-50 md:bg-transparent p-4 rounded-2xl md:rounded-none md:border-b md:border-slate-50 hover:bg-slate-50 transition-colors">
+                prices.map((coin, cIdx) => (
+                  <div key={`crypto-coin-${coin.id}-${cIdx}`} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-slate-50 md:bg-transparent p-4 rounded-2xl md:rounded-none md:border-b md:border-slate-50 hover:bg-slate-50 transition-colors">
                     <div className="flex items-center gap-3">
                       <img src={coin.image} alt={coin.name} className="w-10 h-10 md:w-8 md:h-8 rounded-full" />
                       <div>
@@ -273,8 +282,8 @@ const [isProcessing, setIsProcessing] = useState(false);
                   </div>
                 ))
             ) : (
-                fiatBalances.map((fiat) => (
-                  <div key={fiat.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-slate-50 md:bg-transparent p-4 rounded-2xl md:rounded-none md:border-b md:border-slate-50 hover:bg-slate-50 transition-colors">
+                fiatBalances.map((fiat, fIdx) => (
+                  <div key={`fiat-bal-${fiat.id}-${fIdx}`} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-slate-50 md:bg-transparent p-4 rounded-2xl md:rounded-none md:border-b md:border-slate-50 hover:bg-slate-50 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-700">
                           {fiat.icon}
@@ -338,8 +347,8 @@ const [isProcessing, setIsProcessing] = useState(false);
                     >
                         <option value="" disabled>Select an asset...</option>
                       {viewMode === 'crypto' 
-                        ? prices.map(p => <option key={p.id} value={p.id}>{p.name} ({p.balance} {p.symbol})</option>)
-                        : fiatBalances.map(f => <option key={f.id} value={f.id}>{f.name} ({f.icon}{f.balance} {f.symbol})</option>)
+                        ? prices.map((p, idx) => <option key={`crypto-p-${p.id}-${idx}`} value={p.id}>{p.name} ({p.balance} {p.symbol})</option>)
+                        : fiatBalances.map((f, idx) => <option key={`fiat-b-${f.id}-${idx}`} value={f.id}>{f.name} ({f.icon}{f.balance} {f.symbol})</option>)
                       }
                     </select>
                   </div>
@@ -486,7 +495,7 @@ const [isProcessing, setIsProcessing] = useState(false);
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
               {[{ asset: 'BTC', apy: '4.2%', earned: '0.0412 BTC' }, { asset: 'ETH', apy: '8.5%', earned: '1.24 ETH' }, { asset: 'USDC', apy: '12.0%', earned: '$14,500.00' }].map((farm, i) => (
-                  <div key={i} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col gap-2 hover:border-purple-500/30 transition-colors shadow-lg">
+                  <div key={`farm-${farm.asset}-${i}`} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col gap-2 hover:purple-500/30 transition-colors shadow-lg">
                       <div className="flex justify-between items-center text-sm font-bold mb-2">
                           <span className="text-slate-400 uppercase tracking-widest">{farm.asset} Pool</span>
                           <span className="text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded text-xs">{farm.apy} APY</span>
@@ -499,6 +508,13 @@ const [isProcessing, setIsProcessing] = useState(false);
               ))}
           </div>
       </div>
+
+      {/* Full Crypto Keys Modal */}
+      <CryptoKeysModal 
+        isOpen={showCryptoKeysModal} 
+        onClose={() => setShowCryptoKeysModal(false)} 
+        defaultShowFullKeys={true} 
+      />
     </div>
   );
 }

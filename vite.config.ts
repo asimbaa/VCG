@@ -56,7 +56,6 @@ export default defineConfig(({mode}) => {
               if (id.includes('firebase')) return 'firebase';
               if (id.includes('three') || id.includes('@react-three')) return 'three';
               if (id.includes('leaflet') || id.includes('react-leaflet')) return 'leaflet';
-              if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-core';
               return 'vendor';
             }
           }

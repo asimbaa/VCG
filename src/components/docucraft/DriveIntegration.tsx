@@ -82,7 +82,7 @@ export function DriveIntegration() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
-                  key={file.id}
+                  key={`drive-file-${file.id}-${idx}`}
                   className="bg-slate-950/50 border border-slate-800 hover:border-blue-500/50 p-4 rounded-2xl flex items-center justify-between group transition-all cursor-pointer hover:bg-slate-900"
                 >
                   <div className="flex items-center gap-4">
@@ -95,8 +95,8 @@ export function DriveIntegration() {
                         <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
                           {file.size} • Modified Today
                         </p>
-                        {file.tags && file.tags.map((tag: string) => (
-                          <span key={tag} className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        {file.tags && file.tags.map((tag: string, tIdx: number) => (
+                          <span key={`drive-tag-${tag}-${tIdx}`} className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-400 border border-blue-500/30">
                             {tag}
                           </span>
                         ))}

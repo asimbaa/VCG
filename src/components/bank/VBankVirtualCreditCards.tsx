@@ -9,6 +9,7 @@ import { NFCTapModal } from '../pay/NFCTapModal';
 import { LinkComManagerModal } from '../pay/LinkComManagerModal';
 import { CrossPlatformCardWalletModal } from './CrossPlatformCardWalletModal';
 import { CardDetailsCopyModal } from './CardDetailsCopyModal';
+import { AmexAuAppRegistrationModal } from './AmexAuAppRegistrationModal';
 import { NumpySuperServiceWidget } from './NumpySuperServiceWidget';
 import { numpyCardSuperService } from '../../services/numpyCardSuperService';
 import { 
@@ -204,8 +205,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_centurion_black', 
     type: 'virtual', 
     name: 'American Express Centurion Black Card (Australia)', 
-    number: '3782 821944 10001', 
-    fullNumber: '3782 821944 10001',
+    number: '3782 821910 17712', 
+    fullNumber: '3782 821910 17712',
     balance: 1000000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -224,8 +225,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_platinum_business', 
     type: 'virtual', 
     name: 'American Express Platinum Business Card (Australia)', 
-    number: '3760 918234 51008', 
-    fullNumber: '3760 918234 51008',
+    number: '3760 918210 41008', 
+    fullNumber: '3760 918210 41008',
     balance: 940000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -244,8 +245,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_explorer', 
     type: 'virtual', 
     name: 'American Express Explorer Credit Card (Australia)', 
-    number: '3759 849201 62004', 
-    fullNumber: '3759 849201 62004',
+    number: '3759 849210 62004', 
+    fullNumber: '3759 849210 62004',
     balance: 500000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -264,8 +265,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_corp_black', 
     type: 'virtual', 
     name: 'American Express Corporate Black Diamond (Valourian Treasury AU)', 
-    number: '3791 748291 93005', 
-    fullNumber: '3791 748291 93005',
+    number: '3791 748210 03005', 
+    fullNumber: '3791 748210 03005',
     balance: 2500000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -397,6 +398,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedWalletCard, setSelectedWalletCard] = useState<any | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isAmexRegistrationModalOpen, setIsAmexRegistrationModalOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<BankCard | null>(null);
   const [selectedDestination, setSelectedDestination] = useState<BankCard | null>(null);
   const [refundAmount, setRefundAmount] = useState<string>('');
@@ -645,15 +647,21 @@ export const VBankVirtualCreditCards: React.FC = () => {
                 >
                   <Zap className="w-3.5 h-3.5 fill-emerald-400" /> Open Link.com 38+ Cards Sync Hub
                 </button>
+                <button
+                  onClick={() => setIsAmexRegistrationModalOpen(true)}
+                  className="bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/50 text-blue-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-blue-400" /> AMEX AU App Registration Hub
+                </button>
               </div>
             </div>
 
             {/* Quick Actions & Currency */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
-                {(['AUD', 'USD', 'EUR', 'GBP'] as const).map(curr => (
+                {(['AUD', 'USD', 'EUR', 'GBP'] as const).map((curr, idx) => (
                   <button
-                    key={curr}
+                    key={`vbank-curr-${curr}-${idx}`}
                     onClick={() => setCurrency && setCurrency(curr)}
                     className={`px-3 py-1 rounded text-xs font-bold transition-all ${
                       currency === curr ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -1049,6 +1057,11 @@ export const VBankVirtualCreditCards: React.FC = () => {
         card={selectedCopyModalCard}
         isOpen={isCopyModalOpen}
         onClose={() => setIsCopyModalOpen(false)}
+      />
+
+      <AmexAuAppRegistrationModal
+        isOpen={isAmexRegistrationModalOpen}
+        onClose={() => setIsAmexRegistrationModalOpen(false)}
       />
     </>
   );

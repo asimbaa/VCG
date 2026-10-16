@@ -100,7 +100,7 @@ export function CommandPalette({ isOpen, setIsOpen, setActiveTab }: { isOpen: bo
             )}
             {filtered.map((cmd, i) => (
               <button
-                key={cmd.id}
+                key={`cmd-pal-${cmd.id}-${i}`}
                 onClick={() => {
                   setActiveTab(cmd.id);
                   setIsOpen(false);

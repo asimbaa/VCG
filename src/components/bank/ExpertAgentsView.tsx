@@ -76,10 +76,10 @@ export function ExpertAgentsView() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-        {agentProfiles.map((agent) => {
+        {agentProfiles.map((agent, aIdx) => {
           const Icon = agent.icon;
           return (
-            <div key={agent.id} className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-blue-500/30 transition-all hover:shadow-xl group/card">
+            <div key={`expert-agent-${agent.id}-${aIdx}`} className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-blue-500/30 transition-all hover:shadow-xl group/card">
               <div className={`w-12 h-12 rounded-2xl bg-${agent.color}-100 text-${agent.color}-600 flex items-center justify-center mb-6`}>
                 <Icon className="w-6 h-6" />
               </div>

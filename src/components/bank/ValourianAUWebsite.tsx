@@ -194,7 +194,7 @@ export function ValourianAUWebsite() {
                       "Exclusive Australian Company Number (ACN: 347 639 896) compliance.",
                       "Valourian digital vault verified & synchronized natively."
                     ].map((item, i) => (
-                      <li key={i} className="flex gap-4 items-start">
+                      <li key={`val-au-item-${i}`} className="flex gap-4 items-start">
                          <div className="mt-1 bg-emerald-100 p-1 rounded-full">
                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                          </div>
@@ -225,7 +225,7 @@ export function ValourianAUWebsite() {
                      { name: "Portfolio Deed Package (40+)", size: "45.0 MB ZIP", date: "Yesterday" },
                      { name: "Aura Fleet Operations License", size: "1.2 MB PDF", date: "Yesterday" }
                    ].map((file, i) => (
-                      <div key={i} className="group/item flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
+                      <div key={`val-au-file-${file.name}-${i}`} className="group/item flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
                          <div className="flex items-center gap-4">
                             <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200">
                                <FileText className="w-5 h-5 text-slate-500 group-hover/item:text-emerald-600 transition-colors" />

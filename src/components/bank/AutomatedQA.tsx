@@ -97,8 +97,8 @@ export const AutomatedQA = () => {
             </div>
 
             <div className="space-y-4 relative z-10">
-                {tests.map(test => (
-                    <div key={test.id} className={`p-4 rounded-2xl border transition-colors ${
+                {tests.map((test, tIdx) => (
+                    <div key={`qa-test-${test.id}-${tIdx}`} className={`p-4 rounded-2xl border transition-colors ${
                         test.status === 'passed' ? 'bg-emerald-950/20 border-emerald-500/30' : 
                         test.status === 'running' ? 'bg-blue-950/20 border-blue-500/30' : 
                         'bg-slate-950/50 border-slate-800'

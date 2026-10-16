@@ -404,9 +404,9 @@ export const SovereignNotificationsHub: React.FC<SovereignNotificationsHubProps>
             { id: 'property', label: 'Property & Houses' },
             { id: 'financial', label: 'Financial Decrees' },
             { id: 'email', label: 'Email Dispatches' },
-          ].map((tab) => (
+          ].map((tab, tIdx) => (
             <button
-              key={tab.id}
+              key={`notif-tab-${tab.id}-${tIdx}`}
               onClick={() => {
                 playHapticTone(900, 0.04);
                 setFilterType(tab.id);

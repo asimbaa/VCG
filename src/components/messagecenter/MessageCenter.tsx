@@ -178,9 +178,9 @@ export function MessageCenter({ user }: { user: any }) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredMessages.map(msg => (
+          {filteredMessages.map((msg, mIdx) => (
             <div 
-              key={((msg as any).isDbMsg ? (msg as any).docIdField : `static-${msg.id}`)}
+              key={`msg-item-${((msg as any).isDbMsg ? (msg as any).docIdField : `static-${msg.id}`)}-${mIdx}`}
               onClick={() => handleMessageClick(msg)}
               className={`p-5 border-b border-slate-100 cursor-pointer transition-colors ${selectedMessage?.id === msg.id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'} ${!msg.read ? 'bg-white' : 'opacity-80'}`}
             >
@@ -225,7 +225,7 @@ export function MessageCenter({ user }: { user: any }) {
                     {selectedMessage.attachments.map((att: any, idx: number) => {
                       const Icon = att.icon;
                       return (
-                        <div key={idx} className="flex items-center p-4 rounded-xl border border-slate-200 bg-slate-50 group cursor-pointer hover:bg-slate-100 transition-colors">
+                        <div key={`msg-att-${att.name || 'file'}-${idx}`} className="flex items-center p-4 rounded-xl border border-slate-200 bg-slate-50 group cursor-pointer hover:bg-slate-100 transition-colors">
                           <div className="w-10 h-10 bg-white rounded-lg shadow-sm flex items-center justify-center shrink-0 mr-4">
                             <Icon className="w-5 h-5 text-indigo-600" />
                           </div>

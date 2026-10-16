@@ -151,8 +151,8 @@ export function PastOrdersView({ transactions }: { transactions: any[] }) {
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-        {currentTransactions.map((txn) => (
-          <div key={txn.id} className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl flex flex-col hover:border-emerald-500/30 hover:bg-slate-800/30 transition-all group gap-3 relative overflow-hidden">
+        {currentTransactions.map((txn, idx) => (
+          <div key={`${txn.id || 'order'}-${startIndex + idx}`} className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl flex flex-col hover:border-emerald-500/30 hover:bg-slate-800/30 transition-all group gap-3 relative overflow-hidden">
             {txn.shipping && (
                 <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-bl-lg">
                     Missing Order Restored

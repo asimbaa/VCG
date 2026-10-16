@@ -17,8 +17,8 @@ export const CurrencySelector: React.FC<Props> = ({ currency, onChange, supporte
         onChange={e => onChange(e.target.value)}
         className="bg-transparent text-white text-xs font-bold font-mono outline-none cursor-pointer appearance-none pr-4"
       >
-        {supportedCurrencies.map(c => (
-          <option key={c} value={c} className="bg-slate-900 text-white">{c} ({SYMBOLS[c]})</option>
+        {Array.from(new Set(supportedCurrencies)).map((c, idx) => (
+          <option key={`currency-opt-${c}-${idx}`} value={c} className="bg-slate-900 text-white">{c} ({SYMBOLS[c] || c})</option>
         ))}
       </select>
       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">

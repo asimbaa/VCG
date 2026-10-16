@@ -49,8 +49,8 @@ function ISO20022DashboardWidget() {
           </div>
           
           <div className="space-y-3">
-            {messages.map((msg) => (
-              <div key={msg.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {messages.map((msg, mIdx) => (
+              <div key={`iso-msg-${msg.id}-${mIdx}`} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex flex-col gap-1">
                   <span className="text-white font-black text-sm uppercase tracking-wider">{msg.from} <ArrowRightLeft className="w-3 h-3 inline mx-1" /> {msg.to}</span>
                   <span className="text-slate-500 font-mono text-xs">{msg.id}</span>
@@ -415,7 +415,7 @@ function SovereignReserveArbitrageWidget() {
         
         <div className="space-y-3 mb-6 relative">
           {yieldData.map((data, idx) => (
-            <div key={idx} className="flex flex-col gap-2 bg-emerald-950/50 p-3 rounded-xl border border-emerald-900/50 relative overflow-hidden">
+            <div key={`yield-data-${data.asset}-${idx}`} className="flex flex-col gap-2 bg-emerald-950/50 p-3 rounded-xl border border-emerald-900/50 relative overflow-hidden">
                {isSyncing && (
                  <motion.div 
                    initial={{ left: '-100%' }} animate={{ left: '200%' }} 

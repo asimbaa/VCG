@@ -341,10 +341,10 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
            {paidTransactions.length === 0 ? (
              <div className="p-8 text-center text-slate-400 text-sm">No transaction records found to process receipts.</div>
            ) : (
-             paidTransactions.map((txn: any) => (
+             paidTransactions.map((txn: any, idx: number) => (
                <button
-                 key={txn.id}
-                 id={`rec-item-${txn.id}`}
+                 key={`${txn?.id || 'rec'}-${idx}`}
+                 id={`rec-item-${txn?.id || idx}`}
                  onClick={() => setSelectedReceipt(txn)}
                  onDoubleClick={() => handleDoubleClickedReceipt(txn)}
                  className={`w-full text-left p-5 border-b border-slate-100 transition-all flex flex-col gap-2 relative group cursor-pointer ${

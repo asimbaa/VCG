@@ -66,7 +66,7 @@ export function DeepSpaceTerminal() {
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
               {history.map((msg, i) => (
-                <div key={i} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={`deep-space-msg-${i}-${msg.type}`} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] p-3 rounded ${
                     msg.type === 'user' ? 'bg-emerald-900/40 text-emerald-100 border border-emerald-500/30' :
                     msg.type === 'system' ? 'text-slate-400 font-bold' :

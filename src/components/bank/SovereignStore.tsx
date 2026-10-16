@@ -1071,9 +1071,9 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
               
               {/* Brand filters */}
               <div className="flex flex-wrap gap-2">
-                {(["All", "Valourian FinTech", "Valourian Real Estate", "Gulfstream", "Apple", "Tesla", "BYD", "Kia", "Xero", "MYOB", "Zara", "Burberry", "West Elm", "Eight Sleep", "Amazon", "Australia Post", "FedEx", "DHL"] as const).map(brand => (
+                {(["All", "Valourian FinTech", "Valourian Real Estate", "Gulfstream", "Apple", "Tesla", "BYD", "Kia", "Xero", "MYOB", "Zara", "Burberry", "West Elm", "Eight Sleep", "Amazon", "Australia Post", "FedEx", "DHL"] as const).map((brand, bIdx) => (
                   <button
-                    key={brand}
+                    key={`store-brand-${brand}-${bIdx}`}
                     onClick={() => setSelectedBrand(brand)}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${
                       selectedBrand === brand
@@ -1104,8 +1104,8 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
 
               {/* Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {filteredProducts.map(p => (
-                  <div key={p.id} className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden flex flex-col justify-between group hover:border-amber-500/40 hover:shadow-xl transition-all">
+                {filteredProducts.map((p, pIdx) => (
+                  <div key={`${p.id}-${pIdx}`} className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden flex flex-col justify-between group hover:border-amber-500/40 hover:shadow-xl transition-all">
                     
                     <div className="h-44 relative bg-slate-950 overflow-hidden">
                       <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80" />
@@ -1153,7 +1153,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                 </div>
                 {cart.length > 0 && (
                   <motion.span
-                    key={cart.length}
+                    key={`cart-header-count-${cart.length}`}
                     initial={{ scale: 0.6, opacity: 0 }}
                     animate={{ scale: [1, 1.4, 1], rotate: [0, -10, 10, 0], opacity: 1 }}
                     transition={{ type: "tween", stiffness: 400, damping: 8, bounce: 0.6 }}
@@ -1242,7 +1242,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                       <span className="text-emerald-500 text-[10px] uppercase font-heavy">0 (M&A EXEMPTION)</span>
                     </div>
                     <motion.div 
-                      key={cart.length}
+                      key={`cart-total-procurement-${cart.length}`}
                       initial={{ scale: 0.95, opacity: 0.5 }}
                       animate={{ scale: 1, opacity: 1 }}
                       className="flex justify-between font-black text-base text-white mt-3 pt-3 border-t border-slate-800"
@@ -1640,8 +1640,8 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                     No orders found.
                   </div>
                 ) : (
-                  pastOrders.map((order) => (
-                    <div key={order.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                  pastOrders.map((order, oIdx) => (
+                    <div key={`${order.id}-${oIdx}`} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="text-[10px] text-amber-500 font-mono font-bold">{new Date(order.date).toLocaleDateString()}</span>
@@ -1664,7 +1664,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                           <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-1">Rate Store Purchase:</span>
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
-                              key={star}
+                              key={`store-order-${order.id}-star-${star}`}
                               onClick={async () => {
                                 try {
                                   await updateDoc(doc(db, "transactions", order.id), { rating: star });

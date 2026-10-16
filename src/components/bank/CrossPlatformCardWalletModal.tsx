@@ -549,12 +549,12 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
                 { id: "windows", label: "Windows Laptops & PCs", icon: Laptop },
                 { id: "mac", label: "Mac Laptops (macOS)", icon: Laptop },
                 { id: "universal", label: "Universal & Wearables", icon: Watch },
-              ].map((tab) => {
+              ].map((tab, tIdx) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
                   <button
-                    key={tab.id}
+                    key={`plat-tab-${tab.id}-${tIdx}`}
                     onClick={() => setActiveTab(tab.id as PlatformTab)}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer select-none ${
                       isActive

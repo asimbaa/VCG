@@ -103,7 +103,7 @@ export const LogisticsMap: React.FC<LogisticsMapProps> = ({ shipments, selectedS
              const pos = getPos(shipment, idx);
              const isSelected = selectedShipment?.id === shipment.id;
              return (
-               <AdvancedMarker key={shipment.id} position={pos}>
+               <AdvancedMarker key={`shipment-marker-${shipment.id}-${idx}`} position={pos}>
                  <Pin 
                     background={isSelected ? "#10b981" : "#3b82f6"} 
                     glyphColor="#fff" 
