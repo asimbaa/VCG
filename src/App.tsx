@@ -74,7 +74,66 @@ const CEO_USER = {
 
 export default function App() {
   const [torrensSyncState, setTorrensSyncState] = useState<'synced' | 'syncing'>('synced');
-  const [activeTab, setActiveTab] = useState<"bank" | "docucraft" | "websites" | "payments" | "commbank" | "messagecenter" | "logistics" | "acquisitions" | "smarttech">("commbank");
+  
+  // Persistent activeTab restored from localStorage or URL hash
+  const [activeTab, setActiveTabState] = useState<"bank" | "docucraft" | "websites" | "payments" | "commbank" | "messagecenter" | "logistics" | "acquisitions" | "smarttech">(() => {
+    try {
+      const hash = window.location.hash.replace("#", "");
+      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
+      if (validTabs.includes(hash)) return hash as any;
+      const saved = localStorage.getItem("valourian_active_tab");
+      if (saved && validTabs.includes(saved)) return saved as any;
+    } catch {}
+    return "commbank";
+  });
+
+  // Keep visited apps in DOM so coming in and out never unmounts, resets, or refreshes them
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => {
+    try {
+      const hash = window.location.hash.replace("#", "");
+      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
+      const initial = validTabs.includes(hash) ? hash : (localStorage.getItem("valourian_active_tab") || "commbank");
+      return new Set([initial]);
+    } catch {
+      return new Set(["commbank"]);
+    }
+  });
+
+  const setActiveTab = React.useCallback((tab: typeof activeTab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem("valourian_active_tab", tab);
+      if (window.location.hash !== `#${tab}`) {
+        window.history.replaceState(null, "", `#${tab}`);
+      }
+    } catch {}
+    setVisitedTabs(prev => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, []);
+
+  // Sync with browser forward/back or external tab navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
+      if (validTabs.includes(hash) && hash !== activeTab) {
+        setActiveTabState(hash as any);
+        setVisitedTabs(prev => {
+          if (prev.has(hash)) return prev;
+          const next = new Set(prev);
+          next.add(hash);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [activeTab]);
+
   const [acquisitionsInitialTab, setAcquisitionsInitialTab] = useState<"properties" | "flights" | "domains" | "stocks">("properties");
   const [user, setUser] = useState<User | null>(null);
   const [mobileAppsDrawerOpen, setMobileAppsDrawerOpen] = useState(false);
@@ -287,29 +346,57 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          {/* Content Area */}
+          {/* Content Area with Keep-Alive Preservation */}
           <main className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-0 relative">
             <React.Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-emerald-500" /></div>}>
-              {activeTab === "bank" && <BankDashboard user={effectiveUser} />}
-              {activeTab === "commbank" && <ValourianDashboard user={effectiveUser} />}
-              {activeTab === "smarttech" && (
-                <div className="p-4 sm:p-8">
+              {visitedTabs.has("bank") && (
+                <div className={`h-full w-full ${activeTab === "bank" ? "block" : "hidden"}`}>
+                  <BankDashboard user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("commbank") && (
+                <div className={`h-full w-full ${activeTab === "commbank" ? "block" : "hidden"}`}>
+                  <ValourianDashboard user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("smarttech") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "smarttech" ? "block" : "hidden"}`}>
                   <AutonomousSmartTechConsole />
                 </div>
               )}
-              {activeTab === "acquisitions" && (
-                <div className="p-4 sm:p-8">
+              {visitedTabs.has("acquisitions") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "acquisitions" ? "block" : "hidden"}`}>
                   <UnifiedSovereignAcquisitionsHub 
                     initialTab={acquisitionsInitialTab} 
                     onClose={() => setActiveTab("commbank")}
                   />
                 </div>
               )}
-              {activeTab === "docucraft" && <DocuCraft user={effectiveUser} />}
-              {activeTab === "websites" && <Deployments user={effectiveUser} />}
-              {activeTab === "payments" && <RapidPay user={effectiveUser} />}
-              {activeTab === "messagecenter" && <MessageCenter user={effectiveUser} />}
-              {activeTab === "logistics" && <LogisticsDashboard user={effectiveUser} />}
+              {visitedTabs.has("docucraft") && (
+                <div className={`h-full w-full ${activeTab === "docucraft" ? "block" : "hidden"}`}>
+                  <DocuCraft user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("websites") && (
+                <div className={`h-full w-full ${activeTab === "websites" ? "block" : "hidden"}`}>
+                  <Deployments user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("payments") && (
+                <div className={`h-full w-full ${activeTab === "payments" ? "block" : "hidden"}`}>
+                  <RapidPay user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("messagecenter") && (
+                <div className={`h-full w-full ${activeTab === "messagecenter" ? "block" : "hidden"}`}>
+                  <MessageCenter user={effectiveUser} />
+                </div>
+              )}
+              {visitedTabs.has("logistics") && (
+                <div className={`h-full w-full ${activeTab === "logistics" ? "block" : "hidden"}`}>
+                  <LogisticsDashboard user={effectiveUser} />
+                </div>
+              )}
             </React.Suspense>
           </main>
 

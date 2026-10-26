@@ -70,6 +70,7 @@ import { NFCTapModal } from "./NFCTapModal";
 import { LinkComManagerModal } from "./LinkComManagerModal";
 import { CommBankPayIDFlow } from "./CommBankPayIDFlow";
 import { ExternalBankAccountsDashboard } from "../bank/ExternalBankAccountsDashboard";
+import { PaymentHistoryAuditTab } from "./PaymentHistoryAuditTab";
 import {
   reconcileAndSettleAllPayments,
   COMMBANK_LINKED_ACCOUNTS,
@@ -465,7 +466,7 @@ export function RapidPay({ user }: { user: any }) {
   const [receiveReqAmount, setReceiveReqAmount] = useState("");
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
-  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts">("standard");
+  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts" | "history">("standard");
   const [recipient, setRecipient] = useState("");
   const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
   const [payIdValue, setPayIdValue] = useState("");
@@ -2022,6 +2023,18 @@ export function RapidPay({ user }: { user: any }) {
         >
           <QrCode className="w-4 h-4" /> Receive Payment
         </button>
+        <button
+          onClick={() => setTransferType("history")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 ${
+            transferType === "history"
+              ? "bg-slate-900 text-emerald-400 border border-emerald-500/50 shadow-md font-black ring-2 ring-emerald-500/20"
+              : "text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200/80 border border-emerald-300/60 font-bold"
+          }`}
+        >
+          <Clock className="w-4 h-4 text-emerald-600" />
+          <span>Payment History</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        </button>
       </div>
 
       
@@ -2069,7 +2082,12 @@ export function RapidPay({ user }: { user: any }) {
       )}
 
       {/* Render Main Content Panel */}
-      {transferType === "receive_qr" ? (
+      {transferType === "history" ? (
+        <PaymentHistoryAuditTab
+          user={user}
+          onNavigateToPay={(tab) => setTransferType(tab as any)}
+        />
+      ) : transferType === "receive_qr" ? (
         <div className="grid lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 lg:col-start-3 space-y-6">
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 text-center">

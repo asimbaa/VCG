@@ -2,7 +2,7 @@ import { sendWorkspaceEmail, generateProfessionalReceipt } from "../../utils/ema
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { renderAutoTable } from "../../utils/safePdfAutoTable";
 import { QRCodeSVG } from "qrcode.react";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { CurrencySelector } from "../ui/CurrencySelector";
@@ -1079,9 +1079,12 @@ export function UberEatsApp({
         console.error("Failed to sync cards in UberEatsApp", e);
       }
     };
-    syncCards();
-    window.addEventListener("storage", syncCards);
-    return () => window.removeEventListener("storage", syncCards);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key && e.key !== "valourian_vcard_db_247") return;
+      syncCards();
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const [selectedPaymentCard, setSelectedPaymentCard] =
@@ -1343,7 +1346,7 @@ export function UberEatsApp({
       doc.setFontSize(18);
       doc.text("Sovereign Ecosystem - Global Receipts", 14, 22);
       
-      autoTable(doc, {
+      renderAutoTable(doc, {
         startY: 30,
         head: [["Date", "Entity", "Description", "Amount"]],
         body: tableData,

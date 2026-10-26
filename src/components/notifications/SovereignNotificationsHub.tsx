@@ -7,7 +7,7 @@ import {
   CreditCard, Smartphone, Zap, ArrowUpRight, Copy
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { renderAutoTable } from '../../utils/safePdfAutoTable';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { sendWorkspaceEmail, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
@@ -287,7 +287,7 @@ export const SovereignNotificationsHub: React.FC<SovereignNotificationsHubProps>
       doc.text(splitText, 14, 94);
 
       if (notif.manifest?.items && notif.manifest.items.length > 0) {
-        autoTable(doc, {
+        renderAutoTable(doc, {
           startY: 115,
           head: [['Item Name', 'Quantity', 'Verification Status']],
           body: notif.manifest.items.map(i => [i.name, i.qty, i.status]),

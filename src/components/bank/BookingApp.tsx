@@ -271,9 +271,12 @@ export function BookingApp({ user, balances, setBalances }: {
         console.error("Failed to sync cards in BookingApp", e);
       }
     };
-    syncCards();
-    window.addEventListener('storage', syncCards);
-    return () => window.removeEventListener('storage', syncCards);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key && e.key !== "valourian_vcard_db_247") return;
+      syncCards();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   useEffect(() => {
@@ -286,7 +289,7 @@ export function BookingApp({ user, balances, setBalances }: {
     toast.info("Generating encrypted PDF ledger voucher...");
     try {
       const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
+      const { renderAutoTable } = await import("../../utils/safePdfAutoTable");
       
       const doc = new jsPDF();
       const hotelName = b.recipient?.replace("Booking.com - ", "") || b.hotelName || "Sovereign Hotel";
@@ -324,7 +327,7 @@ export function BookingApp({ user, balances, setBalances }: {
       doc.text("CLEARANCE CODE: VC-ETA-9942 / LEVEL-55 CLEARANCE", 14, 69);
       
       // Details Table
-      autoTable(doc, {
+      renderAutoTable(doc, {
         startY: 80,
         head: [['PROPRIETARY REGISTRY DETAILS', '']],
         body: [
@@ -345,7 +348,7 @@ export function BookingApp({ user, balances, setBalances }: {
       });
       
       // Billing Table
-      autoTable(doc, {
+      renderAutoTable(doc, {
         startY: (doc as any).lastAutoTable.finalY + 15,
         head: [['TREASURY BILLING & PAYMENT STATUS', '']],
         body: [

@@ -6,7 +6,7 @@ const DeliveryMap = React.lazy(() =>
 import * as d3 from "d3";
 import { motion, AnimatePresence } from "framer-motion";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { renderAutoTable } from "../../utils/safePdfAutoTable";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { CurrencySelector } from "../ui/CurrencySelector";
 import {
@@ -667,7 +667,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
       doc.setFontSize(18);
       doc.text("Sovereign Ecosystem - Global Receipts", 14, 22);
       
-      autoTable(doc, {
+      renderAutoTable(doc, {
         startY: 30,
         head: [["Date", "Entity", "Description", "Amount"]],
         body: tableData,
@@ -777,9 +777,12 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         console.error("Failed to sync cards in UberApp", e);
       }
     };
-    syncCards();
-    window.addEventListener("storage", syncCards);
-    return () => window.removeEventListener("storage", syncCards);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key && e.key !== "valourian_vcard_db_247") return;
+      syncCards();
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Advanced features state variables

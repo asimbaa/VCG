@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import toast from "react-hot-toast";
+import { unifiedBankCardSync } from "./unifiedBankCardSync";
 
 export interface CountryCodeOption {
   code: string;
@@ -498,6 +499,31 @@ export async function executeBilateralPayment(
     // 1. Deduct funds from source account
     if (params.senderUserId) {
       try {
+        // If source account matches one of the master bank cards in unifiedBankCardSync
+        try {
+          const cardMatched = unifiedBankCardSync.getCardById(params.sourceAccount.id) ||
+            unifiedBankCardSync.getCards().find((c) => c.id === params.sourceAccount.id || c.name === params.sourceAccount.name);
+          if (cardMatched) {
+            const cbRate = cardMatched.cashbackRate || 0.035;
+            const cbAmount = params.amount * cbRate;
+            unifiedBankCardSync.updateCard(cardMatched.id, (c) => ({
+              ...c,
+              balance: Math.max(0, c.balance - params.amount),
+              accumulatedCashback: (c.accumulatedCashback || 0) + cbAmount,
+              rewardsPoints: (c.rewardsPoints || 0) + Math.round(params.amount * 3),
+              lastUpdated: nowIso,
+            }));
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("valourian_payment_settled", {
+                detail: { amount: params.amount, merchant: finalLegalName, cardId: cardMatched.id }
+              }));
+            }
+          }
+        } catch (cardErr) {
+          console.warn("Card balance debit note:", cardErr);
+        }
+
         // If source account matches one of the linked CBA accounts, deduct from it
         const matchedSourceCbaAcc = COMMBANK_LINKED_ACCOUNTS.find(
           (a) => a.id === params.sourceAccount.id || a.name === params.sourceAccount.name || a.accountNumber === params.sourceAccount.accountNumber

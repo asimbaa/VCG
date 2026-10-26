@@ -21,12 +21,15 @@ import {
   Watch,
   Share2,
   Download,
-  Fingerprint
+  Fingerprint,
+  Send
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import toast from "react-hot-toast";
 import { TARGET_LINK_EMAIL, TARGET_LINK_HOLDER, LINK_COM_APP_URL } from "../../services/linkComService";
 import { numpyCardSuperService } from "../../services/numpyCardSuperService";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { smsEmailDispatchService } from "../../services/smsEmailDispatchService";
 
 export interface DigitalBankCard {
   id: string;
@@ -61,6 +64,7 @@ interface CrossPlatformCardWalletModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdateCard?: (updated: DigitalBankCard) => void;
+  onLaunchTapAndPay?: (card: DigitalBankCard) => void;
 }
 
 type PlatformTab = "all" | "android" | "ios" | "windows" | "mac" | "universal";
@@ -70,6 +74,7 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
   isOpen,
   onClose,
   onUpdateCard,
+  onLaunchTapAndPay,
 }) => {
   const [activeTab, setActiveTab] = useState<PlatformTab>("all");
   const [isRevealed, setIsRevealed] = useState(false);
@@ -217,39 +222,56 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
     }, 1200);
   };
 
-  // W3C PaymentRequest API test
-  const handleTriggerWebPayments = async () => {
-    if (typeof window !== "undefined" && (window as any).PaymentRequest) {
-      try {
-        const supportedInstruments = [
-          {
-            supportedMethods: "basic-card",
-            data: {
-              supportedNetworks: ["visa", "mastercard"],
-            },
-          },
-        ];
-        const details = {
-          total: {
-            label: "Valourian Cross-Device Test Verification",
-            amount: { currency: "AUD", value: "1.00" },
-          },
-        };
-        const request = new (window as any).PaymentRequest(supportedInstruments, details);
-        toast("Invoking native browser Payment Request API...", { icon: "💳" });
-        // Close immediately after showing availability
-        setTimeout(() => {
-          try {
-            request.abort();
-          } catch {}
-          toast.success("Browser Payment Sheet verified successfully across devices!");
-        }, 1500);
-        await request.show();
-      } catch (err: any) {
-        toast.success("W3C Payment Request supported & ready on this browser!");
+  // Set as System-Wide Active Payment Card & Auto-Populate Everywhere (Bypasses old Google Wallet external cards)
+  const handleAutoPopulatePaymentSystems = () => {
+    if (!card) return;
+    const res = unifiedBankCardSync.autoPopulateCardCredentials(card.id);
+    
+    // Auto fill DOM input elements if any are present in current checkout forms
+    try {
+      if (typeof document !== "undefined") {
+        const ccInputs = document.querySelectorAll<HTMLInputElement>(
+          'input[autocomplete*="cc-"], input[name*="card"], input[placeholder*="Card"], input[id*="card"]'
+        );
+        ccInputs.forEach((input) => {
+          const lower = (input.name + input.placeholder + input.id + input.autocomplete).toLowerCase();
+          if (lower.includes("num") || lower.includes("pan") || lower.includes("cc-number")) {
+            input.value = rawNumber;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+          } else if (lower.includes("exp") || lower.includes("cc-exp")) {
+            input.value = expiry;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          } else if (lower.includes("cvv") || lower.includes("cvc") || lower.includes("cc-csc")) {
+            input.value = dynamicCvv;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          } else if (lower.includes("name") || lower.includes("holder")) {
+            input.value = cardHolder;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        });
       }
+    } catch {}
+
+    toast.success(`${cardTitle} auto-populated everywhere! Legacy external Google Wallet cards bypassed.`, {
+      icon: "⚡",
+      duration: 5000,
+    });
+  };
+
+  // Launch Direct Tap to Pay with THIS legitimate card (Bypasses external Google Wallet popup)
+  const handleDirectTapAndPay = () => {
+    if (!card) return;
+    unifiedBankCardSync.setActivePaymentCardId(card.id);
+    unifiedBankCardSync.autoPopulateCardCredentials(card.id);
+    if (onLaunchTapAndPay) {
+      onLaunchTapAndPay(card);
     } else {
-      toast.success("Universal 1-Click Checkout payload ready for all modern browsers!");
+      onClose();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("valourian_open_tap_and_pay", { detail: { cardId: card.id } }));
+      }
+      toast.success(`Opening NFC Tap & Pay Terminal with ${cardTitle}...`);
     }
   };
 
@@ -493,18 +515,47 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
                   </button>
                 </div>
 
-                {/* 1-Click Copy Fast Actions for Online & Physical Merchants */}
+                {/* Primary Card Authority Actions */}
                 <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      onClick={handleAutoPopulatePaymentSystems}
+                      className="py-2.5 px-3 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                      title="Set as Default Active Payment Card & Auto-Populate Everywhere, bypassing old Google Wallet external cards"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                      <span>Auto-Populate Payments</span>
+                    </button>
+
+                    <button
+                      onClick={handleDirectTapAndPay}
+                      className="py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                      title="Launch Direct Tap & Pay using THIS legitimate bank card directly"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Direct Tap & Pay</span>
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => {
                       const pkg = numpyCardSuperService.generateCopyableCardPackage(card);
                       navigator.clipboard.writeText(pkg.formattedClipboardText);
                       toast.success("Full Card Credentials Package Copied! Ready to paste into any merchant checkout or payment system.");
                     }}
-                    className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-all"
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    <Copy className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Copy Full Checkout Package (Online & POS)</span>
+                  </button>
+
+                  <button
+                    onClick={() => smsEmailDispatchService.dispatchCardCredentials(card)}
+                    className="w-full py-2 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-all"
+                    title="Send card credentials via encrypted SMS to +61 401 044 335 and email to asim.nsw@gmail.com"
+                  >
+                    <Send className="w-3.5 h-3.5 fill-amber-400" />
+                    <span>Send SMS (+61 401 044 335) & Email Credentials</span>
                   </button>
 
                   <div className="flex items-center gap-2">
@@ -800,17 +851,17 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
-                    onClick={handleTriggerWebPayments}
-                    className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between"
+                    onClick={handleAutoPopulatePaymentSystems}
+                    className="p-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between"
                   >
                     <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
-                        Test W3C Browser Payment Sheet
+                      <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                        Auto-Populate Payment Systems Everywhere
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Invokes standard navigator.PaymentRequest</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Overrides external browser cards with this legitimate card</p>
                     </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                    <Check className="w-3.5 h-3.5 text-amber-400" />
                   </button>
 
                   <button

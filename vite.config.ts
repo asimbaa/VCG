@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        devOptions: { enabled: true, type: 'module' },
+        devOptions: { enabled: false },
         manifest: {
           id: '/',
           name: 'Valourian Sovereign OS',
@@ -31,6 +31,7 @@ export default defineConfig(({mode}) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         }
       })
     ],

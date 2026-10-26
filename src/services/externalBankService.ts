@@ -9,7 +9,7 @@ import { collection, doc, setDoc, getDocs, getDoc, query, where, addDoc } from "
 import { db } from "../firebase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import { renderAutoTable } from "../utils/safePdfAutoTable";
 
 export interface ExternalBankAccount {
   id: string;
@@ -448,7 +448,7 @@ class ExternalBankService {
     doc.setFont("helvetica", "bold");
     doc.text("Interbank Remittance & Salary Payout Confirmation", 14, 52);
 
-    (doc as any).autoTable({
+    renderAutoTable(doc, {
       startY: 58,
       theme: "grid",
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -470,7 +470,7 @@ class ExternalBankService {
       ]
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 12;
+    const finalY = ((doc as any).lastAutoTable?.finalY || 180) + 12;
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
     doc.text("This remittance advice constitutes formal interbank verification under the Australian New Payments Platform (NPP) regulations.", 14, finalY);

@@ -25,6 +25,8 @@ import { LinkComManagerModal } from "../pay/LinkComManagerModal";
 import { CrossPlatformCardWalletModal } from "./CrossPlatformCardWalletModal";
 import { CardDetailsCopyModal } from "./CardDetailsCopyModal";
 import { AmexAuAppRegistrationModal } from "./AmexAuAppRegistrationModal";
+import { ClassicCardFeaturesModal } from "./ClassicCardFeaturesModal";
+import { unifiedBankCardSync, UnifiedBankCard } from "../../services/unifiedBankCardSync";
 import { CryptoKeysModal } from "./CryptoKeysModal";
 import { numpyCardSuperService, AMEX_AUSTRALIA_CREDIT_CARDS } from "../../services/numpyCardSuperService";
 import { MessageCenter } from "../messagecenter/MessageCenter";
@@ -955,21 +957,17 @@ export function ValourianDashboard({ user }: { user: any }) {
   };
 
   useEffect(() => {
-    const handleStorage = () => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key && e.key !== "commbank_vip_balances") return;
       const valourianStr = localStorage.getItem("commbank_vip_balances");
       if (valourianStr) {
-        setBalances(JSON.parse(valourianStr));
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
-  useEffect(() => {
-    const handleStorage = () => {
-      const valourianStr = localStorage.getItem("commbank_vip_balances");
-      if (valourianStr) {
-        setBalances(JSON.parse(valourianStr));
+        try {
+          const parsed = JSON.parse(valourianStr);
+          setBalances(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(parsed)) return prev;
+            return parsed;
+          });
+        } catch {}
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -1104,7 +1102,21 @@ export function ValourianDashboard({ user }: { user: any }) {
   }, [user]);
 
   
-  const [activeTab, setActiveTab] = useState<string>("treasury");
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("valourian_dashboard_subtab");
+      return saved || "treasury";
+    } catch {
+      return "treasury";
+    }
+  });
+
+  const setActiveTab = React.useCallback((tab: string) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem("valourian_dashboard_subtab", tab);
+    } catch {}
+  }, []);
   const [cmdOpen, setCmdOpen] = useState(false);
   
   // Global Cmd+K / Cmd+P listener
@@ -3718,6 +3730,8 @@ This electronic transmission is the authenticated digital twin of the recorded a
     null,
   );
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [selectedClassicModalCard, setSelectedClassicModalCard] = useState<UnifiedBankCard | null>(null);
+  const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
   const [selectedCardForDetailsCopy, setSelectedCardForDetailsCopy] = useState<any | null>(null);
   const [isCardDetailsCopyModalOpen, setIsCardDetailsCopyModalOpen] = useState(false);
   const [isNfcOverlayOpen, setIsNfcOverlayOpen] = useState(false);
@@ -4227,11 +4241,16 @@ This electronic transmission is the authenticated digital twin of the recorded a
   }, [digitalCards]);
 
   useEffect(() => {
-    const syncLocalCards = () => {
+    const syncLocalCards = (e?: StorageEvent) => {
+      if (e && e.key && e.key !== 'valourian_digital_cards_v8') return;
       try {
         const saved = window.localStorage.getItem('valourian_digital_cards_v8');
         if (saved) {
-          setDigitalCards(JSON.parse(saved));
+          const parsed = JSON.parse(saved);
+          setDigitalCards(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(parsed)) return prev;
+            return parsed;
+          });
         }
       } catch {}
     };
@@ -5311,7 +5330,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
   const exportMonthlyStatementPDF = async () => {
     try {
       const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
+      const { renderAutoTable } = await import("../../utils/safePdfAutoTable");
       
       const doc = new jsPDF();
       
@@ -5347,7 +5366,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
         t.currency || "USD"
       ]);
       
-      autoTable(doc, {
+      renderAutoTable(doc, {
         startY: 60,
         head: [['Date', 'Description', 'Type', 'Amount', 'Currency']],
         body: tableData,
@@ -7920,7 +7939,7 @@ Valourian Capital Treasury Command
         );
         try {
           const { jsPDF } = await import("jspdf");
-          const autoTable = (await import("jspdf-autotable")).default;
+          const { renderAutoTable } = await import("../../utils/safePdfAutoTable");
           const doc = new jsPDF();
           doc.setFillColor(15, 23, 42);
           doc.rect(0, 0, 210, 40, "F");
@@ -7946,7 +7965,7 @@ Valourian Capital Treasury Command
             const baseAmt = (numTotal / numCount) * (0.8 + Math.random() * 0.4);
             return [id, `Executive Tier ${(i%3)+1}`, `${getSymbol(payrollCurrency)}${baseAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, 'CLEARED'];
           });
-          autoTable(doc, {
+          renderAutoTable(doc, {
             startY: 95,
             head: [['Employee ID', 'Band', 'Net Pay', 'Status']],
             body: mockEmployees,
@@ -11866,6 +11885,57 @@ Valourian Capital Treasury Command
                                 </div>
                                   <button
                                     onClick={(e) => {
+                                      e.stopPropagation();
+                                      const cleanNum = String(card.fullNumber || card.number || "").replace(/\D/g, "");
+                                      const last4 = card.last4 || (cleanNum.length >= 4 ? cleanNum.slice(-4) : "4829");
+                                      const unified = unifiedBankCardSync.getCards().find((c) => c.id === card.id || c.last4 === last4) || {
+                                        id: card.id,
+                                        name: card.name || "Valourian Sovereign Card",
+                                        number: card.number,
+                                        fullNumber: card.fullNumber || card.number,
+                                        last4,
+                                        balance: card.balance || 940000000,
+                                        currency: card.currency || "AUD",
+                                        type: "virtual",
+                                        status: "active",
+                                        limit: card.limit || "unlimited",
+                                        cvv: card.cvv || "482",
+                                        dynamicCvv: card.dynamicCvv || card.cvv || "482",
+                                        expiry: card.expiry || "12/28",
+                                        network: (card.network || "Mastercard") as any,
+                                        bsb: card.bsb || "021-000",
+                                        accountNumber: card.accountNumber || "8499210045",
+                                        payId: TARGET_LINK_EMAIL,
+                                        pin: card.pin || "4912",
+                                        dualRouting: "eftpos_domestic",
+                                        burnerMode: false,
+                                        appleGooglePayEnrolled: true,
+                                        cashbackRate: 0.035,
+                                        accumulatedCashback: 18450.0,
+                                        apyInterestRate: 0.051,
+                                        accruedInterest: 24120.0,
+                                        rewardsPoints: 1450200,
+                                        dailySpendingLimit: 10000000,
+                                        atmDailyLimit: 250000,
+                                        onlinePaymentsEnabled: true,
+                                        internationalPaymentsEnabled: true,
+                                        contactlessEnabled: true,
+                                        loungeAccess: true,
+                                        travelInsuranceCovered: true,
+                                        purchaseProtectionCovered: true,
+                                        lastUpdated: new Date().toISOString()
+                                      };
+                                      setSelectedClassicModalCard(unified as UnifiedBankCard);
+                                      setIsClassicModalOpen(true);
+                                    }}
+                                    className="px-3 py-1.5 transition-colors rounded-lg bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 border border-amber-500/40 flex items-center gap-1.5 shrink-0 text-amber-300 font-bold tracking-wider text-[10px] uppercase shadow-sm cursor-pointer ring-1 ring-amber-500/20"
+                                    title="Open Classic Bank Card Features, Security Controls & Yield Suite"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>Classic Features & Yield</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
                                         e.stopPropagation();
                                         setActiveNfcCard(card);
                                         setNfcState("ready");
@@ -12398,6 +12468,17 @@ Valourian Capital Treasury Command
         isOpen={isAmexAuModalOpen}
         onClose={() => setIsAmexAuModalOpen(false)}
         initialCardId={selectedAmexCardIdForModal}
+      />
+      <ClassicCardFeaturesModal
+        card={selectedClassicModalCard}
+        isOpen={isClassicModalOpen}
+        onClose={() => setIsClassicModalOpen(false)}
+        onCardUpdated={(updated) => {
+          setSelectedClassicModalCard(updated);
+          setDigitalCards((prev) =>
+            prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+          );
+        }}
       />
       <CommBankPayIDFlow
         user={user}

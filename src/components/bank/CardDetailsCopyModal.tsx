@@ -7,6 +7,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import { numpyCardSuperService, AU_DEFAULT_BILLING } from '../../services/numpyCardSuperService';
+import { smsEmailDispatchService } from '../../services/smsEmailDispatchService';
 import { AmexAuAppRegistrationModal } from './AmexAuAppRegistrationModal';
 
 interface CardDetailsCopyModalProps {
@@ -171,22 +172,35 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
                     Copies complete card number, expiry, CVV, holder name, and full Australian billing address in one clean block.
                   </p>
                 </div>
-                <button
-                  onClick={() => handleCopyText(cardPackage.formattedClipboardText, 'Full Card Credentials Package')}
-                  className="w-full md:w-auto px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0"
-                >
-                  {copiedField === 'Full Card Credentials Package' ? (
-                    <>
-                      <Check className="w-4 h-4 text-white" />
-                      <span>Copied to Clipboard!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      <span>Copy Full Package</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleCopyText(cardPackage.formattedClipboardText, 'Full Card Credentials Package')}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    {copiedField === 'Full Card Credentials Package' ? (
+                      <>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Copied to Clipboard!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Copy Full Package</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      smsEmailDispatchService.dispatchCardCredentials(card);
+                    }}
+                    className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    title="Send instant encrypted SMS to +61 401 044 335 and email to asim.nsw@gmail.com"
+                  >
+                    <Send className="w-4 h-4 fill-slate-950" />
+                    <span>Send SMS & Email</span>
+                  </button>
+                </div>
               </div>
 
               {/* Individual Field Copy Grid */}

@@ -27,6 +27,7 @@ import {
   Wallet,
   Edit2,
   Globe,
+  CreditCard,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -49,6 +50,7 @@ import {
 import { generatePdfReceipt, generateBpayPdfReceipt } from "../../utils/pdfGenerator";
 import { collection, query, where, onSnapshot, limit } from "firebase/firestore";
 import { db } from "../../firebase";
+import { unifiedBankCardSync, UnifiedBankCard, TARGET_LINK_HOLDER } from "../../services/unifiedBankCardSync";
 
 interface CommBankPayIDFlowProps {
   user: any;
@@ -59,6 +61,7 @@ interface CommBankPayIDFlowProps {
   isInline?: boolean;
   availableBalances?: Record<string, number>;
   sourceCards?: any[];
+  initialSourceAccountId?: string;
 }
 
 export function CommBankPayIDFlow({
@@ -70,6 +73,7 @@ export function CommBankPayIDFlow({
   isInline = false,
   availableBalances,
   sourceCards = [],
+  initialSourceAccountId,
 }: CommBankPayIDFlowProps) {
   const [screen, setScreen] = useState<
     | "pay_someone"
@@ -233,7 +237,21 @@ export function CommBankPayIDFlow({
     return () => unsub();
   }, [user?.uid]);
 
-  const userAccounts = COMMBANK_LINKED_ACCOUNTS.map((acc) => {
+  const [syncedCards, setSyncedCards] = useState<UnifiedBankCard[]>(() => unifiedBankCardSync.getCards());
+
+  useEffect(() => {
+    const handleSync = () => {
+      setSyncedCards(unifiedBankCardSync.getCards());
+    };
+    window.addEventListener("valourian_cards_updated", handleSync);
+    window.addEventListener("valourian_payment_settled", handleSync);
+    return () => {
+      window.removeEventListener("valourian_cards_updated", handleSync);
+      window.removeEventListener("valourian_payment_settled", handleSync);
+    };
+  }, []);
+
+  const coreAccounts = COMMBANK_LINKED_ACCOUNTS.map((acc) => {
     const bal =
       liveCbaBalances[acc.id] !== undefined
         ? liveCbaBalances[acc.id]
@@ -248,10 +266,48 @@ export function CommBankPayIDFlow({
       currency: acc.currency,
       bankName: acc.bankName,
       accountHolder: acc.accountHolder,
+      isCard: false,
+      cardNetwork: "CBA ADI",
+      cashbackRate: 0,
+      last4: acc.accountNumber.slice(-4),
     };
   });
 
-  const [selectedAccountId, setSelectedAccountId] = useState(userAccounts[0].id);
+  const cardAccounts = syncedCards.map((card) => {
+    const rawNum = card.fullNumber || card.number || "";
+    const clean = rawNum.replace(/\s+/g, "");
+    const last4 = card.last4 || (clean.length >= 4 ? clean.slice(-4) : "••••");
+    return {
+      id: card.id,
+      name: card.name,
+      number: `${card.bsb || "021-000"} ${card.accountNumber || last4}`,
+      balance: card.balance,
+      currency: card.currency || "AUD",
+      bankName: card.name,
+      accountHolder: TARGET_LINK_HOLDER,
+      isCard: true,
+      cardNetwork: card.network || "Mastercard",
+      last4,
+      cashbackRate: card.cashbackRate || 0.035,
+      status: card.status,
+    };
+  });
+
+  const userAccounts = [...cardAccounts, ...coreAccounts];
+
+  const [selectedAccountId, setSelectedAccountId] = useState(() => {
+    if (initialSourceAccountId && userAccounts.some((a) => a.id === initialSourceAccountId)) {
+      return initialSourceAccountId;
+    }
+    return userAccounts[0]?.id || "acc_smart_access";
+  });
+
+  useEffect(() => {
+    if (initialSourceAccountId) {
+      setSelectedAccountId(initialSourceAccountId);
+    }
+  }, [initialSourceAccountId]);
+
   const [showAccountDrawer, setShowAccountDrawer] = useState(false);
 
   const activeAccount =
@@ -1639,62 +1695,141 @@ export function CommBankPayIDFlow({
                 {!showAccountDrawer ? (
                   <div
                     onClick={() => setShowAccountDrawer(true)}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition-colors cursor-pointer"
+                    className={`flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer border ${
+                      activeAccount.isCard
+                        ? "bg-gradient-to-r from-slate-900 via-slate-950 to-indigo-950 border-indigo-500/30 text-white shadow-sm"
+                        : "bg-slate-50 hover:bg-slate-100/80 border-slate-200"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#ffcc00] text-slate-950 flex items-center justify-center font-black">
-                        <Wallet className="w-5 h-5" />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${
+                        activeAccount.isCard 
+                          ? activeAccount.cardNetwork === "AMEX"
+                            ? "bg-gradient-to-br from-blue-700 to-indigo-900 text-white shadow-xs"
+                            : "bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-xs"
+                          : "bg-[#ffcc00] text-slate-950"
+                      }`}>
+                        {activeAccount.isCard ? (
+                          <CreditCard className="w-5 h-5" />
+                        ) : (
+                          <Wallet className="w-5 h-5" />
+                        )}
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-slate-900">
-                          {activeAccount.name}
+                        <div className="flex items-center gap-2">
+                          <div className={`text-sm font-bold ${activeAccount.isCard ? "text-white" : "text-slate-900"}`}>
+                            {activeAccount.name}
+                          </div>
+                          {activeAccount.isCard && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              {activeAccount.cardNetwork} • {((activeAccount.cashbackRate || 0.035) * 100).toFixed(1)}% CB
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono">
-                          {activeAccount.number}
+                        <div className={`text-xs font-mono ${activeAccount.isCard ? "text-indigo-200/70" : "text-slate-500"}`}>
+                          {activeAccount.isCard ? `BSB & ACC: ${activeAccount.number} • Last 4: ${activeAccount.last4}` : activeAccount.number}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-slate-900">
+                      <div className={`text-sm font-black ${activeAccount.isCard ? "text-emerald-400" : "text-slate-900"}`}>
                         ${activeAccount.balance.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-semibold uppercase">
-                        Available
+                      <div className={`text-[10px] font-semibold uppercase ${activeAccount.isCard ? "text-emerald-300/80" : "text-slate-400"}`}>
+                        Available AUD
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 pt-1">
-                    {userAccounts.map((acc, aIdx) => (
-                      <button
-                        key={`user-acc-choice-${acc.id}-${aIdx}`}
-                        type="button"
-                        onClick={() => {
-                          setSelectedAccountId(acc.id);
-                          setShowAccountDrawer(false);
-                        }}
-                        className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                          selectedAccountId === acc.id
-                            ? "bg-amber-50/60 border-[#ffcc00]"
-                            : "bg-white border-slate-200 hover:border-slate-300"
-                        }`}
-                      >
-                        <div>
-                          <div className="text-sm font-bold text-slate-900">{acc.name}</div>
-                          <div className="text-xs text-slate-500 font-mono">{acc.number}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-black text-slate-900">
-                            ${acc.balance.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                  <div className="space-y-3 pt-1 max-h-80 overflow-y-auto pr-1">
+                    {/* Bank Cards Section */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 flex items-center gap-1">
+                          <CreditCard className="w-3 h-3" />
+                          Master Bank Cards (Direct Debit with Cashback)
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-bold">Earns 3.5% - 5.0% Yield</span>
+                      </div>
+                      {userAccounts.filter((a) => a.isCard).map((acc, aIdx) => (
+                        <button
+                          key={`user-card-choice-${acc.id}-${aIdx}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAccountId(acc.id);
+                            setShowAccountDrawer(false);
+                          }}
+                          className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                            selectedAccountId === acc.id
+                              ? "bg-indigo-950/20 border-indigo-500 ring-1 ring-indigo-500/30"
+                              : "bg-white border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/20"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0">
+                              <CreditCard className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                <span>{acc.name}</span>
+                                <span className="text-[9px] font-mono px-1 rounded bg-slate-100 text-slate-600 font-bold uppercase">
+                                  {acc.cardNetwork}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                {acc.number} • Last 4: {acc.last4}
+                              </div>
+                            </div>
                           </div>
-                          {selectedAccountId === acc.id && (
-                            <span className="text-[10px] text-amber-700 font-black uppercase">
-                              Active
+                          <div className="text-right">
+                            <div className="text-xs font-black text-slate-900">
+                              ${acc.balance.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                            </div>
+                            <span className="text-[9px] text-emerald-700 font-bold uppercase bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              +{((acc.cashbackRate || 0.035) * 100).toFixed(1)}% CB
                             </span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Standard Accounts Section */}
+                    <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1">
+                        <Landmark className="w-3 h-3" />
+                        Core Transaction & Sovereign Accounts
+                      </div>
+                      {userAccounts.filter((a) => !a.isCard).map((acc, aIdx) => (
+                        <button
+                          key={`user-acc-choice-${acc.id}-${aIdx}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAccountId(acc.id);
+                            setShowAccountDrawer(false);
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                            selectedAccountId === acc.id
+                              ? "bg-amber-50/60 border-[#ffcc00] ring-1 ring-amber-400"
+                              : "bg-white border-slate-200 hover:border-slate-300"
+                          }`}
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-slate-900">{acc.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">{acc.number}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs font-black text-slate-900">
+                              ${acc.balance.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                            </div>
+                            {selectedAccountId === acc.id && (
+                              <span className="text-[9px] text-amber-700 font-black uppercase">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1740,6 +1875,18 @@ export function CommBankPayIDFlow({
                     All
                   </button>
                 </div>
+
+                {activeAccount.isCard && parseFloat(amount || "0") > 0 && (
+                  <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-800">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{activeAccount.cardNetwork} Cashback Yield:</span>
+                    </div>
+                    <span className="font-mono font-black text-emerald-700">
+                      +${(parseFloat(amount) * (activeAccount.cashbackRate || 0.035)).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AUD (Credited Instantly)
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Description (Osko 280 chars max) */}
@@ -1953,6 +2100,12 @@ export function CommBankPayIDFlow({
                         maximumFractionDigits: 2,
                       })}
                     </div>
+                    {activeAccount.isCard && (
+                      <div className="text-[11px] font-bold text-emerald-600 mt-0.5 flex items-center justify-end gap-1">
+                        <Sparkles className="w-3 h-3 text-emerald-500" />
+                        <span>+${(parseFloat(amount) * (activeAccount.cashbackRate || 0.035)).toFixed(2)} AUD Cashback Credited</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -1,11 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import express from "express";
 import path from "path";
+import fs from "fs";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import PDFDocument from "pdfkit";
 
 dotenv.config();
+
+// Global unhandled error mitigation for Cloud Run resilience
+process.on("uncaughtException", (err) => {
+  console.error("[CLOUD RUN RESILIENCE: UNCAUGHT EXCEPTION]:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[CLOUD RUN RESILIENCE: UNHANDLED REJECTION]:", reason);
+});
 
 // API Key Validation Protocol
 const REQUIRED_SECRETS = ['GEMINI_API_KEY'];
@@ -17,11 +26,25 @@ if (missingSecrets.length > 0) {
 }
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// Port selection protocol:
+// 1. In Cloud Run, Nginx runs on port 8080 (or process.env.NGINX_PORT) and reverse-proxies to localhost:3000 (DEFAULT_APP_PORT).
+// 2. The Node/Express app MUST listen on DEFAULT_APP_PORT (3000) so Nginx and control-plane can reach it.
+// 3. Attempting to bind to 8080 when Nginx is active throws EADDRINUSE and causes Cloud Run service failure.
+const args = process.argv.slice(2);
+const portArgIndex = args.findIndex(arg => arg === '--port' || arg === '-p');
+const CLI_PORT = portArgIndex !== -1 && args[portArgIndex + 1] ? parseInt(args[portArgIndex + 1], 10) : null;
+const PORT = CLI_PORT || (process.env.DEFAULT_APP_PORT
+  ? parseInt(process.env.DEFAULT_APP_PORT, 10)
+  : (process.env.APP_PORT
+      ? parseInt(process.env.APP_PORT, 10)
+      : (process.env.PORT && process.env.PORT !== "8080" && process.env.PORT !== process.env.NGINX_PORT
+          ? parseInt(process.env.PORT, 10)
+          : 3000)));
 
 // Health check endpoints for Cloud Run and load balancers
 app.get(["/healthz", "/health", "/_health", "/livez", "/readyz"], (req, res) => {
-  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+  res.status(200).json({ status: "healthy", port: PORT, timestamp: new Date().toISOString() });
 });
 
 app.use(express.json());
@@ -2718,16 +2741,23 @@ if (process.env.NODE_ENV !== "production") {
   });
 } else {
   const distPath = path.resolve(process.cwd(), "dist");
-  app.use(express.static(distPath, {
-    maxAge: "1d",
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith("index.html") || filePath.endsWith("manifest.json") || filePath.endsWith("sw.js") || filePath.endsWith("registerSW.js")) {
-        res.setHeader("Cache-Control", "no-cache");
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath, {
+      maxAge: "1d",
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html") || filePath.endsWith("manifest.json") || filePath.endsWith("sw.js") || filePath.endsWith("registerSW.js")) {
+          res.setHeader("Cache-Control", "no-cache");
+        }
       }
-    }
-  }));
+    }));
+  }
   app.get("*", (req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
+    const indexPath = path.join(distPath, "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(200).send("<!doctype html><html lang='en'><head><meta charset='UTF-8'/><title>Valourian Capital Management</title></head><body><div id='root'></div><script>console.warn('dist/index.html initializing');</script></body></html>");
+    }
   });
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running in production on http://0.0.0.0:${PORT}`);

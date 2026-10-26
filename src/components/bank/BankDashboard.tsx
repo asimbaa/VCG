@@ -21,13 +21,16 @@ import {
   Smartphone,
   QrCode,
   FileText,
-  Building2
+  Building2,
+  Sparkles
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PaymentStatusOverlay } from "./PaymentStatusOverlay";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { COMMBANK_LINKED_ACCOUNTS, DEFAULT_COMMBANK_PAYEES } from "../../services/paymentSettlementService";
 import { BASE_BANKING_CREDIT_CARDS } from "../../services/linkComService";
+import { ClassicCardFeaturesModal } from "./ClassicCardFeaturesModal";
+import { unifiedBankCardSync, UnifiedBankCard } from "../../services/unifiedBankCardSync";
 import { toast } from "sonner";
 import { TreasuryGrowthChart } from "./TreasuryGrowthChart";
 import { LiquidityNettingWidget } from "./LiquidityNettingWidget";
@@ -39,6 +42,8 @@ export function BankDashboard({ user }: { user: any }) {
   const [activeTab, setActiveTab] = useState<"treasury" | "external">("treasury");
   const [selectedAccount, setSelectedAccount] = useState(COMMBANK_LINKED_ACCOUNTS[0]);
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
+  const [selectedClassicCard, setSelectedClassicCard] = useState<UnifiedBankCard | null>(null);
+  const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quickAmount, setQuickAmount] = useState("10000");
   const [clearingRail, setClearingRail] = useState<"OSKO_NPP" | "RTGS" | "FEDWIRE" | "TARGET2">("OSKO_NPP");
@@ -368,6 +373,19 @@ export function BankDashboard({ user }: { user: any }) {
                   <div className="font-mono text-white text-xs">{BASE_BANKING_CREDIT_CARDS[0].expiry}</div>
                 </div>
               </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => {
+                  const masterCard = unifiedBankCardSync.getCards()[0];
+                  setSelectedClassicCard(masterCard);
+                  setIsClassicModalOpen(true);
+                }}
+                className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Classic Features, Security Controls & Yield</span>
+              </button>
             </div>
 
             {/* Quick Cardless Cash Pickup Info */}
@@ -438,6 +456,13 @@ export function BankDashboard({ user }: { user: any }) {
         onClose={() => setIsNfcModalOpen(false)}
         cards={BASE_BANKING_CREDIT_CARDS}
         user={user}
+      />
+
+      {/* Classic Card Features & Yield Suite Modal */}
+      <ClassicCardFeaturesModal
+        card={selectedClassicCard}
+        isOpen={isClassicModalOpen}
+        onClose={() => setIsClassicModalOpen(false)}
       />
     </div>
   );

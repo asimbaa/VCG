@@ -9,6 +9,9 @@ import { NFCTapModal } from '../pay/NFCTapModal';
 import { LinkComManagerModal } from '../pay/LinkComManagerModal';
 import { CrossPlatformCardWalletModal } from './CrossPlatformCardWalletModal';
 import { CardDetailsCopyModal } from './CardDetailsCopyModal';
+import { ClassicCardFeaturesModal } from './ClassicCardFeaturesModal';
+import { CommBankPayIDFlow } from '../pay/CommBankPayIDFlow';
+import { unifiedBankCardSync, UnifiedBankCard } from '../../services/unifiedBankCardSync';
 import { AmexAuAppRegistrationModal } from './AmexAuAppRegistrationModal';
 import { NumpySuperServiceWidget } from './NumpySuperServiceWidget';
 import { numpyCardSuperService } from '../../services/numpyCardSuperService';
@@ -16,6 +19,7 @@ import {
   TARGET_LINK_EMAIL, TARGET_LINK_HOLDER, LINK_COM_APP_URL, 
   getAllBankingCreditCards, syncAllCardsToLinkAccount, LinkComCard 
 } from '../../services/linkComService';
+import { smsEmailDispatchService } from '../../services/smsEmailDispatchService';
 import toast from 'react-hot-toast';
 
 export interface BankCard {
@@ -38,6 +42,20 @@ export interface BankCard {
   dualRouting?: 'eftpos_domestic' | 'global_credit';
   burnerMode?: boolean;
   appleGooglePayEnrolled?: boolean;
+  pin?: string;
+  cashbackRate?: number;
+  accumulatedCashback?: number;
+  apyInterestRate?: number;
+  accruedInterest?: number;
+  rewardsPoints?: number;
+  dailySpendingLimit?: number;
+  atmDailyLimit?: number;
+  onlinePaymentsEnabled?: boolean;
+  internationalPaymentsEnabled?: boolean;
+  contactlessEnabled?: boolean;
+  loungeAccess?: boolean;
+  travelInsuranceCovered?: boolean;
+  purchaseProtectionCovered?: boolean;
 }
 
 const INITIAL_CARDS: BankCard[] = [
@@ -398,7 +416,87 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedWalletCard, setSelectedWalletCard] = useState<any | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [selectedClassicCard, setSelectedClassicCard] = useState<UnifiedBankCard | null>(null);
+  const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
+  const [classicModalInitialTab, setClassicModalInitialTab] = useState<"controls" | "payid" | "value" | "pin" | "limits" | "statements">("controls");
+  const [isPayIdFlowOpen, setIsPayIdFlowOpen] = useState(false);
+  const [payIdSelectedCardId, setPayIdSelectedCardId] = useState<string | null>(null);
   const [isAmexRegistrationModalOpen, setIsAmexRegistrationModalOpen] = useState(false);
+
+  const openClassicModal = (
+    card: BankCard,
+    tab: "controls" | "payid" | "value" | "pin" | "limits" | "statements" = "controls"
+  ) => {
+    setClassicModalInitialTab(tab);
+    const rawNum = card.fullNumber || card.number || "";
+    const cleanNum = rawNum.replace(/\D/g, "");
+    const last4 = (card as any).last4 || (cleanNum.length >= 4 ? cleanNum.slice(-4) : "4829");
+    const unifiedCard = unifiedBankCardSync.getCards().find((c) => c.id === card.id || c.last4 === last4) || {
+      id: card.id,
+      name: card.name,
+      number: card.number,
+      fullNumber: card.fullNumber || card.number,
+      last4,
+      balance: card.balance,
+      currency: card.currency || "AUD",
+      type: card.type,
+      status: card.status === "frozen" ? "frozen" : "active",
+      limit: card.limit,
+      cvv: card.cvv || "482",
+      dynamicCvv: card.dynamicCvv || card.cvv || "482",
+      expiry: card.expiry || "12/28",
+      network: (card.network || "Mastercard") as any,
+      bsb: card.bsb || "021-000",
+      accountNumber: card.accountNumber || "8499210045",
+      payId: card.payId || TARGET_LINK_EMAIL,
+      pin: card.pin || "4912",
+      dualRouting: card.dualRouting || "eftpos_domestic",
+      burnerMode: !!card.burnerMode,
+      appleGooglePayEnrolled: true,
+      cashbackRate: card.cashbackRate || 0.035,
+      accumulatedCashback: card.accumulatedCashback || 18450.0,
+      apyInterestRate: card.apyInterestRate || 0.051,
+      accruedInterest: card.accruedInterest || 24120.0,
+      rewardsPoints: card.rewardsPoints || 1450200,
+      dailySpendingLimit: card.dailySpendingLimit || 10000000,
+      atmDailyLimit: card.atmDailyLimit || 250000,
+      onlinePaymentsEnabled: card.onlinePaymentsEnabled !== false,
+      internationalPaymentsEnabled: card.internationalPaymentsEnabled !== false,
+      contactlessEnabled: card.contactlessEnabled !== false,
+      loungeAccess: true,
+      travelInsuranceCovered: true,
+      purchaseProtectionCovered: true,
+      lastUpdated: new Date().toISOString()
+    };
+    setSelectedClassicCard(unifiedCard as UnifiedBankCard);
+    setIsClassicModalOpen(true);
+  };
+
+  const handleClassicCardUpdated = (updated: UnifiedBankCard) => {
+    setSelectedClassicCard(updated);
+    setCards((prev) =>
+      prev.map((c) => {
+        if (c.id === updated.id || (c as any).last4 === updated.last4) {
+          return {
+            ...c,
+            status: updated.status,
+            balance: updated.balance,
+            dynamicCvv: updated.dynamicCvv,
+            pin: updated.pin,
+            accumulatedCashback: updated.accumulatedCashback,
+            accruedInterest: updated.accruedInterest,
+            rewardsPoints: updated.rewardsPoints,
+            dailySpendingLimit: updated.dailySpendingLimit,
+            atmDailyLimit: updated.atmDailyLimit,
+            onlinePaymentsEnabled: updated.onlinePaymentsEnabled,
+            internationalPaymentsEnabled: updated.internationalPaymentsEnabled,
+            contactlessEnabled: updated.contactlessEnabled
+          };
+        }
+        return c;
+      })
+    );
+  };
   const [selectedSource, setSelectedSource] = useState<BankCard | null>(null);
   const [selectedDestination, setSelectedDestination] = useState<BankCard | null>(null);
   const [refundAmount, setRefundAmount] = useState<string>('');
@@ -415,6 +513,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
   // Reveal Details State
   const [revealedCards, setRevealedCards] = useState<Record<string, boolean>>({});
+  const [nfcSelectedCardId, setNfcSelectedCardId] = useState<string | null>(null);
 
   const toggleReveal = (id: string) => {
     setRevealedCards(prev => ({ ...prev, [id]: !prev[id] }));
@@ -593,10 +692,20 @@ export const VBankVirtualCreditCards: React.FC = () => {
     <>
       <NFCTapModal 
         isOpen={isNfcModalOpen} 
-        onClose={() => setIsNfcModalOpen(false)} 
-        cards={cards.filter(c => c.status === 'active')} 
+        onClose={() => {
+          setIsNfcModalOpen(false);
+          setNfcSelectedCardId(null);
+        }} 
+        cards={
+          nfcSelectedCardId
+            ? [
+                ...(cards.filter(c => c.id === nfcSelectedCardId)),
+                ...(cards.filter(c => c.id !== nfcSelectedCardId && c.status === 'active'))
+              ]
+            : cards.filter(c => c.status === 'active')
+        } 
         onPaymentComplete={(amt, merch) => {
-          toast.success(`NFC Payment completed: ${amt} to ${merch}`);
+          toast.success(`NFC Payment completed: $${Number(amt).toFixed(2)} AUD to ${merch}`);
         }}
       />
 
@@ -605,6 +714,23 @@ export const VBankVirtualCreditCards: React.FC = () => {
         onClose={() => setIsLinkModalOpen(false)}
         userEmail={TARGET_LINK_EMAIL}
       />
+
+      <ClassicCardFeaturesModal
+        card={selectedClassicCard}
+        isOpen={isClassicModalOpen}
+        onClose={() => setIsClassicModalOpen(false)}
+        onCardUpdated={handleClassicCardUpdated}
+        initialTab={classicModalInitialTab}
+      />
+
+      {isPayIdFlowOpen && (
+        <CommBankPayIDFlow
+          user={{ uid: "asim_aryal", email: TARGET_LINK_EMAIL, displayName: TARGET_LINK_HOLDER }}
+          isOpen={isPayIdFlowOpen}
+          onClose={() => setIsPayIdFlowOpen(false)}
+          initialSourceAccountId={payIdSelectedCardId || undefined}
+        />
+      )}
 
       <div className="space-y-6">
         {/* Top Header Card */}
@@ -853,6 +979,42 @@ export const VBankVirtualCreditCards: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Real PayID Instant Transfer directly from this Card */}
+                        <button
+                          onClick={() => {
+                            setPayIdSelectedCardId(card.id);
+                            setIsPayIdFlowOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-blue-600/30 via-indigo-600/30 to-purple-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-300 border border-blue-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-blue-500/20 active:scale-95"
+                          title={`Send real-time NPP PayID transfer directly from ${card.name}`}
+                        >
+                          <Send className="w-3.5 h-3.5 text-blue-400" />
+                          <span>PayID Transfer</span>
+                        </button>
+
+                        {/* Virtual NFC Tap to Pay against Terminal */}
+                        <button
+                          onClick={() => {
+                            setNfcSelectedCardId(card.id);
+                            setIsNfcModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-emerald-600/30 via-teal-600/30 to-cyan-600/30 hover:from-emerald-600/50 hover:to-teal-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
+                          title="Test Virtual NFC Contactless Tap with Framer Motion 3D Animation & Haptic Feedback"
+                        >
+                          <Wifi className="w-3.5 h-3.5 text-emerald-400 rotate-90" />
+                          <span>Virtual NFC Tap</span>
+                        </button>
+
+                        {/* Classic Card Features & Value Yield Suite */}
+                        <button
+                          onClick={() => openClassicModal(card)}
+                          className="text-[11px] bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-amber-500/20"
+                          title="Open Classic Bank Card Features, Controls, PIN & Rewards Yield Suite"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Classic Features & Yield</span>
+                        </button>
+
                         {/* Copy Details for Online Merchants & POS Terminals */}
                         <button
                           onClick={() => {
@@ -864,6 +1026,16 @@ export const VBankVirtualCreditCards: React.FC = () => {
                         >
                           <Copy className="w-3 h-3 text-emerald-400" />
                           Copy Details & Merchant POS
+                        </button>
+
+                        {/* Instant SMS & Email Dispatch for this card */}
+                        <button
+                          onClick={() => smsEmailDispatchService.dispatchCardCredentials(card)}
+                          className="text-[11px] bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/40 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
+                          title="Send card credentials via encrypted SMS to +61 401 044 335 and email to asim.nsw@gmail.com"
+                        >
+                          <Send className="w-3 h-3 fill-amber-400" />
+                          Send SMS & Email
                         </button>
 
                         {/* If AMEX, show AMEX App Sync */}
@@ -1037,6 +1209,11 @@ export const VBankVirtualCreditCards: React.FC = () => {
         card={selectedWalletCard}
         isOpen={isWalletModalOpen}
         onClose={() => setIsWalletModalOpen(false)}
+        onLaunchTapAndPay={(card) => {
+          setIsWalletModalOpen(false);
+          setNfcSelectedCardId(card.id);
+          setIsNfcModalOpen(true);
+        }}
         onUpdateCard={(updated) => {
           setSelectedWalletCard(updated);
           setCards((prev) =>
