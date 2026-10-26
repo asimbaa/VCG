@@ -36,6 +36,8 @@ import { TreasuryGrowthChart } from "./TreasuryGrowthChart";
 import { LiquidityNettingWidget } from "./LiquidityNettingWidget";
 import { NFCTapModal } from "../pay/NFCTapModal";
 import { ExternalBankAccountsDashboard } from "./ExternalBankAccountsDashboard";
+import { SectionWisdomTooltip } from "../shared/SectionWisdomTooltip";
+import { CardGeniusInnovationsModal } from "./CardGeniusInnovationsModal";
 
 export function BankDashboard({ user }: { user: any }) {
   const { currency, formatConverted, supportedCurrencies } = useGlobalCurrency();
@@ -44,6 +46,8 @@ export function BankDashboard({ user }: { user: any }) {
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
   const [selectedClassicCard, setSelectedClassicCard] = useState<UnifiedBankCard | null>(null);
   const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
+  const [selectedGeniusCard, setSelectedGeniusCard] = useState<UnifiedBankCard | null>(null);
+  const [isGeniusModalOpen, setIsGeniusModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quickAmount, setQuickAmount] = useState("10000");
   const [clearingRail, setClearingRail] = useState<"OSKO_NPP" | "RTGS" | "FEDWIRE" | "TARGET2">("OSKO_NPP");
@@ -94,9 +98,22 @@ export function BankDashboard({ user }: { user: any }) {
               </span>
             </div>
             
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
-              Valourian Institutional Treasury & Core
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
+                Valourian Institutional Treasury & Core
+              </h1>
+              <SectionWisdomTooltip 
+                title="Institutional Sovereign Treasury Core"
+                concept="APRA ADI Liquidity"
+                insights={[
+                  "Dual-tier clearing linked directly to Reserve Bank of Australia Exchange Settlement account #062-951.",
+                  "Compounding 5.85% p.a. sovereign institutional yield with real-time liquidity sweep.",
+                  "All accounts across CBA, Westpac, ANZ, NAB, Macquarie, and AMEX hold multi-billion AUD liquid reserves."
+                ]}
+                regulatory="APRA Banking Act 1959 & RBA Exchange Settlement Regulations"
+                actionTip="Use 'Reconcile Core' or 'Sweep to Yield Pool' to optimize cash compounding."
+              />
+            </div>
             <p className="text-slate-400 text-xs sm:text-sm max-w-2xl leading-relaxed">
               Real-time multi-currency clearing, Australian NPP/Osko settlement gateway, and APRA-supervised high-yield liquidity reserves.
             </p>
@@ -374,18 +391,32 @@ export function BankDashboard({ user }: { user: any }) {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <button
-                onClick={() => {
-                  const masterCard = unifiedBankCardSync.getCards()[0];
-                  setSelectedClassicCard(masterCard);
-                  setIsClassicModalOpen(true);
-                }}
-                className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Classic Features, Security Controls & Yield</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="space-y-2 mt-2">
+                <button
+                  onClick={() => {
+                    const masterCard = unifiedBankCardSync.getActivePaymentCard();
+                    setSelectedGeniusCard(masterCard);
+                    setIsGeniusModalOpen(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Card Innovations, 3D Flip &amp; Luhn Proof</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const masterCard = unifiedBankCardSync.getCards()[0];
+                    setSelectedClassicCard(masterCard);
+                    setIsClassicModalOpen(true);
+                  }}
+                  className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Classic Features, Security Controls & Yield</span>
+                </button>
+              </div>
             </div>
 
             {/* Quick Cardless Cash Pickup Info */}
@@ -463,6 +494,13 @@ export function BankDashboard({ user }: { user: any }) {
         card={selectedClassicCard}
         isOpen={isClassicModalOpen}
         onClose={() => setIsClassicModalOpen(false)}
+      />
+
+      {/* Card Genius Innovations & Luhn Accuracy Proof Modal */}
+      <CardGeniusInnovationsModal
+        card={selectedGeniusCard}
+        isOpen={isGeniusModalOpen}
+        onClose={() => setIsGeniusModalOpen(false)}
       />
     </div>
   );

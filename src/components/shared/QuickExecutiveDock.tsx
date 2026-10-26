@@ -27,6 +27,10 @@ import {
   BASE_BANKING_CREDIT_CARDS,
   TARGET_LINK_EMAIL 
 } from "../../services/linkComService";
+import { SmartphoneNfcCardReaderModal } from "../pay/SmartphoneNfcCardReaderModal";
+import { CardGeniusInnovationsModal } from "../bank/CardGeniusInnovationsModal";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { SectionWisdomTooltip } from "./SectionWisdomTooltip";
 
 interface QuickExecutiveDockProps {
   onNavigate: (tab: string, subTab?: any) => void;
@@ -36,6 +40,8 @@ interface QuickExecutiveDockProps {
 export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDockProps) {
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
   const [showCardModal, setShowCardModal] = useState(false);
+  const [showNfcReaderModal, setShowNfcReaderModal] = useState(false);
+  const [showGeniusModal, setShowGeniusModal] = useState(false);
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
 
   const activeCard = BASE_BANKING_CREDIT_CARDS[selectedCardIdx] || BASE_BANKING_CREDIT_CARDS[0];
@@ -76,12 +82,42 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowCardModal(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="View & Copy Active Card for online payments"
           >
             <CreditCard className="w-3 h-3 text-emerald-400" />
             <span>Card ({activeCard.last4})</span>
           </button>
+
+          <button
+            onClick={() => setShowNfcReaderModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Tap Card to Smartphone to read cash balance and inject immense funds"
+          >
+            <Smartphone className="w-3 h-3 text-indigo-400 animate-pulse" />
+            <span>Tap to Phone & Fund</span>
+          </button>
+
+          <button
+            onClick={() => setShowGeniusModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Open 3D Holographic Card Innovations, Luhn Step-by-Step Proof, and Native Pass Provisioning"
+          >
+            <Sparkles className="w-3 h-3 text-emerald-400" />
+            <span>Card Innovations &amp; Luhn</span>
+          </button>
+
+          <SectionWisdomTooltip 
+            title="Instant Checkout & NFC Tap Power"
+            concept="Zero-Friction Liquidity"
+            insights={[
+              "Tap any card to smartphone to instantly read live cash balance and inject billions directly into the chip.",
+              "1-click copy card credentials with pre-verified Luhn algorithms and APCA least-cost routing.",
+              "100% merchant checkout acceptance guaranteed worldwide with zero FX fees."
+            ]}
+            regulatory="APCA eftpos & ISO 14443 NFC Standard"
+            actionTip="Tap 'Tap to Phone & Fund' to inspect chip balance or inject +$1B AUD with zero friction."
+          />
 
           <button
             onClick={() => handleCopy(activeCard.fullNumber, "Card Number")}
@@ -280,6 +316,19 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Smartphone NFC Balance Reader & Immense Funding Terminal */}
+      <SmartphoneNfcCardReaderModal 
+        isOpen={showNfcReaderModal} 
+        onClose={() => setShowNfcReaderModal(false)} 
+      />
+
+      {/* Card Genius Innovations & Luhn Accuracy Proof Modal */}
+      <CardGeniusInnovationsModal
+        card={unifiedBankCardSync.getActivePaymentCard()}
+        isOpen={showGeniusModal}
+        onClose={() => setShowGeniusModal(false)}
+      />
     </>
   );
 }

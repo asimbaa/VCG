@@ -50,6 +50,13 @@ export interface UnifiedBankCard {
   loungeAccess: boolean;
   travelInsuranceCovered: boolean;
   purchaseProtectionCovered: boolean;
+
+  // Genius Innovations & Quantum Features
+  biometricsEnclaveEnabled?: boolean;
+  supportedCurrencies?: string[];
+  zeroDeclineGuaranteed?: boolean;
+  quantumDynamicCvvToken?: string;
+  appleGooglePayPassProvisioned?: boolean;
   
   lastUpdated: string;
 }
@@ -82,9 +89,9 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dualRouting: "global_credit",
     burnerMode: false,
     appleGooglePayEnrolled: true,
-    cashbackRate: 0.05, // 5.0% Centurion Cashback
+    cashbackRate: 0.05,
     accumulatedCashback: 48950.00,
-    apyInterestRate: 0.051, // 5.10% p.a.
+    apyInterestRate: 0.051,
     accruedInterest: 38200.00,
     rewardsPoints: 2450000,
     roundUpSavings: 4580.50,
@@ -97,14 +104,18 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
     id: "vc-cba-diamond-world",
     name: "CommBank Diamond World Elite Virtual",
-    number: "5163 9201 4419 8201",
-    fullNumber: "5163920144198201",
-    last4: "8201",
+    number: "5163 9201 4419 8208",
+    fullNumber: "5163920144198208",
+    last4: "8208",
     balance: 500000000,
     currency: "AUD",
     type: "virtual",
@@ -121,7 +132,7 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dualRouting: "eftpos_domestic",
     burnerMode: false,
     appleGooglePayEnrolled: true,
-    cashbackRate: 0.035, // 3.5%
+    cashbackRate: 0.035,
     accumulatedCashback: 22100.00,
     apyInterestRate: 0.051,
     accruedInterest: 19800.00,
@@ -136,14 +147,18 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
     id: "vc-westpac-infinite",
     name: "Westpac Institutional Visa Infinite",
-    number: "4564 8192 3019 5521",
-    fullNumber: "4564819230195521",
-    last4: "5521",
+    number: "4564 8192 3019 5524",
+    fullNumber: "4564819230195524",
+    last4: "5524",
     balance: 750000000,
     currency: "AUD",
     type: "virtual",
@@ -175,14 +190,18 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
     id: "vc-anz-black-premium",
     name: "ANZ Black Premium Virtual Visa",
-    number: "4111 2948 1029 4810",
-    fullNumber: "4111294810294810",
-    last4: "4810",
+    number: "4111 2948 1029 4816",
+    fullNumber: "4111294810294816",
+    last4: "4816",
     balance: 600000000,
     currency: "AUD",
     type: "virtual",
@@ -192,7 +211,7 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dynamicCvv: "481",
     expiry: "05/30",
     network: "Visa",
-    bsb: "012-000",
+    bsb: "012-003",
     accountNumber: "44928102",
     payId: TARGET_LINK_EMAIL,
     pin: "4912",
@@ -214,14 +233,18 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "NZD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
     id: "vc-nab-private-wealth",
     name: "NAB Private Wealth Virtual Visa Infinite",
-    number: "4564 8192 3019 9942",
-    fullNumber: "4564819230199942",
-    last4: "9942",
+    number: "4916 4892 3019 9945",
+    fullNumber: "4916489230199945",
+    last4: "9945",
     balance: 1000000000,
     currency: "AUD",
     type: "virtual",
@@ -253,6 +276,10 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
@@ -270,7 +297,7 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dynamicCvv: "482",
     expiry: "12/28",
     network: "Mastercard",
-    bsb: "021-000",
+    bsb: "182-512",
     accountNumber: "8499210045",
     payId: TARGET_LINK_EMAIL,
     pin: "4912",
@@ -292,6 +319,10 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   },
   {
@@ -309,7 +340,7 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dynamicCvv: "119",
     expiry: "09/27",
     network: "Mastercard",
-    bsb: "021-000",
+    bsb: "182-512",
     accountNumber: "8499210046",
     payId: TARGET_LINK_EMAIL,
     pin: "4912",
@@ -331,6 +362,311 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     loungeAccess: true,
     travelInsuranceCovered: true,
     purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "link_vb_logistics_virtual",
+    name: "VBank Sovereign Logistics Virtual",
+    number: "5119 3988 4562 1023",
+    fullNumber: "5119398845621023",
+    last4: "1023",
+    balance: 9400000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: 9400000000,
+    cvv: "741",
+    dynamicCvv: "741",
+    expiry: "04/29",
+    network: "Mastercard",
+    bsb: "182-512",
+    accountNumber: "8499210047",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.04,
+    accumulatedCashback: 85200.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 94200.00,
+    rewardsPoints: 5200000,
+    roundUpSavings: 9400.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 100000000,
+    atmDailyLimit: 1000000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "link_vb_physical_titanium",
+    name: "Valourian Physical Black Card (Primary Titanium)",
+    number: "5119 3988 4562 9992",
+    fullNumber: "5119398845629992",
+    last4: "9992",
+    balance: 940000000,
+    currency: "AUD",
+    type: "physical",
+    status: "active",
+    limit: "unlimited",
+    cvv: "999",
+    dynamicCvv: "999",
+    expiry: "01/30",
+    network: "Mastercard",
+    bsb: "182-512",
+    accountNumber: "8499210048",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.045,
+    accumulatedCashback: 54100.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 41200.00,
+    rewardsPoints: 3100000,
+    roundUpSavings: 6700.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 50000000,
+    atmDailyLimit: 500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "CHF"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "link_au_macquarie_platinum",
+    name: "Macquarie Bank Platinum Virtual Mastercard",
+    number: "5424 9912 3810 6634",
+    fullNumber: "5424991238106634",
+    last4: "6634",
+    balance: 450000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: 450000000,
+    cvv: "663",
+    dynamicCvv: "663",
+    expiry: "07/28",
+    network: "Mastercard",
+    bsb: "182-512",
+    accountNumber: "99182371",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.035,
+    accumulatedCashback: 16700.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 18400.00,
+    rewardsPoints: 1120000,
+    roundUpSavings: 2450.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 12000000,
+    atmDailyLimit: 200000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "amex_au_platinum_business",
+    name: "American Express Platinum Business Card (Australia)",
+    number: "3760 918210 41006",
+    fullNumber: "376091821041006",
+    last4: "1006",
+    balance: 940000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: 940000000,
+    cvv: "8819",
+    dynamicCvv: "8819",
+    expiry: "08/29",
+    network: "AMEX",
+    bsb: "021-000",
+    accountNumber: "8499210051",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "global_credit",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.045,
+    accumulatedCashback: 41800.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 32600.00,
+    rewardsPoints: 2100000,
+    roundUpSavings: 4100.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 30000000,
+    atmDailyLimit: 400000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "amex_au_explorer",
+    name: "American Express Explorer Credit Card (Australia)",
+    number: "3759 849210 62008",
+    fullNumber: "375984921062008",
+    last4: "2008",
+    balance: 500000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: 500000000,
+    cvv: "4201",
+    dynamicCvv: "4201",
+    expiry: "11/29",
+    network: "AMEX",
+    bsb: "021-000",
+    accountNumber: "8499210052",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "global_credit",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.035,
+    accumulatedCashback: 21400.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 19500.00,
+    rewardsPoints: 1350000,
+    roundUpSavings: 2800.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 15000000,
+    atmDailyLimit: 250000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "amex_au_corp_black",
+    name: "American Express Corporate Black Diamond (Valourian Treasury AU)",
+    number: "3791 748210 03007",
+    fullNumber: "379174821003007",
+    last4: "3007",
+    balance: 2500000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: 2500000000,
+    cvv: "9305",
+    dynamicCvv: "9305",
+    expiry: "12/31",
+    network: "AMEX",
+    bsb: "021-000",
+    accountNumber: "8499210053",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "global_credit",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.05,
+    accumulatedCashback: 98400.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 84100.00,
+    rewardsPoints: 6400000,
+    roundUpSavings: 11200.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 100000000,
+    atmDailyLimit: 1000000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "amex_au_qantas_ult",
+    name: "American Express Qantas Ultimate Corporate Card (Australia)",
+    number: "3767 482910 84002",
+    fullNumber: "376748291084002",
+    last4: "4002",
+    balance: 1000000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: "unlimited",
+    cvv: "3102",
+    dynamicCvv: "3102",
+    expiry: "09/30",
+    network: "AMEX",
+    bsb: "021-000",
+    accountNumber: "8499210054",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "global_credit",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.045,
+    accumulatedCashback: 49500.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 37900.00,
+    rewardsPoints: 3800000,
+    roundUpSavings: 5400.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 40000000,
+    atmDailyLimit: 500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
   }
 ];
@@ -539,19 +875,48 @@ export class UnifiedBankCardSyncService {
     let newCard: UnifiedBankCard | null = null;
     this.updateCard(cardId, (c) => {
       const isAmex = c.network === "AMEX";
-      const randomMiddle = Math.floor(100000 + Math.random() * 900000);
-      const randomLast = Math.floor(1000 + Math.random() * 9000);
-      const newNumber = isAmex
-        ? `3782 ${randomMiddle} ${randomLast}`
-        : `5163 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${randomLast}`;
-      const cleanNum = newNumber.replace(/\s+/g, "");
+      let basePrefix = "";
+      if (isAmex) {
+        basePrefix = `3782${Math.floor(10000000 + Math.random() * 90000000)}`; // 14 digits
+      } else if (c.network === "Visa") {
+        basePrefix = `4564${Math.floor(10000000000 + Math.random() * 90000000000)}`; // 15 digits
+      } else {
+        basePrefix = `5119${Math.floor(10000000000 + Math.random() * 90000000000)}`; // 15 digits
+      }
+
+      // Compute exact Luhn check digit
+      let checkDigit = 0;
+      for (let d = 0; d <= 9; d++) {
+        const testPan = basePrefix + d;
+        let sum = 0;
+        let shouldDouble = false;
+        for (let i = testPan.length - 1; i >= 0; i--) {
+          let digit = parseInt(testPan[i], 10);
+          if (shouldDouble) {
+            digit *= 2;
+            if (digit > 9) digit -= 9;
+          }
+          sum += digit;
+          shouldDouble = !shouldDouble;
+        }
+        if (sum % 10 === 0) {
+          checkDigit = d;
+          break;
+        }
+      }
+
+      const fullPan = basePrefix + checkDigit;
+      const formatted = isAmex
+        ? `${fullPan.slice(0, 4)} ${fullPan.slice(4, 10)} ${fullPan.slice(10)}`
+        : `${fullPan.slice(0, 4)} ${fullPan.slice(4, 8)} ${fullPan.slice(8, 12)} ${fullPan.slice(12)}`;
+      const last4 = fullPan.slice(-4);
       const newCvv = isAmex ? String(Math.floor(1000 + Math.random() * 9000)) : String(Math.floor(100 + Math.random() * 900));
-      
+
       newCard = {
         ...c,
-        number: newNumber,
-        fullNumber: cleanNum,
-        last4: String(randomLast),
+        number: formatted,
+        fullNumber: fullPan,
+        last4: last4,
         cvv: newCvv,
         dynamicCvv: newCvv,
         expiry: "12/35",
@@ -560,6 +925,50 @@ export class UnifiedBankCardSyncService {
       return newCard;
     });
     return newCard;
+  }
+
+  public injectImmenseFunds(cardId: string, amount: number): number {
+    let nextBal = 0;
+    this.updateCard(cardId, (c) => {
+      nextBal = c.balance + amount;
+      return {
+        ...c,
+        balance: nextBal,
+        zeroDeclineGuaranteed: true
+      };
+    });
+    return nextBal;
+  }
+
+  public switchCardCurrency(cardId: string, newCurrency: string): boolean {
+    const validCurrencies = ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"];
+    if (!validCurrencies.includes(newCurrency)) return false;
+    this.updateCard(cardId, (c) => ({
+      ...c,
+      currency: newCurrency
+    }));
+    return true;
+  }
+
+  public toggleBiometrics(cardId: string): boolean {
+    let state = false;
+    this.updateCard(cardId, (c) => {
+      state = !c.biometricsEnclaveEnabled;
+      return {
+        ...c,
+        biometricsEnclaveEnabled: state
+      };
+    });
+    return state;
+  }
+
+  public provisionWalletPass(cardId: string): boolean {
+    this.updateCard(cardId, (c) => ({
+      ...c,
+      appleGooglePayPassProvisioned: true,
+      appleGooglePayEnrolled: true
+    }));
+    return true;
   }
 
   public getActivePaymentCardId(): string {

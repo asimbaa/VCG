@@ -37,6 +37,7 @@ import {
   BASE_BANKING_CREDIT_CARDS 
 } from "../../services/linkComService";
 import { AmexAuAppRegistrationModal } from "../bank/AmexAuAppRegistrationModal";
+import { AutonomousBenchmarkSentinel } from "./AutonomousBenchmarkSentinel";
 
 interface NotificationsBarProps {
   onOpenAcquisitions?: (tab?: "properties" | "flights" | "domains" | "stocks") => void;
@@ -433,6 +434,9 @@ export function SovereignNotificationsBar({
         {/* Center / Right: Quick Command Line & Quick Copy Shortcuts */}
         <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0">
           
+          {/* Always-Running Autonomous Benchmarking Sentinel */}
+          <AutonomousBenchmarkSentinel />
+
           {/* Quick Copy Merchant Pills */}
           <div className="hidden sm:flex items-center gap-1.5">
             <button

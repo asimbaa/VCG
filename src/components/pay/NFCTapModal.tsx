@@ -41,6 +41,9 @@ import { unifiedBankCardSync, UnifiedBankCard } from '../../services/unifiedBank
 import { smsEmailDispatchService } from '../../services/smsEmailDispatchService';
 import { useGlobalCurrency } from '../../contexts/CurrencyContext';
 import { convertCurrency, formatCurrency } from '../../utils/CurrencyConverter';
+import { SectionWisdomTooltip } from '../shared/SectionWisdomTooltip';
+import { SmartphoneNfcCardReaderModal } from './SmartphoneNfcCardReaderModal';
+import { Smartphone } from 'lucide-react';
 
 interface NFCTapModalProps {
   isOpen: boolean;
@@ -54,6 +57,7 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
   const { currency: globalCur } = useGlobalCurrency();
   const [selectedCardId, setSelectedCardId] = useState<string>('');
   const [cards, setCards] = useState<any[]>(propCards || []);
+  const [showSmartphoneReaderModal, setShowSmartphoneReaderModal] = useState(false);
 
   // Sync cards with unifiedBankCardSync
   useEffect(() => {
@@ -563,6 +567,17 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-black tracking-tight text-white">Virtual NFC Tapping Terminal</h3>
+                    <SectionWisdomTooltip 
+                      title="NFC Contactless & EMV Cryptogram"
+                      concept="Host Card Emulation"
+                      insights={[
+                        "Transmits ISO 14443 Type-A dynamic cryptogram (ARQC) directly to contactless POS terminals.",
+                        "Direct least-cost routing routes via Australian eftpos rail for sub-50ms clearance.",
+                        "Tap smartphone to read card balance or inject up to $10B AUD liquidity directly into the card."
+                      ]}
+                      regulatory="APCA eftpos Level-2 & EMVCo Contactless Spec"
+                      actionTip="Click 'Phone Balance Reader' to inspect exact cash balance or inject immediate funds."
+                    />
                     <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                       EMV L2 POS
                     </span>
@@ -579,6 +594,17 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Switch to Smartphone NFC Reader & Immense Funding Mode */}
+                <button
+                  type="button"
+                  onClick={() => setShowSmartphoneReaderModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Open Smartphone NFC Balance Reader & Immense Funding Terminal"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                  <span className="hidden sm:inline">Phone Balance Reader</span>
+                </button>
+
                 {/* Audio Sound Toggle */}
                 <button
                   onClick={() => {
@@ -1337,6 +1363,13 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
           </motion.div>
         </div>
       )}
+
+      {/* Smartphone NFC Balance Reader & Immense Funding Terminal */}
+      <SmartphoneNfcCardReaderModal
+        isOpen={showSmartphoneReaderModal}
+        onClose={() => setShowSmartphoneReaderModal(false)}
+        preSelectedCardId={selectedCardId}
+      />
     </AnimatePresence>
   );
 }

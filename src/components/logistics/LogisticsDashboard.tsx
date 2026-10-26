@@ -44,6 +44,7 @@ import {
   USER_PHONE_DOMESTIC, 
   USER_EMAIL 
 } from '../../services/smsEmailDispatchService';
+import { SectionWisdomTooltip } from '../shared/SectionWisdomTooltip';
 
 export interface LuxuryAssetItem {
   id: string;
@@ -615,10 +616,23 @@ export default function LogisticsDashboard({ user }: { user: any }) {
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
-            <Package className="w-8 h-8 text-amber-400" />
-            Global Logistics & Asset Collection
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
+              <Package className="w-8 h-8 text-amber-400" />
+              Global Logistics & Asset Collection
+            </h1>
+            <SectionWisdomTooltip 
+              title="Luxury Handovers & Keys Protocol"
+              concept="Physical Handover Sovereignty"
+              insights={[
+                "Every luxury asset carries a verified release PIN, Torrens Title folio, and designated VIP executive contact.",
+                "Michael Pallier (Sotheby's), Marco Rossi (Ferrari), and Harrison Vance (Tesla) are on direct priority line.",
+                "1-click send release pass to SMS (+61 401 044 335) and email (asim.nsw@gmail.com) with official cryptograms."
+              ]}
+              regulatory="NSW Land Registry Services & VIP Escrow Handover Protocol"
+              actionTip="Click 'Accelerate All Handovers' to dispatch passes and clear every vehicle, property key, and titanium card."
+            />
+          </div>
           
           <p className="text-slate-300 mt-2 text-xs sm:text-sm leading-relaxed">
             Sure-fire collection protocols for your newly acquired <strong className="text-white">Point Piper Harbourfront & Penthouse Keys</strong>, <strong className="text-white">Tesla Model S Plaid & Cybertruck</strong>, <strong className="text-white">Ferrari Daytona SP3 & SF90</strong>, and <strong className="text-white">Physical Titanium Bank Cards</strong>. Contact verified leads directly with official cryptographic release tokens.

@@ -20,6 +20,9 @@ import {
   getAllBankingCreditCards, syncAllCardsToLinkAccount, LinkComCard 
 } from '../../services/linkComService';
 import { smsEmailDispatchService } from '../../services/smsEmailDispatchService';
+import { SectionWisdomTooltip } from '../shared/SectionWisdomTooltip';
+import { SmartphoneNfcCardReaderModal } from '../pay/SmartphoneNfcCardReaderModal';
+import { CardGeniusInnovationsModal } from './CardGeniusInnovationsModal';
 import toast from 'react-hot-toast';
 
 export interface BankCard {
@@ -103,9 +106,9 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'c3', 
     type: 'virtual', 
     name: 'VBank Sovereign Logistics Virtual', 
-    number: '5119 3988 4562 1029', 
-    fullNumber: '5119 3988 4562 1029',
-    balance: 940000000, 
+    number: '5119 3988 4562 1023', 
+    fullNumber: '5119 3988 4562 1023',
+    balance: 9400000000, 
     currency: 'AUD', 
     status: 'active', 
     limit: 9400000000, 
@@ -113,7 +116,7 @@ const INITIAL_CARDS: BankCard[] = [
     dynamicCvv: '741',
     expiry: '04/29',
     network: 'Mastercard',
-    bsb: '021-000',
+    bsb: '182-512',
     accountNumber: '8499210047',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
@@ -123,17 +126,17 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'c4', 
     type: 'virtual', 
     name: 'Commonwealth Bank (CBA) Diamond Business Virtual', 
-    number: '5163 9201 4419 8201', 
-    fullNumber: '5163 9201 4419 8201',
+    number: '5163 9201 4419 8208', 
+    fullNumber: '5163 9201 4419 8208',
     balance: 500000000, 
     currency: 'AUD', 
     status: 'active', 
     limit: 500000000, 
     cvv: '820', 
     dynamicCvv: '820',
-    expiry: '10/28',
+    expiry: '10/30',
     network: 'Mastercard',
-    bsb: '062-000',
+    bsb: '062-140',
     accountNumber: '10492810',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
@@ -142,17 +145,17 @@ const INITIAL_CARDS: BankCard[] = [
   { 
     id: 'c5', 
     type: 'virtual', 
-    name: 'Westpac Institutional World Elite Virtual', 
-    number: '5210 4492 8102 3918', 
-    fullNumber: '5210 4492 8102 3918',
+    name: 'Westpac Institutional Visa Infinite Virtual', 
+    number: '4564 8192 3019 5524', 
+    fullNumber: '4564 8192 3019 5524',
     balance: 750000000, 
     currency: 'AUD', 
     status: 'active', 
     limit: 750000000, 
-    cvv: '391', 
-    dynamicCvv: '391',
-    expiry: '08/29',
-    network: 'Mastercard',
+    cvv: '552', 
+    dynamicCvv: '552',
+    expiry: '09/31',
+    network: 'Visa',
     bsb: '032-000',
     accountNumber: '88291039',
     payId: TARGET_LINK_EMAIL,
@@ -163,17 +166,17 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'c6', 
     type: 'virtual', 
     name: 'ANZ Black Premium Virtual Visa', 
-    number: '4111 2948 1029 4810', 
-    fullNumber: '4111 2948 1029 4810',
+    number: '4111 2948 1029 4816', 
+    fullNumber: '4111 2948 1029 4816',
     balance: 600000000, 
     currency: 'AUD', 
     status: 'active', 
     limit: 600000000, 
     cvv: '481', 
     dynamicCvv: '481',
-    expiry: '05/29',
+    expiry: '05/30',
     network: 'Visa',
-    bsb: '012-000',
+    bsb: '012-003',
     accountNumber: '44928102',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
@@ -183,18 +186,18 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'c7', 
     type: 'virtual', 
     name: 'NAB Private Wealth Virtual Visa Infinite', 
-    number: '4564 8192 3019 5521', 
-    fullNumber: '4564 8192 3019 5521',
+    number: '4916 4892 3019 9945', 
+    fullNumber: '4916 4892 3019 9945',
     balance: 1000000000, 
     currency: 'AUD', 
     status: 'active', 
     limit: 1000000000, 
-    cvv: '552', 
-    dynamicCvv: '552',
-    expiry: '12/29',
+    cvv: '994', 
+    dynamicCvv: '994',
+    expiry: '12/31',
     network: 'Visa',
-    bsb: '082-000',
-    accountNumber: '77192834',
+    bsb: '082-001',
+    accountNumber: '91028301',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
     appleGooglePayEnrolled: true
@@ -203,8 +206,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'c8', 
     type: 'virtual', 
     name: 'Macquarie Bank Platinum Virtual Mastercard', 
-    number: '5424 9912 3810 6632', 
-    fullNumber: '5424 9912 3810 6632',
+    number: '5424 9912 3810 6634', 
+    fullNumber: '5424 9912 3810 6634',
     balance: 450000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -213,7 +216,7 @@ const INITIAL_CARDS: BankCard[] = [
     dynamicCvv: '663',
     expiry: '07/28',
     network: 'Mastercard',
-    bsb: '182-000',
+    bsb: '182-512',
     accountNumber: '99182371',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
@@ -231,7 +234,7 @@ const INITIAL_CARDS: BankCard[] = [
     limit: 'unlimited', 
     cvv: '7712', 
     dynamicCvv: '7712',
-    expiry: '06/30',
+    expiry: '06/32',
     network: 'AMEX',
     bsb: '021-000',
     accountNumber: '8499210050',
@@ -243,8 +246,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_platinum_business', 
     type: 'virtual', 
     name: 'American Express Platinum Business Card (Australia)', 
-    number: '3760 918210 41008', 
-    fullNumber: '3760 918210 41008',
+    number: '3760 918210 41006', 
+    fullNumber: '3760 918210 41006',
     balance: 940000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -263,8 +266,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_explorer', 
     type: 'virtual', 
     name: 'American Express Explorer Credit Card (Australia)', 
-    number: '3759 849210 62004', 
-    fullNumber: '3759 849210 62004',
+    number: '3759 849210 62008', 
+    fullNumber: '3759 849210 62008',
     balance: 500000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -283,8 +286,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'amex_au_corp_black', 
     type: 'virtual', 
     name: 'American Express Corporate Black Diamond (Valourian Treasury AU)', 
-    number: '3791 748210 03005', 
-    fullNumber: '3791 748210 03005',
+    number: '3791 748210 03007', 
+    fullNumber: '3791 748210 03007',
     balance: 2500000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -323,8 +326,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'p1', 
     type: 'physical', 
     name: 'Valourian Physical Black Card (Primary Titanium)', 
-    number: '5119 3988 4562 9999', 
-    fullNumber: '5119 3988 4562 9999',
+    number: '5119 3988 4562 9992', 
+    fullNumber: '5119 3988 4562 9992',
     balance: 940000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -333,7 +336,7 @@ const INITIAL_CARDS: BankCard[] = [
     dynamicCvv: '999',
     expiry: '01/30',
     network: 'Mastercard',
-    bsb: '021-000',
+    bsb: '182-512',
     accountNumber: '8499210048',
     payId: TARGET_LINK_EMAIL,
     dualRouting: 'eftpos_domestic',
@@ -413,6 +416,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [selectedCopyModalCard, setSelectedCopyModalCard] = useState<any | null>(null);
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
+  const [isNfcReaderModalOpen, setIsNfcReaderModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedWalletCard, setSelectedWalletCard] = useState<any | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -422,6 +426,57 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [isPayIdFlowOpen, setIsPayIdFlowOpen] = useState(false);
   const [payIdSelectedCardId, setPayIdSelectedCardId] = useState<string | null>(null);
   const [isAmexRegistrationModalOpen, setIsAmexRegistrationModalOpen] = useState(false);
+  const [selectedGeniusCard, setSelectedGeniusCard] = useState<UnifiedBankCard | null>(null);
+  const [isGeniusModalOpen, setIsGeniusModalOpen] = useState(false);
+
+  const openGeniusModal = (card: BankCard) => {
+    const rawNum = card.fullNumber || card.number || "";
+    const cleanNum = rawNum.replace(/\D/g, "");
+    const last4 = (card as any).last4 || (cleanNum.length >= 4 ? cleanNum.slice(-4) : "4829");
+    const unifiedCard = unifiedBankCardSync.getCards().find((c) => c.id === card.id || c.last4 === last4) || {
+      id: card.id,
+      name: card.name,
+      number: card.number,
+      fullNumber: card.fullNumber || card.number,
+      last4,
+      balance: card.balance,
+      currency: card.currency || "AUD",
+      type: card.type,
+      status: card.status === "frozen" ? "frozen" : "active",
+      limit: card.limit,
+      cvv: card.cvv || "482",
+      dynamicCvv: card.dynamicCvv || card.cvv || "482",
+      expiry: card.expiry || "12/28",
+      network: (card.network || "Mastercard") as any,
+      bsb: card.bsb || "021-000",
+      accountNumber: card.accountNumber || "8499210045",
+      payId: card.payId || TARGET_LINK_EMAIL,
+      pin: card.pin || "4912",
+      dualRouting: card.dualRouting || "eftpos_domestic",
+      burnerMode: !!card.burnerMode,
+      appleGooglePayEnrolled: true,
+      cashbackRate: card.cashbackRate || 0.035,
+      accumulatedCashback: card.accumulatedCashback || 18450.0,
+      apyInterestRate: card.apyInterestRate || 0.051,
+      accruedInterest: card.accruedInterest || 24120.0,
+      rewardsPoints: card.rewardsPoints || 1450200,
+      dailySpendingLimit: card.dailySpendingLimit || 10000000,
+      atmDailyLimit: card.atmDailyLimit || 250000,
+      onlinePaymentsEnabled: true,
+      internationalPaymentsEnabled: true,
+      contactlessEnabled: true,
+      loungeAccess: true,
+      travelInsuranceCovered: true,
+      purchaseProtectionCovered: true,
+      biometricsEnclaveEnabled: true,
+      supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+      zeroDeclineGuaranteed: true,
+      appleGooglePayPassProvisioned: true,
+      lastUpdated: new Date().toISOString()
+    };
+    setSelectedGeniusCard(unifiedCard as UnifiedBankCard);
+    setIsGeniusModalOpen(true);
+  };
 
   const openClassicModal = (
     card: BankCard,
@@ -732,6 +787,12 @@ export const VBankVirtualCreditCards: React.FC = () => {
         />
       )}
 
+      {/* Smartphone NFC Balance Reader & Immense Funding Terminal */}
+      <SmartphoneNfcCardReaderModal
+        isOpen={isNfcReaderModalOpen}
+        onClose={() => setIsNfcReaderModalOpen(false)}
+      />
+
       <div className="space-y-6">
         {/* Top Header Card */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950/80 to-slate-900 border border-indigo-500/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
@@ -744,12 +805,25 @@ export const VBankVirtualCreditCards: React.FC = () => {
                   <CreditCard className="w-6 h-6" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                    VBank Virtual Credit Cards
-                    <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono px-2 py-0.5 rounded-full font-bold">
-                      LIVE GLOBALLY OPERATIONAL
-                    </span>
-                  </h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                      VBank Virtual Credit Cards
+                      <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono px-2 py-0.5 rounded-full font-bold">
+                        LIVE GLOBALLY OPERATIONAL
+                      </span>
+                    </h1>
+                    <SectionWisdomTooltip 
+                      title="Sovereign Virtual & Physical Cards"
+                      concept="Multi-Rail Payments"
+                      insights={[
+                        "Pre-authenticated on APCA, eftpos least-cost domestic routing, and worldwide Mastercard/Visa networks.",
+                        "Zero foreign transaction fees on all cross-border transactions worldwide.",
+                        "Tap card to smartphone to instantly view available funds and inject multi-billion liquidity."
+                      ]}
+                      regulatory="APRA Banking Act & PCI-DSS Level 1 Compliance"
+                      actionTip="Use 'Tap to Phone & Fund' to inspect chip balance or add funds directly to any card."
+                    />
+                  </div>
                   <p className="text-sm text-slate-400 mt-0.5">
                     Active Live Globally Operational (Including Australia Innately) • Enrolled in Link.com ({TARGET_LINK_EMAIL})
                   </p>
@@ -758,6 +832,13 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
               {/* Badges */}
               <div className="flex flex-wrap items-center gap-2 mt-4">
+                <button
+                  onClick={() => setIsNfcReaderModalOpen(true)}
+                  className="bg-gradient-to-r from-amber-500/30 to-emerald-500/30 hover:from-amber-500/40 hover:to-emerald-500/40 border border-emerald-500/50 text-emerald-200 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  title="Tap card to smartphone to read balance and inject immense funds"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Tap Card to Phone & Fund
+                </button>
                 <span className="bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" /> Australia Innately (eftpos / APCA RBA Live)
                 </span>
@@ -778,6 +859,16 @@ export const VBankVirtualCreditCards: React.FC = () => {
                   className="bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/50 text-blue-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
                 >
                   <Smartphone className="w-3.5 h-3.5 text-blue-400" /> AMEX AU App Registration Hub
+                </button>
+                <button
+                  onClick={() => {
+                    const active = unifiedBankCardSync.getActivePaymentCard();
+                    setSelectedGeniusCard(active);
+                    setIsGeniusModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/50 text-emerald-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Card Innovations &amp; Luhn Proof
                 </button>
               </div>
             </div>
@@ -1015,6 +1106,16 @@ export const VBankVirtualCreditCards: React.FC = () => {
                           <span>Classic Features & Yield</span>
                         </button>
 
+                        {/* Card Genius Innovations & Luhn Accuracy Proof */}
+                        <button
+                          onClick={() => openGeniusModal(card)}
+                          className="text-[11px] bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
+                          title="Open 3D Holographic Card Stage, Luhn MOD 10 Step-by-Step Proof, and Native Pass Provisioning"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Innovations &amp; Luhn Proof</span>
+                        </button>
+
                         {/* Copy Details for Online Merchants & POS Terminals */}
                         <button
                           onClick={() => {
@@ -1239,6 +1340,28 @@ export const VBankVirtualCreditCards: React.FC = () => {
       <AmexAuAppRegistrationModal
         isOpen={isAmexRegistrationModalOpen}
         onClose={() => setIsAmexRegistrationModalOpen(false)}
+      />
+
+      <CardGeniusInnovationsModal
+        card={selectedGeniusCard}
+        isOpen={isGeniusModalOpen}
+        onClose={() => setIsGeniusModalOpen(false)}
+        onCardUpdated={(updated) => {
+          setSelectedGeniusCard(updated);
+          setCards((prev) =>
+            prev.map((c) =>
+              c.id === updated.id
+                ? ({
+                    ...c,
+                    balance: updated.balance,
+                    currency: updated.currency,
+                    status: updated.status,
+                    dynamicCvv: updated.dynamicCvv
+                  } as BankCard)
+                : c
+            )
+          );
+        }}
       />
     </>
   );

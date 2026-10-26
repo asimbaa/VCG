@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { Globe, Server, Rocket, Layout, Calendar, Shield, ExternalLink, Play, CheckCircle2, ChevronRight, UploadCloud, X, Lock } from "lucide-react";
+import { Globe, Server, Rocket, Layout, Calendar, Shield, ExternalLink, Play, CheckCircle2, ChevronRight, UploadCloud, X, Lock, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { ValourianLogo } from "../bank/ValourianLogo";
+import { SectionWisdomTooltip } from "../shared/SectionWisdomTooltip";
+import { DomainKeyDetailsModal, DomainDetails } from "./DomainKeyDetailsModal";
 
 export function Deployments({ user }: { user: any }) {
   const [deploying, setDeploying] = useState(false);
@@ -10,11 +12,14 @@ export function Deployments({ user }: { user: any }) {
   const [repoUrl, setRepoUrl] = useState("");
   const [showPromoSite, setShowPromoSite] = useState(false);
   const [showCorpSite, setShowCorpSite] = useState(false);
+  const [selectedDomainDetails, setSelectedDomainDetails] = useState<DomainDetails | null>(null);
   
   const [activeSites, setActiveSites] = useState([
-    { id: 1, name: "Valourian Capital Public Terminal", url: "https://valourian.com", status: "Live", uptime: "99.99%", lastDeployed: "Just now" },
-    { id: 2, name: "Valourian Dashboard", url: "https://valourian.app", status: "Live", uptime: "99.99%", lastDeployed: "2 hours ago" },
-    { id: 3, name: "Corporate Portal", url: "https://corp.valourian.app", status: "Live", uptime: "100%", lastDeployed: "1 day ago" },
+    { id: 1, name: "Valourian Capital Public Terminal", url: "https://valourian.com", domain: "valourian.com", status: "Live", uptime: "99.99%", lastDeployed: "Just now" },
+    { id: 2, name: "Valourian Dashboard & Command", url: "https://valourian.app", domain: "valourian.app", status: "Live", uptime: "99.99%", lastDeployed: "2 hours ago" },
+    { id: 3, name: "Corporate Portal", url: "https://corp.valourian.app", domain: "corp.valourian.app", status: "Live", uptime: "100%", lastDeployed: "1 day ago" },
+    { id: 4, name: "Valourian Capital AU Primary", url: "https://valourian.com.au", domain: "valourian.com.au", status: "Live", uptime: "100%", lastDeployed: "Just now" },
+    { id: 5, name: "DocuCraft AI Sovereign Engine", url: "https://docucraft.ai", domain: "docucraft.ai", status: "Live", uptime: "100%", lastDeployed: "Just now" }
   ]);
 
   const handleDeploy = (e: React.FormEvent) => {
@@ -42,6 +47,7 @@ export function Deployments({ user }: { user: any }) {
           id: Date.now(), 
           name: siteName, 
           url: `https://${siteName.toLowerCase().replace(/\s+/g, '-')}.app`, 
+          domain: `${siteName.toLowerCase().replace(/\s+/g, '-')}.app`,
           status: "Live", 
           uptime: "100%", 
           lastDeployed: "Just now" 
@@ -199,13 +205,33 @@ export function Deployments({ user }: { user: any }) {
         )}
       </AnimatePresence>
 
+      {/* Domain Key Details Modal */}
+      <DomainKeyDetailsModal
+        domain={selectedDomainDetails}
+        isOpen={Boolean(selectedDomainDetails)}
+        onClose={() => setSelectedDomainDetails(null)}
+      />
+
       {/* Hero Section */}
       <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden flex justify-between items-center">
         <div className="relative z-10">
-          <h2 className="text-3xl font-bold mb-2 flex items-center gap-3">
-            <Globe className="w-8 h-8 text-blue-400" />
-            Website Deployments
-          </h2>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold flex items-center gap-3">
+              <Globe className="w-8 h-8 text-blue-400" />
+              Website Deployments
+            </h2>
+            <SectionWisdomTooltip 
+              title="Global Edge Web Infra"
+              concept="Sovereign Routing"
+              insights={[
+                "Anycast edge routing with zero latency penalty across Australia and global financial capitals.",
+                "Automatic DNS propagation with Quantum-Safe TLS 1.3 certificates.",
+                "Click any active site to inspect live DNS records, A/AAAA IP mapping, and API webhook endpoints."
+              ]}
+              regulatory="ICANN Sovereign DNS & TLS 1.3 Quantum-Resistant Standard"
+              actionTip="Click 'DNS & Key Details' on any site below to copy records or dispatch credentials via SMS & Email."
+            />
+          </div>
           <p className="text-slate-400 max-w-xl text-lg">
             Easily deploy, manage, and scale your web properties across our global sovereign edge network. Zero-downtime guaranteed.
           </p>
@@ -334,15 +360,37 @@ export function Deployments({ user }: { user: any }) {
                       <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Last Deployed</p>
                       <p className="text-sm font-semibold text-slate-800">{site.lastDeployed}</p>
                     </div>
-                    <button 
-                      onClick={() => {
-                         if (site.id === 1) setShowPromoSite(true);
-                         if (site.id === 3) setShowCorpSite(true);
-                      }}
-                      className="w-10 h-10 rounded-full bg-slate-50 hover:bg-blue-50 border border-slate-200 flex items-center justify-center transition-colors text-slate-400 hover:text-blue-600"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedDomainDetails({
+                            domain: site.domain || site.url.replace("https://", ""),
+                            name: site.name,
+                            status: "ACTIVE",
+                            type: "Production Edge Deployment",
+                            encryption: "TLS 1.3 Quantum-Safe",
+                            visitors: "14.2k/hr",
+                            server: "ap-southeast-2 (Sydney High-Availability)",
+                            ipAddress: "76.76.21.21"
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                        title="View DNS Records, Quantum SSL, and API Webhooks"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Key Details & DNS</span>
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                           if (site.id === 1) setShowPromoSite(true);
+                           if (site.id === 3) setShowCorpSite(true);
+                        }}
+                        className="w-10 h-10 rounded-full bg-slate-50 hover:bg-blue-50 border border-slate-200 flex items-center justify-center transition-colors text-slate-400 hover:text-blue-600"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               ))}
