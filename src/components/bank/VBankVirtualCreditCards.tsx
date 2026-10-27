@@ -993,7 +993,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
                           <div className="flex flex-wrap items-center gap-4 mt-2 text-xs font-mono text-slate-400">
                             <span>BSB: <strong className="text-emerald-400">{card.bsb || '021-000'}</strong></span>
                             <span>ACC: <strong className="text-emerald-400">{card.accountNumber || '8499210045'}</strong></span>
-                            <span>PAYID: <strong className="text-indigo-300">{TARGET_LINK_EMAIL}</strong></span>
+                            <span>PAYID: <strong className="text-indigo-300">{card.payId || TARGET_LINK_EMAIL}</strong></span>
                           </div>
 
                           {/* Revealed Expiry and CVV */}
@@ -1001,7 +1001,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
                             <div className="flex flex-wrap items-center gap-4 mt-2.5 pt-2.5 border-t border-white/5 text-xs text-slate-300 font-mono">
                               <span>EXP: <strong className="text-white">{card.expiry || '12/28'}</strong></span>
                               <div className="flex items-center gap-1.5">
-                                <span>CVV: <strong className="text-white">{card.dynamicCvv || card.cvv}</strong></span>
+                                <span>CVV: <strong className="text-white">{card.dynamicCvv || card.cvv || '843'}</strong></span>
                                 <button 
                                   onClick={() => handleRotateCvv(card.id)} 
                                   className="text-[10px] bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1 cursor-pointer"
@@ -1010,7 +1010,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
                                   <RefreshCw className="w-2.5 h-2.5" /> Rotate CVV
                                 </button>
                               </div>
-                              <span>PIN: <strong className="text-amber-300">4912</strong></span>
+                              <span>PIN: <strong className="text-amber-300">{card.pin || '4912'}</strong></span>
                             </div>
                           )}
                         </div>
@@ -1018,9 +1018,9 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
                       {/* Right: Balance & Limit */}
                       <div className="text-left sm:text-right shrink-0">
-                        <div className="text-lg font-black text-white">{format(card.balance)}</div>
+                        <div className="text-lg font-black text-white">{format(typeof card.balance === 'number' ? card.balance : 0)}</div>
                         <div className="text-xs text-emerald-400 font-medium">
-                          Limit: {card.limit === 'unlimited' ? 'Unlimited AUD' : format(card.limit as number)}
+                          Limit: {card.limit === 'unlimited' ? 'Unlimited AUD' : format(typeof card.limit === 'number' ? card.limit : 0)}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono mt-1">
                           Settlement: 0% FX Worldwide

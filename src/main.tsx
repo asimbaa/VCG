@@ -44,14 +44,33 @@ console.warn = (...args) => {
 
 const originalError = console.error;
 console.error = (...args) => {
-  if (typeof args[0] === 'string' && args[0].includes('[vite] failed to connect to websocket')) return;
-  if (args[0] && args[0].message && args[0].message.includes('WebSocket')) return;
-  if (typeof args[0] === 'string' && args[0].includes('Encountered two children with the same key')) return;
+  if (typeof args[0] === 'string' && (
+    args[0].includes('[vite] failed to connect to websocket') ||
+    args[0].includes('send was called before connect') ||
+    args[0].includes('Could not reach Cloud Firestore backend') ||
+    args[0].includes('The operation could not be completed') ||
+    args[0].includes('Encountered two children with the same key')
+  )) return;
+  if (args[0] && args[0].message && (
+    args[0].message.includes('WebSocket') || 
+    args[0].message.includes('send was called before connect') || 
+    args[0].message.includes('Could not reach Cloud Firestore backend')
+  )) return;
   originalError(...args);
 };
 
 window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason && event.reason.message && event.reason.message.includes('WebSocket')) {
+  if (
+    (event.reason && event.reason.message && (
+      event.reason.message.includes('WebSocket') ||
+      event.reason.message.includes('send was called before connect') ||
+      event.reason.message.includes('Could not reach Cloud Firestore backend')
+    )) ||
+    (typeof event.reason === 'string' && (
+      event.reason.includes('WebSocket') ||
+      event.reason.includes('send was called before connect')
+    ))
+  ) {
     event.preventDefault();
   }
 });

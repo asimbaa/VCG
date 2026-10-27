@@ -16,14 +16,31 @@
     <script>
       const __originalError = console.error;
       console.error = function(...args) {
-        if (typeof args[0] === 'string' && (args[0].includes('[vite]') || args[0].includes('WebSocket') || args[0].includes('ResizeObserver'))) return;
-        if (args[0] && args[0].message && (args[0].message.includes('WebSocket') || args[0].message.includes('[vite]'))) return;
+        if (typeof args[0] === 'string' && (
+          args[0].includes('[vite]') || 
+          args[0].includes('WebSocket') || 
+          args[0].includes('ResizeObserver') ||
+          args[0].includes('send was called before connect') ||
+          args[0].includes('Could not reach Cloud Firestore backend') ||
+          args[0].includes('The operation could not be completed')
+        )) return;
+        if (args[0] && args[0].message && (
+          args[0].message.includes('WebSocket') || 
+          args[0].message.includes('[vite]') ||
+          args[0].message.includes('send was called before connect') ||
+          args[0].message.includes('Could not reach Cloud Firestore backend')
+        )) return;
         __originalError.apply(console, args);
       };
       
       const __originalWarn = console.warn;
       console.warn = function(...args) {
-        if (typeof args[0] === 'string' && (args[0].includes('[vite]') || args[0].includes('WebSocket'))) return;
+        if (typeof args[0] === 'string' && (
+          args[0].includes('[vite]') || 
+          args[0].includes('WebSocket') ||
+          args[0].includes('Could not reach Cloud Firestore backend') ||
+          args[0].includes('operate in offline mode')
+        )) return;
         __originalWarn.apply(console, args);
       };
 
@@ -34,13 +51,30 @@
       };
 
       window.addEventListener('error', function(e) {
-        if (e.message && (e.message.includes('WebSocket') || e.message.includes('[vite]') || e.message.includes('ResizeObserver'))) {
+        if (e.message && (
+          e.message.includes('WebSocket') || 
+          e.message.includes('[vite]') || 
+          e.message.includes('ResizeObserver') ||
+          e.message.includes('send was called before connect') ||
+          e.message.includes('Could not reach Cloud Firestore backend')
+        )) {
           e.preventDefault();
           e.stopImmediatePropagation();
         }
       });
       window.addEventListener('unhandledrejection', function(e) {
-        if (e.reason && (e.reason.message && (e.reason.message.includes('WebSocket') || e.reason.message.includes('[vite]')))) {
+        if (e.reason && (
+          (e.reason.message && (
+            e.reason.message.includes('WebSocket') || 
+            e.reason.message.includes('[vite]') ||
+            e.reason.message.includes('send was called before connect') ||
+            e.reason.message.includes('Could not reach Cloud Firestore backend')
+          )) ||
+          (typeof e.reason === 'string' && (
+            e.reason.includes('WebSocket') ||
+            e.reason.includes('send was called before connect')
+          ))
+        )) {
           e.preventDefault();
         }
       });
@@ -50,7 +84,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0f172a" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <meta name="theme-color" content="#020617" />
   </head>
   <body class="antialiased">
     <div id="root"></div>

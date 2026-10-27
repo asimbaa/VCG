@@ -12,6 +12,8 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: null,
+        includeAssets: ['apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png'],
         devOptions: { enabled: false },
         manifest: {
           id: '/',
@@ -24,6 +26,7 @@ export default defineConfig(({mode}) => {
           start_url: '/',
           scope: '/',
           icons: [
+            { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
             { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
             { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
             { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }

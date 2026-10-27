@@ -27,6 +27,7 @@ import { AutoBugCatcherConsole } from "./components/shared/AutoBugCatcherConsole
 import { FloatingSpeedDial } from "./components/FloatingSpeedDial";
 import { MessageCenter } from "./components/messagecenter/MessageCenter";
 import LogisticsDashboard from "./components/logistics/LogisticsDashboard";
+import { PWAInstallBanner } from "./components/pwa/PWAInstallBanner";
 
 // Global Google Maps Auth Failure Handler
 if (typeof window !== 'undefined') {
@@ -144,6 +145,26 @@ export default function App() {
   const [aiModalTarget, setAiModalTarget] = useState("");
   const [showBanner, setShowBanner] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pwaInstallPrompt, setPwaInstallPrompt] = useState<any>(null);
+
+  // PWA 'beforeinstallprompt' listener for custom installation prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setPwaInstallPrompt(e);
+    };
+    const handleAppInstalled = () => {
+      setPwaInstallPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -293,6 +314,11 @@ export default function App() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 relative h-[100dvh]">
+          {/* Custom PWA Installation Banner for Mobile Users */}
+          <PWAInstallBanner 
+            installPrompt={pwaInstallPrompt} 
+            onClearPrompt={() => setPwaInstallPrompt(null)} 
+          />
           
           {/* Mobile Header */}
           <header className="md:hidden bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800 h-16 flex items-center justify-between px-4 flex-shrink-0">
