@@ -71,6 +71,7 @@ import { LinkComManagerModal } from "./LinkComManagerModal";
 import { CommBankPayIDFlow } from "./CommBankPayIDFlow";
 import { ExternalBankAccountsDashboard } from "../bank/ExternalBankAccountsDashboard";
 import { PaymentHistoryAuditTab } from "./PaymentHistoryAuditTab";
+import { RapidPayQuickTestPanel } from "./RapidPayQuickTestPanel";
 import {
   reconcileAndSettleAllPayments,
   COMMBANK_LINKED_ACCOUNTS,
@@ -466,7 +467,7 @@ export function RapidPay({ user }: { user: any }) {
   const [receiveReqAmount, setReceiveReqAmount] = useState("");
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
-  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts" | "history">("standard");
+  const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts" | "history" | "quick_test">("standard");
   const [recipient, setRecipient] = useState("");
   const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
   const [payIdValue, setPayIdValue] = useState("");
@@ -2035,6 +2036,18 @@ export function RapidPay({ user }: { user: any }) {
           <span>Payment History</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
         </button>
+        <button
+          onClick={() => setTransferType("quick_test")}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+            transferType === "quick_test"
+              ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-md font-black ring-2 ring-emerald-500/30"
+              : "text-amber-800 bg-amber-100/70 hover:bg-amber-200/80 border border-amber-300/60 font-bold"
+          }`}
+        >
+          <Zap className="w-4 h-4 text-amber-600 fill-amber-500" />
+          <span>Quick Fast Test</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        </button>
       </div>
 
       
@@ -2082,7 +2095,13 @@ export function RapidPay({ user }: { user: any }) {
       )}
 
       {/* Render Main Content Panel */}
-      {transferType === "history" ? (
+      {transferType === "quick_test" ? (
+        <RapidPayQuickTestPanel
+          user={user}
+          onNavigateToHistory={() => setTransferType("history")}
+          onNavigateToTab={(tab) => setTransferType(tab as any)}
+        />
+      ) : transferType === "history" ? (
         <PaymentHistoryAuditTab
           user={user}
           onNavigateToPay={(tab) => setTransferType(tab as any)}

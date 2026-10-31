@@ -576,6 +576,9 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([35, 45, 35]);
+    }
     toast.success(`${type} copied to clipboard`);
   };
 

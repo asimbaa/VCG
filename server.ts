@@ -28,19 +28,16 @@ if (missingSecrets.length > 0) {
 const app = express();
 
 // Port selection protocol:
-// 1. In Cloud Run, Nginx runs on port 8080 (or process.env.NGINX_PORT) and reverse-proxies to localhost:3000 (DEFAULT_APP_PORT).
-// 2. The Node/Express app MUST listen on DEFAULT_APP_PORT (3000) so Nginx and control-plane can reach it.
-// 3. Attempting to bind to 8080 when Nginx is active throws EADDRINUSE and causes Cloud Run service failure.
+// 1. In AI Studio dev environment, Nginx is active on port 8080 and reverse-proxies to DEFAULT_APP_PORT (3000).
+// 2. In production Cloud Run (indicated by K_SERVICE or NODE_ENV === 'production' or absence of DEFAULT_APP_PORT),
+//    Cloud Run routes external traffic directly to process.env.PORT (typically 8080).
 const args = process.argv.slice(2);
 const portArgIndex = args.findIndex(arg => arg === '--port' || arg === '-p');
 const CLI_PORT = portArgIndex !== -1 && args[portArgIndex + 1] ? parseInt(args[portArgIndex + 1], 10) : null;
-const PORT = CLI_PORT || (process.env.DEFAULT_APP_PORT
-  ? parseInt(process.env.DEFAULT_APP_PORT, 10)
-  : (process.env.APP_PORT
-      ? parseInt(process.env.APP_PORT, 10)
-      : (process.env.PORT && process.env.PORT !== "8080" && process.env.PORT !== process.env.NGINX_PORT
-          ? parseInt(process.env.PORT, 10)
-          : 3000)));
+const isCloudRun = Boolean(process.env.K_SERVICE || process.env.NODE_ENV === "production" || !process.env.DEFAULT_APP_PORT);
+const PORT = CLI_PORT || (isCloudRun
+  ? (process.env.PORT ? parseInt(process.env.PORT, 10) : 8080)
+  : (process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000));
 
 // Health check endpoints for Cloud Run and load balancers
 app.get(["/healthz", "/health", "/_health", "/livez", "/readyz"], (req, res) => {
