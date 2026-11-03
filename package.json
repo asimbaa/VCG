@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "node scripts/pwa-cache-bust.js && vite build && node scripts/pwa-cache-bust.js --post-build",
     "start": "node server.ts",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"

@@ -17,19 +17,44 @@ export default defineConfig(({mode}) => {
         devOptions: { enabled: false },
         manifest: {
           id: '/',
-          name: 'Valourian Sovereign OS',
+          name: 'Valourian Capital Management',
           short_name: 'Valourian',
-          description: 'A sovereign financial & logistics OS for Valourian Capital Inc.',
+          description: 'Tier 1 Global Treasury OS. Encrypted administrative interface securing over $1.02 Trillion AUD in unified global assets, real estate, global transportation networks, and deep tech investments.',
           theme_color: '#020617',
           background_color: '#020617',
           display: 'standalone',
+          orientation: 'any',
           start_url: '/',
           scope: '/',
+          categories: ['finance', 'business', 'productivity'],
           icons: [
             { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
             { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
             { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
             { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          ],
+          shortcuts: [
+            {
+              name: 'RapidPay Fast Test',
+              short_name: 'RapidPay',
+              description: 'Launch 6-rail rapid payments and settlement test suite',
+              url: '/?tab=rapidpay',
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+            },
+            {
+              name: 'VBank Virtual Cards',
+              short_name: 'Cards',
+              description: 'Manage sovereign digital credit cards and dynamic Quantum CVVs',
+              url: '/?tab=cards',
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+            },
+            {
+              name: 'Sovereign Treasury',
+              short_name: 'Treasury',
+              description: 'View institutional reserves and CommBank linked balances',
+              url: '/?tab=treasury',
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+            }
           ]
         },
         workbox: {

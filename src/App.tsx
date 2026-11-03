@@ -167,7 +167,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Safety fallback: ensure preview screen is instantly rendered within 350ms even if Firebase Auth stalls
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 350);
+
     const unsub = onAuthStateChanged(auth, async (u) => {
+      clearTimeout(safetyTimer);
       setUser(u);
       setLoading(false);
       
@@ -181,7 +187,10 @@ export default function App() {
       completeEmailLogin().catch(console.error);
     }
     
-    return unsub;
+    return () => {
+      clearTimeout(safetyTimer);
+      unsub();
+    };
   }, []);
 
   useEffect(() => {

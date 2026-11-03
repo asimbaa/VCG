@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, ShieldCheck, Zap, ArrowRight, RefreshCw, Send, CheckCircle2, 
   Smartphone, Eye, EyeOff, Copy, QrCode, Wifi, Cloud, Lock, Unlock, Globe,
-  Sparkles, ExternalLink, Flame, ShieldAlert, Cpu
+  Sparkles, ExternalLink, Flame, ShieldAlert, Cpu, ShoppingBag, TrendingUp
 } from 'lucide-react';
 import { useGlobalCurrency } from '../../contexts/CurrencyContext';
 import { NFCTapModal } from '../pay/NFCTapModal';
@@ -23,6 +23,11 @@ import { smsEmailDispatchService } from '../../services/smsEmailDispatchService'
 import { SectionWisdomTooltip } from '../shared/SectionWisdomTooltip';
 import { SmartphoneNfcCardReaderModal } from '../pay/SmartphoneNfcCardReaderModal';
 import { CardGeniusInnovationsModal } from './CardGeniusInnovationsModal';
+import { ExternalAppAutoLoginModal } from './ExternalAppAutoLoginModal';
+import { MassiveRateExpansionModal } from './MassiveRateExpansionModal';
+import { GlobalMerchantPOSModal } from './GlobalMerchantPOSModal';
+import { CardBenefitsShowcaseModal } from './CardBenefitsShowcaseModal';
+import { LuxuryConciergeSection } from './LuxuryConciergeSection';
 import toast from 'react-hot-toast';
 
 export interface BankCard {
@@ -428,6 +433,13 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [isAmexRegistrationModalOpen, setIsAmexRegistrationModalOpen] = useState(false);
   const [selectedGeniusCard, setSelectedGeniusCard] = useState<UnifiedBankCard | null>(null);
   const [isGeniusModalOpen, setIsGeniusModalOpen] = useState(false);
+  const [isAutoLoginModalOpen, setIsAutoLoginModalOpen] = useState(false);
+  const [isRateExpansionModalOpen, setIsRateExpansionModalOpen] = useState(false);
+  const [rateExpansionInitialCardId, setRateExpansionInitialCardId] = useState<string | undefined>(undefined);
+  const [isGlobalPOSModalOpen, setIsGlobalPOSModalOpen] = useState(false);
+  const [posModalInitialCardId, setPosModalInitialCardId] = useState<string | undefined>(undefined);
+  const [isBenefitsModalOpen, setIsBenefitsModalOpen] = useState(false);
+  const [benefitsModalInitialTab, setBenefitsModalInitialTab] = useState<"cashback" | "aviation" | "concierge" | "lounge" | "immense">("cashback");
 
   const openGeniusModal = (card: BankCard) => {
     const rawNum = card.fullNumber || card.number || "";
@@ -796,6 +808,27 @@ export const VBankVirtualCreditCards: React.FC = () => {
         onClose={() => setIsNfcReaderModalOpen(false)}
       />
 
+      {/* Massive Rate Expansion Modal */}
+      <MassiveRateExpansionModal
+        isOpen={isRateExpansionModalOpen}
+        onClose={() => setIsRateExpansionModalOpen(false)}
+        initialCardId={rateExpansionInitialCardId}
+      />
+
+      {/* Global Merchant POS Simulator Modal */}
+      <GlobalMerchantPOSModal
+        isOpen={isGlobalPOSModalOpen}
+        onClose={() => setIsGlobalPOSModalOpen(false)}
+        initialCardId={posModalInitialCardId}
+      />
+
+      {/* Restored Elite Benefits Matrix Modal */}
+      <CardBenefitsShowcaseModal
+        isOpen={isBenefitsModalOpen}
+        onClose={() => setIsBenefitsModalOpen(false)}
+        initialTab={benefitsModalInitialTab}
+      />
+
       <div className="space-y-6">
         {/* Top Header Card */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950/80 to-slate-900 border border-indigo-500/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
@@ -873,6 +906,62 @@ export const VBankVirtualCreditCards: React.FC = () => {
                 >
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Card Innovations &amp; Luhn Proof
                 </button>
+                <button
+                  onClick={() => {
+                    const active = unifiedBankCardSync.getActivePaymentCard();
+                    setSelectedCopyModalCard(active);
+                    setIsAutoLoginModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 border border-amber-500/50 text-amber-200 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                  title="Auto-Login and 1-Click Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas with asim.nsw@gmail.com"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5 text-amber-400" /> External Apps Auto-Login (Amazon • Tesla • Uber)
+                </button>
+                <button
+                  onClick={() => {
+                    const active = unifiedBankCardSync.getActivePaymentCard();
+                    setRateExpansionInitialCardId(active?.id);
+                    setIsRateExpansionModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-400 hover:to-indigo-500 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-emerald-500/30 cursor-pointer animate-pulse"
+                  title="Pay via Bank Card to expand card APY to 15.00% - 25.00% p.a. & 10% - 15% cashback"
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Massive Rate Expansion (Pay via Card)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const active = unifiedBankCardSync.getActivePaymentCard();
+                    setPosModalInitialCardId(active?.id);
+                    setIsGlobalPOSModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-amber-500/30 cursor-pointer"
+                  title="Test card charges across USA, UK, EU, and Australia merchants with instant pre-arrival clearance"
+                >
+                  <Globe className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Global POS Simulator (USA • UK • EU • AUS)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setBenefitsModalInitialTab("cashback");
+                    setIsBenefitsModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-emerald-500/30 cursor-pointer"
+                  title="Restored Elite Benefits: 5% Uncapped Cashback, Private Jet Fleet, 24/7 Diplomatic Concierge"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Restored Elite Benefits (5% Cashback &amp; Jets)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    smsEmailDispatchService.dispatchAllCardsPackage(cards);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  title="Email entire portfolio of legitimate credit &amp; debit cards to asim.nsw@gmail.com"
+                >
+                  <Send className="w-3.5 h-3.5 text-white" />
+                  <span>Email All Cards Package</span>
+                </button>
               </div>
             </div>
 
@@ -909,6 +998,9 @@ export const VBankVirtualCreditCards: React.FC = () => {
             setIsCopyModalOpen(true);
           }} 
         />
+
+        {/* Dedicated Luxury Concierge Sub-Component (Aviation, Michelin Dining & Live In-App Updates) */}
+        <LuxuryConciergeSection />
 
         {/* Main Grid: Card Stack + Operations Panel */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -1132,6 +1224,32 @@ export const VBankVirtualCreditCards: React.FC = () => {
                           Copy Details & Merchant POS
                         </button>
 
+                        {/* Auto-Login to Amazon, Tesla, Uber, Uber Eats, etc. */}
+                        <button
+                          onClick={() => {
+                            setSelectedCopyModalCard(card);
+                            setIsAutoLoginModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
+                          title="Auto-Login & Saved Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas"
+                        >
+                          <ShoppingBag className="w-3 h-3 text-amber-400" />
+                          Auto-Login &amp; Apps Vault
+                        </button>
+
+                        {/* Massive Rate Expansion */}
+                        <button
+                          onClick={() => {
+                            setRateExpansionInitialCardId(card.id);
+                            setIsRateExpansionModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
+                          title="Pay via this card to activate Massive Rate Expansion (up to 25% APY & 15% cashback)"
+                        >
+                          <TrendingUp className="w-3 h-3 text-emerald-400" />
+                          <span>Expand APY Rate</span>
+                        </button>
+
                         {/* Instant SMS & Email Dispatch for this card */}
                         <button
                           onClick={() => smsEmailDispatchService.dispatchCardCredentials(card)}
@@ -1139,7 +1257,20 @@ export const VBankVirtualCreditCards: React.FC = () => {
                           title="Send card credentials via encrypted SMS to +61 401 044 335 and email to asim.nsw@gmail.com"
                         >
                           <Send className="w-3 h-3 fill-amber-400" />
-                          Send SMS & Email
+                          Send SMS &amp; Email
+                        </button>
+
+                        {/* Global Merchant POS Simulator for this specific card */}
+                        <button
+                          onClick={() => {
+                            setPosModalInitialCardId(card.id);
+                            setIsGlobalPOSModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-amber-600/30 hover:from-amber-500/40 hover:to-orange-500/40 text-amber-200 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm active:scale-95"
+                          title="Authorize and test pre-arrival charges at merchants across USA, UK, EU, and Australia"
+                        >
+                          <Globe className="w-3 h-3 text-amber-400" />
+                          <span>Global POS Test</span>
                         </button>
 
                         {/* If AMEX, show AMEX App Sync */}
@@ -1365,6 +1496,12 @@ export const VBankVirtualCreditCards: React.FC = () => {
             )
           );
         }}
+      />
+
+      <ExternalAppAutoLoginModal
+        isOpen={isAutoLoginModalOpen}
+        onClose={() => setIsAutoLoginModalOpen(false)}
+        initialCard={selectedCopyModalCard}
       />
     </>
   );

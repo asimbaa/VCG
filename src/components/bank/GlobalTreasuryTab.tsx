@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { motion } from 'framer-motion';
-import { Globe, TrendingUp, ShieldCheck, DollarSign, Activity, Lock, BarChart3, Database } from 'lucide-react';
+import { Globe, TrendingUp, ShieldCheck, DollarSign, Activity, Lock, BarChart3, Database, Zap, Sparkles, CreditCard, ChevronRight } from 'lucide-react';
+import { MassiveRateExpansionModal } from './MassiveRateExpansionModal';
 
 const yieldData = [
   { month: 'Jan', yield: 2.1, benchmark: 1.8 },
@@ -47,6 +48,34 @@ const formatTrillions = (value: number) => {
 
 export function GlobalTreasuryTab() {
   const [activeMetric, setActiveMetric] = useState<'yield' | 'allocation'>('yield');
+  const [isRateExpansionOpen, setIsRateExpansionOpen] = useState(false);
+  const [activeExpansion, setActiveExpansion] = useState<{
+    tierName: string;
+    expandedApy: number;
+    cashbackRate: number;
+    treasuryMultiplier: number;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem("valourian_active_rate_expansion");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      tierName: "Quantum Treasury Multiplier",
+      expandedApy: 0.15,
+      cashbackRate: 0.10,
+      treasuryMultiplier: 5.0
+    };
+  });
+
+  useEffect(() => {
+    const handleExpansion = (e: any) => {
+      if (e.detail) {
+        setActiveExpansion(e.detail);
+      }
+    };
+    window.addEventListener("valourian_rate_expansion_activated", handleExpansion);
+    return () => window.removeEventListener("valourian_rate_expansion_activated", handleExpansion);
+  }, []);
   
   const totalAUM = allocationData.reduce((acc, curr) => acc + curr.value, 0);
 
@@ -97,6 +126,48 @@ export function GlobalTreasuryTab() {
           </div>
         </div>
       </div>
+
+      {/* Massive Rate Expansion Banner */}
+      <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-indigo-950/80 rounded-3xl p-6 border border-emerald-500/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+        <div className="flex items-start sm:items-center gap-4 relative z-10">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 shadow-inner">
+            <Zap className="w-7 h-7 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Massive Rate Expansion
+              </span>
+              <span className="text-xs font-mono text-slate-300">
+                Active Tier: <strong className="text-white">{activeExpansion.tierName}</strong> ({(activeExpansion.expandedApy * 100).toFixed(2)}% APY)
+              </span>
+            </div>
+            <h3 className="text-lg font-black text-white uppercase tracking-wider">
+              Pay via Bank Card to Scale Institutional Rates & Yields
+            </h3>
+            <p className="text-xs text-slate-400 font-mono mt-0.5 max-w-2xl">
+              1-Click settlement using Centurion Black or CBA Diamond to unlock up to 25.00% APY, 15% Cashback, and 10x Treasury Multiplier.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 relative z-10 w-full sm:w-auto">
+          <button
+            onClick={() => setIsRateExpansionOpen(true)}
+            className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center justify-center gap-2.5 cursor-pointer"
+          >
+            <CreditCard className="w-4 h-4 text-slate-950" />
+            <span>Pay & Expand Rates</span>
+            <ChevronRight className="w-4 h-4 text-slate-950" />
+          </button>
+        </div>
+      </div>
+
+      <MassiveRateExpansionModal
+        isOpen={isRateExpansionOpen}
+        onClose={() => setIsRateExpansionOpen(false)}
+      />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

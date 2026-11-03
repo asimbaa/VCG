@@ -16,7 +16,8 @@ import {
   ExternalLink,
   ChevronDown,
   X,
-  FileText
+  FileText,
+  ShoppingBag
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -29,8 +30,13 @@ import {
 } from "../../services/linkComService";
 import { SmartphoneNfcCardReaderModal } from "../pay/SmartphoneNfcCardReaderModal";
 import { CardGeniusInnovationsModal } from "../bank/CardGeniusInnovationsModal";
+import { ExternalAppAutoLoginModal } from "../bank/ExternalAppAutoLoginModal";
+import { MassiveRateExpansionModal } from "../bank/MassiveRateExpansionModal";
 import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
 import { SectionWisdomTooltip } from "./SectionWisdomTooltip";
+import { GlobalMerchantPOSModal } from "../bank/GlobalMerchantPOSModal";
+import { CardBenefitsShowcaseModal } from "../bank/CardBenefitsShowcaseModal";
+import { smsEmailDispatchService } from "../../services/smsEmailDispatchService";
 
 interface QuickExecutiveDockProps {
   onNavigate: (tab: string, subTab?: any) => void;
@@ -42,6 +48,10 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
   const [showCardModal, setShowCardModal] = useState(false);
   const [showNfcReaderModal, setShowNfcReaderModal] = useState(false);
   const [showGeniusModal, setShowGeniusModal] = useState(false);
+  const [showAutoLoginModal, setShowAutoLoginModal] = useState(false);
+  const [showRateExpansionModal, setShowRateExpansionModal] = useState(false);
+  const [showGlobalPOSModal, setShowGlobalPOSModal] = useState(false);
+  const [showBenefitsModal, setShowBenefitsModal] = useState(false);
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
 
   const activeCard = BASE_BANKING_CREDIT_CARDS[selectedCardIdx] || BASE_BANKING_CREDIT_CARDS[0];
@@ -105,6 +115,54 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
           >
             <Sparkles className="w-3 h-3 text-emerald-400" />
             <span>Card Innovations &amp; Luhn</span>
+          </button>
+
+          <button
+            onClick={() => setShowAutoLoginModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Auto-Login and 1-Click Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas with asim.nsw@gmail.com"
+          >
+            <ShoppingBag className="w-3 h-3 text-amber-400" />
+            <span>Apps Auto-Login (Amazon • Tesla • Uber)</span>
+          </button>
+
+          <button
+            onClick={() => setShowRateExpansionModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Pay via Bank Card to expand card APY to 15.00% - 25.00% p.a. & 10% - 15% cashback"
+          >
+            <TrendingUp className="w-3 h-3 text-emerald-400" />
+            <span>Rate Expansion (Pay via Card)</span>
+          </button>
+
+          <button
+            onClick={() => setShowGlobalPOSModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Global Merchant POS Terminal Simulator for USA, UK, EU, and AUS"
+          >
+            <Globe className="w-3 h-3 text-amber-400" />
+            <span>POS Simulator (USA • UK • EU • AUS)</span>
+          </button>
+
+          <button
+            onClick={() => setShowBenefitsModal(true)}
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Restored Elite Benefits: 5% Uncapped Cashback, Private Aviation, 24/7 Diplomatic Concierge"
+          >
+            <Sparkles className="w-3 h-3 text-emerald-400" />
+            <span>5% Cashback &amp; Jets</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const cards = unifiedBankCardSync.getCards();
+              smsEmailDispatchService.dispatchAllCardsPackage(cards);
+            }}
+            className="px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Email all legitimate card credentials to asim.nsw@gmail.com"
+          >
+            <Send className="w-3 h-3 text-blue-400" />
+            <span>Email Cards</span>
           </button>
 
           <SectionWisdomTooltip 
@@ -328,6 +386,31 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
         card={unifiedBankCardSync.getActivePaymentCard()}
         isOpen={showGeniusModal}
         onClose={() => setShowGeniusModal(false)}
+      />
+
+      {/* External Apps Auto-Login & Card Vault Modal */}
+      <ExternalAppAutoLoginModal
+        isOpen={showAutoLoginModal}
+        onClose={() => setShowAutoLoginModal(false)}
+        initialCard={activeCard}
+      />
+
+      {/* Massive Rate Expansion Modal */}
+      <MassiveRateExpansionModal
+        isOpen={showRateExpansionModal}
+        onClose={() => setShowRateExpansionModal(false)}
+      />
+
+      {/* Global Merchant POS Simulator Modal */}
+      <GlobalMerchantPOSModal
+        isOpen={showGlobalPOSModal}
+        onClose={() => setShowGlobalPOSModal(false)}
+      />
+
+      {/* Restored Elite Benefits Matrix Modal */}
+      <CardBenefitsShowcaseModal
+        isOpen={showBenefitsModal}
+        onClose={() => setShowBenefitsModal(false)}
       />
     </>
   );

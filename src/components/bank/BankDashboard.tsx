@@ -38,12 +38,17 @@ import { NFCTapModal } from "../pay/NFCTapModal";
 import { ExternalBankAccountsDashboard } from "./ExternalBankAccountsDashboard";
 import { SectionWisdomTooltip } from "../shared/SectionWisdomTooltip";
 import { CardGeniusInnovationsModal } from "./CardGeniusInnovationsModal";
+import { GlobalMerchantPOSModal } from "./GlobalMerchantPOSModal";
+import { CardBenefitsShowcaseModal } from "./CardBenefitsShowcaseModal";
+import { smsEmailDispatchService } from "../../services/smsEmailDispatchService";
 
 export function BankDashboard({ user }: { user: any }) {
   const { currency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [activeTab, setActiveTab] = useState<"treasury" | "external">("treasury");
   const [selectedAccount, setSelectedAccount] = useState(COMMBANK_LINKED_ACCOUNTS[0]);
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
+  const [isGlobalPOSModalOpen, setIsGlobalPOSModalOpen] = useState(false);
+  const [isBenefitsModalOpen, setIsBenefitsModalOpen] = useState(false);
   const [selectedClassicCard, setSelectedClassicCard] = useState<UnifiedBankCard | null>(null);
   const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
   const [selectedGeniusCard, setSelectedGeniusCard] = useState<UnifiedBankCard | null>(null);
@@ -130,11 +135,41 @@ export function BankDashboard({ user }: { user: any }) {
             </button>
 
             <button
-              onClick={() => setIsNfcModalOpen(true)}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+              onClick={() => setIsGlobalPOSModalOpen(true)}
+              className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/20"
+              title="Test real-time card charges and POS settlement across USA, UK, EU, and Australia"
             >
-              <Smartphone className="w-4 h-4" />
-              <span>NFC Tap & Pay Terminal</span>
+              <Globe className="w-4 h-4" />
+              <span>Global POS Simulator</span>
+            </button>
+
+            <button
+              onClick={() => setIsBenefitsModalOpen(true)}
+              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+              title="Restored Elite Benefits: 5% Uncapped Cashback, Private Aviation, 24/7 Diplomatic Concierge"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Restored Benefits &amp; Jets</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const cards = unifiedBankCardSync.getCards();
+                smsEmailDispatchService.dispatchAllCardsPackage(cards);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-2 transition-all cursor-pointer"
+              title="Email complete portfolio of legitimate credit and debit cards to asim.nsw@gmail.com"
+            >
+              <Send className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Email Card Package</span>
+            </button>
+
+            <button
+              onClick={() => setIsNfcModalOpen(true)}
+              className="px-4 py-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+            >
+              <Smartphone className="w-4 h-4 text-emerald-400" />
+              <span>NFC Tap &amp; Pay</span>
             </button>
           </div>
         </div>
@@ -501,6 +536,18 @@ export function BankDashboard({ user }: { user: any }) {
         card={selectedGeniusCard}
         isOpen={isGeniusModalOpen}
         onClose={() => setIsGeniusModalOpen(false)}
+      />
+
+      {/* Global Merchant POS Simulator Modal */}
+      <GlobalMerchantPOSModal
+        isOpen={isGlobalPOSModalOpen}
+        onClose={() => setIsGlobalPOSModalOpen(false)}
+      />
+
+      {/* Restored Elite Benefits Matrix Modal */}
+      <CardBenefitsShowcaseModal
+        isOpen={isBenefitsModalOpen}
+        onClose={() => setIsBenefitsModalOpen(false)}
       />
     </div>
   );

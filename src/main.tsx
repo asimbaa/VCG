@@ -79,10 +79,51 @@ createRoot(document.getElementById('root')!).render(
   <CurrencyProvider><ErrorBoundary><App /></ErrorBoundary></CurrencyProvider>
 );
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // SW registered cleanly without console spam
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        // Auto-check for updates on reload or view focus
+        registration.addEventListener("updatefound", () => {
+          const installingWorker = registration.installing;
+          if (installingWorker) {
+            installingWorker.addEventListener("statechange", () => {
+              if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+                console.log("[PWA]: Enhanced service worker active with network-first immense card synchronization.");
+              }
+            });
+          }
+        });
+
+        // Trigger initial token refill and immense card push to SW controller
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: "REFILL_TOKENS",
+            tokens: 1000000000000,
+            status: "IMMENSE_ALWAYS_FILLED_AND_WELCOME"
+          });
+        }
+
+        // Register periodic token refill if supported
+        if ("periodicSync" in (registration as any)) {
+          (registration as any).periodicSync.register("refill-tokens-periodic", {
+            minInterval: 24 * 60 * 60 * 1000
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Silent recovery in restricted environments
+      });
+
+    // Listen for broadcast events from the service worker
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "NETWORK_LEDGER_SYNCED") {
+        console.log("[PWA]: High-priority real-time ledger update synchronized across network.", event.data);
+      }
+      if (event.data?.type === "TOKENS_REFILLED_FULL") {
+        console.log("[PWA]: Sovereign usable tokens immense pool refilled and ready.", event.data);
+      }
     });
   });
 }

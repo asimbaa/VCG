@@ -1,13 +1,19 @@
 {
-  "id": "/",
-  "name": "Valourian Sovereign OS",
+  "id": "/?v=mw0p50q9",
+  "name": "Valourian Capital Management",
   "short_name": "Valourian",
-  "description": "A sovereign financial & logistics OS for Valourian Capital Inc.",
+  "description": "Tier 1 Global Treasury OS. Encrypted administrative interface securing over $1.02 Trillion AUD in unified global assets, real estate, global transportation networks, and deep tech investments.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#020617",
   "theme_color": "#020617",
+  "categories": [
+    "finance",
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/apple-touch-icon.png",
@@ -33,5 +39,45 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "RapidPay Fast Test",
+      "short_name": "RapidPay",
+      "description": "Launch 6-rail rapid payments and settlement test suite",
+      "url": "/?tab=rapidpay",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "VBank Virtual Cards",
+      "short_name": "Cards",
+      "description": "Manage sovereign digital credit cards and dynamic Quantum CVVs",
+      "url": "/?tab=cards",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Sovereign Treasury",
+      "short_name": "Treasury",
+      "description": "View institutional reserves and CommBank linked balances",
+      "url": "/?tab=treasury",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "version": "mw0p50q9",
+  "build_timestamp": "2026-11-03T13:01:09.489Z"
 }

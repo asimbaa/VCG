@@ -61,6 +61,44 @@ export interface UnifiedBankCard {
   lastUpdated: string;
 }
 
+export interface MerchantTransaction {
+  id: string;
+  cardId: string;
+  cardName: string;
+  cardLast4: string;
+  merchantName: string;
+  merchantLocation: string;
+  region: "USA" | "UK" | "EU" | "AUS" | "Global";
+  foreignAmount: number;
+  foreignCurrency: string;
+  convertedAUD: number;
+  exchangeRate: number;
+  cashbackEarned: number;
+  timestamp: string;
+  status: "approved_instant";
+  authorizationCode: string;
+  arqcToken: string;
+  rail: string;
+  preArrivalApproved: boolean;
+}
+
+export interface SovereignTokenPool {
+  poolId: string;
+  totalTokens: number;
+  availableTokens: number;
+  allocatedTokens: number;
+  refillCount: number;
+  status: "FULL_AND_WELCOME";
+  policy: "INSTANT_AUTO_REFILL_PERPETUAL";
+  quantumCvvTokensReady: boolean;
+  biometricTokensActive: boolean;
+  offlineSyncTokensCached: boolean;
+  lastRefilled: string;
+}
+
+export const IMMENSE_DEFAULT_TOKENS = 1000000000000; // 1 Trillion usable tokens
+export const SOVEREIGN_TOKENS_REFILLED_EVENT = "valourian_tokens_refilled";
+
 export const TARGET_LINK_EMAIL = "asim.nsw@gmail.com";
 export const TARGET_LINK_HOLDER = "MR. ASIM ARYAL";
 export const TARGET_USER_PHONE = "+61 401 044 335";
@@ -116,11 +154,11 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     number: "5163 9201 4419 8208",
     fullNumber: "5163920144198208",
     last4: "8208",
-    balance: 500000000,
+    balance: 1000000000,
     currency: "AUD",
     type: "virtual",
     status: "active",
-    limit: 500000000,
+    limit: 1000000000,
     cvv: "820",
     dynamicCvv: "820",
     expiry: "10/30",
@@ -132,15 +170,15 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dualRouting: "eftpos_domestic",
     burnerMode: false,
     appleGooglePayEnrolled: true,
-    cashbackRate: 0.035,
+    cashbackRate: 0.045,
     accumulatedCashback: 22100.00,
     apyInterestRate: 0.051,
     accruedInterest: 19800.00,
     rewardsPoints: 1250000,
     roundUpSavings: 3120.00,
     roundUpEnabled: true,
-    dailySpendingLimit: 10000000,
-    atmDailyLimit: 250000,
+    dailySpendingLimit: 50000000,
+    atmDailyLimit: 500000,
     onlinePaymentsEnabled: true,
     internationalPaymentsEnabled: true,
     contactlessEnabled: true,
@@ -159,11 +197,11 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     number: "4564 8192 3019 5524",
     fullNumber: "4564819230195524",
     last4: "5524",
-    balance: 750000000,
+    balance: 1000000000,
     currency: "AUD",
     type: "virtual",
     status: "active",
-    limit: 750000000,
+    limit: 1000000000,
     cvv: "552",
     dynamicCvv: "552",
     expiry: "09/31",
@@ -175,15 +213,15 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dualRouting: "eftpos_domestic",
     burnerMode: false,
     appleGooglePayEnrolled: true,
-    cashbackRate: 0.035,
+    cashbackRate: 0.04,
     accumulatedCashback: 31400.00,
     apyInterestRate: 0.051,
     accruedInterest: 28500.00,
     rewardsPoints: 1890000,
     roundUpSavings: 5890.00,
     roundUpEnabled: true,
-    dailySpendingLimit: 20000000,
-    atmDailyLimit: 300000,
+    dailySpendingLimit: 50000000,
+    atmDailyLimit: 500000,
     onlinePaymentsEnabled: true,
     internationalPaymentsEnabled: true,
     contactlessEnabled: true,
@@ -202,11 +240,11 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     number: "4111 2948 1029 4816",
     fullNumber: "4111294810294816",
     last4: "4816",
-    balance: 600000000,
+    balance: 1000000000,
     currency: "AUD",
     type: "virtual",
     status: "active",
-    limit: 600000000,
+    limit: 1000000000,
     cvv: "481",
     dynamicCvv: "481",
     expiry: "05/30",
@@ -218,15 +256,15 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     dualRouting: "eftpos_domestic",
     burnerMode: false,
     appleGooglePayEnrolled: true,
-    cashbackRate: 0.035,
+    cashbackRate: 0.04,
     accumulatedCashback: 18200.00,
     apyInterestRate: 0.051,
     accruedInterest: 21400.00,
     rewardsPoints: 1420000,
     roundUpSavings: 2750.00,
     roundUpEnabled: true,
-    dailySpendingLimit: 15000000,
-    atmDailyLimit: 250000,
+    dailySpendingLimit: 50000000,
+    atmDailyLimit: 500000,
     onlinePaymentsEnabled: true,
     internationalPaymentsEnabled: true,
     contactlessEnabled: true,
@@ -940,6 +978,139 @@ export class UnifiedBankCardSyncService {
     return nextBal;
   }
 
+  public restoreAllCardsToImmenseValues(): void {
+    const cards = this.getCards();
+    const updated = cards.map((c) => ({
+      ...c,
+      balance: Math.max(c.balance, 1000000000), // minimum $1 Billion AUD
+      limit: 'unlimited' as const,
+      zeroDeclineGuaranteed: true,
+      onlinePaymentsEnabled: true,
+      internationalPaymentsEnabled: true,
+      contactlessEnabled: true,
+      loungeAccess: true,
+      travelInsuranceCovered: true,
+      purchaseProtectionCovered: true,
+      biometricsEnclaveEnabled: true,
+      appleGooglePayPassProvisioned: true,
+      appleGooglePayEnrolled: true,
+      lastUpdated: new Date().toISOString()
+    }));
+    this.saveCards(updated);
+  }
+
+  public getRecentTransactions(): MerchantTransaction[] {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("valourian_merchant_transactions_history");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  }
+
+  public recordMerchantTransaction(tx: MerchantTransaction): void {
+    try {
+      if (typeof window !== "undefined") {
+        const existing = this.getRecentTransactions();
+        const updated = [tx, ...existing].slice(0, 50);
+        localStorage.setItem("valourian_merchant_transactions_history", JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent("valourian_transaction_recorded", { detail: { transaction: tx } }));
+      }
+    } catch (e) {
+      console.warn("Failed to record transaction:", e);
+    }
+  }
+
+  public spendFromCard(
+    cardId: string,
+    options: {
+      merchantName: string;
+      merchantLocation: string;
+      region: "USA" | "UK" | "EU" | "AUS" | "Global";
+      foreignAmount: number;
+      foreignCurrency: string;
+      category?: string;
+    }
+  ): {
+    success: boolean;
+    card: UnifiedBankCard;
+    transaction: MerchantTransaction;
+    newBalance: number;
+    cashbackEarned: number;
+    newCashbackTotal: number;
+  } {
+    const card = this.getCardById(cardId) || this.getActivePaymentCard();
+    const FX_RATES: Record<string, number> = {
+      AUD: 1.00,
+      USD: 1.52,
+      EUR: 1.65,
+      GBP: 1.93,
+      JPY: 0.010,
+      CHF: 1.72,
+      SGD: 1.13
+    };
+
+    const rate = FX_RATES[options.foreignCurrency] || 1.0;
+    const convertedAUD = Math.round(options.foreignAmount * rate * 100) / 100;
+    const cashbackRate = card.cashbackRate || 0.05; // 5% cashback
+    const cashbackEarned = Math.round(convertedAUD * cashbackRate * 100) / 100;
+
+    let updatedCard: UnifiedBankCard = card;
+    this.updateCard(card.id, (c) => {
+      const nextBal = Math.max(0, c.balance - convertedAUD);
+      const nextCashback = (c.accumulatedCashback || 0) + cashbackEarned;
+      const nextPoints = (c.rewardsPoints || 0) + Math.floor(convertedAUD * 2);
+      updatedCard = {
+        ...c,
+        balance: nextBal,
+        accumulatedCashback: nextCashback,
+        rewardsPoints: nextPoints,
+        zeroDeclineGuaranteed: true
+      };
+      return updatedCard;
+    });
+
+    const txId = `TX-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const authCode = `AUTH-${Math.floor(100000 + Math.random() * 900000)}`;
+    const arqc = `ARQC-${Math.random().toString(36).substring(2, 10).toUpperCase()}-SOV`;
+
+    const tx: MerchantTransaction = {
+      id: txId,
+      cardId: updatedCard.id,
+      cardName: updatedCard.name,
+      cardLast4: updatedCard.last4,
+      merchantName: options.merchantName,
+      merchantLocation: options.merchantLocation,
+      region: options.region,
+      foreignAmount: options.foreignAmount,
+      foreignCurrency: options.foreignCurrency,
+      convertedAUD,
+      exchangeRate: rate,
+      cashbackEarned,
+      timestamp: new Date().toISOString(),
+      status: "approved_instant",
+      authorizationCode: authCode,
+      arqcToken: arqc,
+      rail: options.region === "AUS" ? "APCA / eftpos Domestic" : `${updatedCard.network} Global Zero-FX`,
+      preArrivalApproved: true
+    };
+
+    this.recordMerchantTransaction(tx);
+
+    return {
+      success: true,
+      card: updatedCard,
+      transaction: tx,
+      newBalance: updatedCard.balance,
+      cashbackEarned,
+      newCashbackTotal: updatedCard.accumulatedCashback
+    };
+  }
+
   public switchCardCurrency(cardId: string, newCurrency: string): boolean {
     const validCurrencies = ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"];
     if (!validCurrencies.includes(newCurrency)) return false;
@@ -1078,6 +1249,77 @@ export class UnifiedBankCardSyncService {
   private notifyListeners() {
     const current = this.getCards();
     this.listeners.forEach((cb) => cb(current));
+    this.syncTokensWithServiceWorker();
+  }
+
+  private tokenPool: SovereignTokenPool = {
+    poolId: "sovereign_tokens_primary",
+    totalTokens: IMMENSE_DEFAULT_TOKENS,
+    availableTokens: IMMENSE_DEFAULT_TOKENS,
+    allocatedTokens: IMMENSE_DEFAULT_TOKENS,
+    refillCount: 1,
+    status: "FULL_AND_WELCOME",
+    policy: "INSTANT_AUTO_REFILL_PERPETUAL",
+    quantumCvvTokensReady: true,
+    biometricTokensActive: true,
+    offlineSyncTokensCached: true,
+    lastRefilled: new Date().toISOString()
+  };
+
+  public getUsableTokens(): number {
+    // Immense tokens are perpetually guaranteed to be fully available and welcome
+    if (this.tokenPool.availableTokens < IMMENSE_DEFAULT_TOKENS * 0.9) {
+      this.refillAllTokens();
+    }
+    return this.tokenPool.availableTokens;
+  }
+
+  public getTokenPool(): SovereignTokenPool {
+    return { ...this.tokenPool };
+  }
+
+  public consumeTokens(amount: number = 1): boolean {
+    // Always grant tokens and instantly replenish so they are perpetual
+    this.tokenPool.availableTokens = Math.max(
+      IMMENSE_DEFAULT_TOKENS,
+      this.tokenPool.availableTokens - amount
+    );
+    this.tokenPool.refillCount++;
+    this.tokenPool.lastRefilled = new Date().toISOString();
+    this.syncTokensWithServiceWorker();
+    return true;
+  }
+
+  public refillAllTokens(): SovereignTokenPool {
+    this.tokenPool.availableTokens = IMMENSE_DEFAULT_TOKENS;
+    this.tokenPool.totalTokens = IMMENSE_DEFAULT_TOKENS;
+    this.tokenPool.allocatedTokens = IMMENSE_DEFAULT_TOKENS;
+    this.tokenPool.refillCount++;
+    this.tokenPool.lastRefilled = new Date().toISOString();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(SOVEREIGN_TOKENS_REFILLED_EVENT, { detail: { ...this.tokenPool } })
+      );
+    }
+    this.syncTokensWithServiceWorker();
+    return { ...this.tokenPool };
+  }
+
+  public syncTokensWithServiceWorker(): void {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      try {
+        navigator.serviceWorker.controller.postMessage({
+          type: "REFILL_TOKENS",
+          tokens: this.tokenPool.availableTokens,
+          status: "IMMENSE_ALWAYS_FILLED_AND_WELCOME"
+        });
+        navigator.serviceWorker.controller.postMessage({
+          type: "SYNC_IMMENSE_CARDS",
+          cards: this.getCards()
+        });
+      } catch {}
+    }
   }
 }
 
