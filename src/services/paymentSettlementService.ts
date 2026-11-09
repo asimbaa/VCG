@@ -576,9 +576,15 @@ export async function executeBilateralPayment(
       );
     });
 
-    // If still not matched, check if recipient is Asim Aryal or Asim's PayID (routes to CBA)
+    // If still not matched, check if recipient is Valourian Capital or Asim Aryal or Asim's PayID (routes to CBA)
     if (!matchedRecipientCbaAcc) {
       if (
+        recipientNameLower.includes("valourian") ||
+        recipientTargetLower.includes("valouriancapital") ||
+        recipientTargetLower.includes("valourian")
+      ) {
+        matchedRecipientCbaAcc = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_sovereign_vault") || COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_business_trans") || COMMBANK_LINKED_ACCOUNTS[0];
+      } else if (
         recipientNameLower.includes("asim") ||
         recipientNameLower.includes("aryal") ||
         recipientTargetLower.includes("asim") ||
@@ -1176,6 +1182,9 @@ export const CENTRAL_HUMAN_DIRECTORY: Record<string, { name: string; bank: strin
   "+6591234567": { name: "CHUA KIAN WEI", bank: "DBS Bank Singapore" },
 
   // Verified Email Directory
+  "valouriancapital@gmail.com": { name: "VALOURIAN CAPITAL", bank: "Commonwealth Bank of Australia" },
+  "valouriancapital": { name: "VALOURIAN CAPITAL", bank: "Commonwealth Bank of Australia" },
+  "valourian": { name: "VALOURIAN CAPITAL", bank: "Commonwealth Bank of Australia" },
   "asim.nsw@gmail.com": { name: "ASIM ARYAL", bank: "Commonwealth Bank of Australia" },
   "asim@valourian.com": { name: "ASIM ARYAL", bank: "Commonwealth Bank of Australia" },
   "support@redcross.org.au": { name: "AUSTRALIAN RED CROSS SOCIETY", bank: "Westpac Banking Corporation" },
@@ -1397,6 +1406,19 @@ export async function resolvePayIDDirectory(
       };
     }
 
+    if (emailLower.includes("valourian")) {
+      return {
+        isValid: true,
+        registeredName: "VALOURIAN CAPITAL",
+        payIdType: "email",
+        payIdValue: cleanVal,
+        countryCode: parsed.countryCode,
+        institution: "Commonwealth Bank of Australia",
+        fastPaymentEligible: true,
+        matchConfidence: "exact",
+      };
+    }
+
     const domain = emailLower.split("@")[1] || "";
     const userPart = emailLower.split("@")[0] || "";
 
@@ -1547,6 +1569,16 @@ export async function resolvePayIDDirectory(
  * Fixed: no "...2" or artificial suffixes
  */
 export const DEFAULT_COMMBANK_PAYEES: PayIDContact[] = [
+  {
+    id: "payee-valourian-capital",
+    name: "VALOURIAN CAPITAL",
+    payIdType: "email",
+    payIdValue: "valouriancapital@gmail.com",
+    bankName: "Commonwealth Bank of Australia",
+    avatarColor: "bg-amber-500",
+    category: "favorites",
+    lastPaidDate: "Just now",
+  },
   {
     id: "payee-asim-aryal-primary",
     name: "Asim Aryal",

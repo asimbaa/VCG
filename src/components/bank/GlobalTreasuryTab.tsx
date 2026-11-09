@@ -17,7 +17,8 @@ const yieldData = [
 
 const allocationData = [
   { name: 'Fiat Reserves (AUD/USD)', value: 2450000000000, color: '#3b82f6' },
-  { name: 'Strategic Equity Stakes', value: 800000000000, color: '#10b981' },
+  { name: 'Planetary Flourishing & Green Endowment', value: 350000000000, color: '#10b981' },
+  { name: 'Strategic Equity Stakes', value: 800000000000, color: '#059669' },
   { name: 'Corporate Bonds (High Yield)', value: 500000000000, color: '#8b5cf6' },
   { name: 'Physical Real Estate', value: 850000000000, color: '#f59e0b' },
   { name: 'Deep Tech & Compute', value: 75000000000, color: '#ec4899' },

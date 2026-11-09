@@ -73,7 +73,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
     const expiry = card.expiry || '12/28';
     const [expMonth, expYear] = expiry.includes('/') ? expiry.split('/') : ['12', '28'];
     const cvv = card.cvv || card.dynamicCvv || '482';
-    const holder = card.holder || 'ASIM NSW';
+    const holder = card.holder || card.cardholder || 'ASIM ARYAL';
     const bundle = `Card Number: ${rawNum}\nExp Month: ${expMonth}\nExp Year: ${expYear.length === 2 ? '20' + expYear : expYear}\nCVV: ${cvv}\nCardholder: ${holder}\nBilling Address: ${AU_DEFAULT_BILLING.line1}, ${AU_DEFAULT_BILLING.city}, ${AU_DEFAULT_BILLING.state} ${AU_DEFAULT_BILLING.postcode}, Australia`;
     
     handleCopyText(bundle, 'AutoFill Universal Bundle');

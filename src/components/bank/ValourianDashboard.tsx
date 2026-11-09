@@ -20,6 +20,7 @@ const SovereignLogisticsTab = React.lazy(() => import("./SovereignLogisticsTab")
 
 const PortfolioEntitiesTab = React.lazy(() => import("./PortfolioEntitiesTab").then(module => ({ default: module.PortfolioEntitiesTab })));
 const GlobalEquities = React.lazy(() => import("./GlobalEquities").then(module => ({ default: module.GlobalEquities })));
+const SustainableFlourishingHub = React.lazy(() => import("./SustainableFlourishingHub").then(module => ({ default: module.SustainableFlourishingHub })));
 import { VBankVirtualCreditCards } from "./VBankVirtualCreditCards";
 import { LinkComManagerModal } from "../pay/LinkComManagerModal";
 import { CrossPlatformCardWalletModal } from "./CrossPlatformCardWalletModal";
@@ -116,6 +117,7 @@ import {
   Crown,
   Rocket,
   Globe,
+  Leaf,
   UserCheck,
   User,
   Package,
@@ -8263,6 +8265,12 @@ Valourian Capital Treasury Command
                 <FileText className="w-4 h-4" /> Operations Guide
             </button>
             <button 
+                onClick={() => setActiveTab('flourishing')} 
+                className="w-full sm:w-auto px-5 py-3 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer"
+            >
+                <Leaf className="w-4 h-4 text-emerald-400 animate-pulse" /> Planetary Flourishing
+            </button>
+            <button 
                 onClick={() => setActiveTab('cards')} 
                 className="w-full sm:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] flex items-center justify-center gap-2"
             >
@@ -8449,6 +8457,16 @@ Valourian Capital Treasury Command
                   })),
                   // Static options
                   {
+                    category: "Planetary Sustainability",
+                    title: "Planetary Flourishing & Green Sovereign Banking",
+                    subtitle: "100% Carbon-negative operations & humanitarian yield endowments",
+                    description: "Inspect live CO2 offsets, solar compute certificates, and disburse humanitarian grants.",
+                    actionLabel: "Open Flourishing Hub",
+                    action: "tab-flourishing",
+                    keywords: ["flourish", "sustainable", "humanity", "green", "carbon", "esg", "offset", "water", "solar", "earth", "climate"],
+                    verified: true,
+                  },
+                  {
                     category: "Corporate Podcast Network",
                     title: "Valourian Weekly Briefings (Weekly Podcast)",
                     subtitle: "Released every Monday morning at 7:00 AM (Bi-weekly schedule)",
@@ -8607,6 +8625,7 @@ Valourian Capital Treasury Command
       <div className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar sticky top-[72px] z-40 bg-slate-50 border-b border-slate-200/50 pt-2 -mx-4 px-4 sm:mx-0 sm:px-0">
         {[
           { id: "australia", label: "Operations (AU)", icon: Building },
+          { id: "flourishing", label: "Planetary Flourishing", icon: Leaf },
           { id: "send", label: "Sovereign Send", icon: Send },
           { id: "deposit", label: "Deposits", icon: Landmark },
           { id: "bills", label: "Global Bills & Invoices", icon: DollarSign },
@@ -12348,6 +12367,8 @@ Valourian Capital Treasury Command
                 </div>
               </div>
             
+                ) : activeTab === "flourishing" ? (
+                  <SustainableFlourishingHub onNavigateTab={(tab) => setActiveTab(tab as any)} />
                 ) : activeTab === "crypto" ? (
                   <CryptoPortfolioTab />
                 ) : activeTab === "documents" || activeTab === "properties" ? (

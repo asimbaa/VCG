@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, ShieldCheck, Zap, ArrowRight, RefreshCw, Send, CheckCircle2, 
   Smartphone, Eye, EyeOff, Copy, QrCode, Wifi, Cloud, Lock, Unlock, Globe,
-  Sparkles, ExternalLink, Flame, ShieldAlert, Cpu, ShoppingBag, TrendingUp
+  Sparkles, ExternalLink, Flame, ShieldAlert, Cpu, ShoppingBag, TrendingUp,
+  Leaf
 } from 'lucide-react';
 import { useGlobalCurrency } from '../../contexts/CurrencyContext';
 import { NFCTapModal } from '../pay/NFCTapModal';
@@ -28,6 +29,8 @@ import { MassiveRateExpansionModal } from './MassiveRateExpansionModal';
 import { GlobalMerchantPOSModal } from './GlobalMerchantPOSModal';
 import { CardBenefitsShowcaseModal } from './CardBenefitsShowcaseModal';
 import { LuxuryConciergeSection } from './LuxuryConciergeSection';
+import { EasyPayPurchaseModal } from './EasyPayPurchaseModal';
+import { IOSAppleWalletCardDeck } from './IOSAppleWalletCardDeck';
 import toast from 'react-hot-toast';
 
 export interface BankCard {
@@ -347,6 +350,46 @@ const INITIAL_CARDS: BankCard[] = [
     dualRouting: 'eftpos_domestic',
     appleGooglePayEnrolled: true
   },
+  { 
+    id: 'diamond_infinity', 
+    type: 'virtual', 
+    name: 'Valourian Sovereign Diamond Infinity Reserve', 
+    number: '5500 8821 4492 1198', 
+    fullNumber: '5500 8821 4492 1198',
+    balance: 10000000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 'unlimited', 
+    cvv: '119', 
+    dynamicCvv: '119',
+    expiry: '04/35',
+    network: 'Mastercard',
+    bsb: '021-000',
+    accountNumber: '8499210099',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true
+  },
+  { 
+    id: 'apple_card_titanium', 
+    type: 'virtual', 
+    name: 'Apple Card Titanium Sovereign Edition', 
+    number: '5521 7719 3019 4482', 
+    fullNumber: '5521 7719 3019 4482',
+    balance: 500000000, 
+    currency: 'AUD', 
+    status: 'active', 
+    limit: 'unlimited', 
+    cvv: '448', 
+    dynamicCvv: '448',
+    expiry: '10/33',
+    network: 'Mastercard',
+    bsb: '021-000',
+    accountNumber: '8499210060',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true
+  },
 ];
 
 const EXCHANGE_RATES: Record<string, number> = {
@@ -440,6 +483,27 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [posModalInitialCardId, setPosModalInitialCardId] = useState<string | undefined>(undefined);
   const [isBenefitsModalOpen, setIsBenefitsModalOpen] = useState(false);
   const [benefitsModalInitialTab, setBenefitsModalInitialTab] = useState<"cashback" | "aviation" | "concierge" | "lounge" | "immense">("cashback");
+  const [isEasyPayModalOpen, setIsEasyPayModalOpen] = useState(false);
+  const [selectedEasyPayCard, setSelectedEasyPayCard] = useState<BankCard | null>(null);
+
+  const handleRefillCard = (cardId: string) => {
+    setCards(prev => prev.map(c => {
+      if (c.id === cardId) {
+        const refillAmt = c.id === 'diamond_infinity' ? 10000000000 : (c.limit === 'unlimited' ? 1000000000 : (typeof c.limit === 'number' ? c.limit : 940000000));
+        toast.success(`Replenished ${c.name} with institutional sovereign liquidity! Now fully refilled.`);
+        return {
+          ...c,
+          balance: refillAmt,
+          status: 'active' as const
+        };
+      }
+      return c;
+    }));
+  };
+
+  const handleCardBalanceUpdated = (cardId: string, newBalance: number) => {
+    setCards(prev => prev.map(c => c.id === cardId ? { ...c, balance: newBalance } : c));
+  };
 
   const openGeniusModal = (card: BankCard) => {
     const rawNum = card.fullNumber || card.number || "";
@@ -1002,6 +1066,28 @@ export const VBankVirtualCreditCards: React.FC = () => {
         {/* Dedicated Luxury Concierge Sub-Component (Aviation, Michelin Dining & Live In-App Updates) */}
         <LuxuryConciergeSection />
 
+        {/* iOS Apple Wallet Sovereign Card Deck & Instant Actions */}
+        <IOSAppleWalletCardDeck
+          cards={cards}
+          onSelectPayId={(cardId) => {
+            setPayIdSelectedCardId(cardId);
+            setIsPayIdFlowOpen(true);
+          }}
+          onSelectNfc={(cardId) => {
+            setNfcSelectedCardId(cardId);
+            setIsNfcModalOpen(true);
+          }}
+          onSelectCopyModal={(c) => {
+            setSelectedCopyModalCard(c);
+            setIsCopyModalOpen(true);
+          }}
+          onSelectEasyPay={(c) => {
+            setSelectedEasyPayCard(c);
+            setIsEasyPayModalOpen(true);
+          }}
+          onRefillCard={handleRefillCard}
+        />
+
         {/* Main Grid: Card Stack + Operations Panel */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Card Stack (2 Columns) */}
@@ -1045,6 +1131,9 @@ export const VBankVirtualCreditCards: React.FC = () => {
                             <h3 className="text-white font-bold text-base">{card.name}</h3>
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold uppercase">
                               {card.network || 'Mastercard'}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold flex items-center gap-1">
+                              <Leaf className="w-2.5 h-2.5 text-emerald-400" /> Net -1.25x CO₂
                             </span>
                             {card.burnerMode && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
@@ -1165,6 +1254,29 @@ export const VBankVirtualCreditCards: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Easy Pay & Instant Purchase Anywhere */}
+                        <button
+                          onClick={() => {
+                            setSelectedEasyPayCard(card);
+                            setIsEasyPayModalOpen(true);
+                          }}
+                          className="text-[11px] bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-black transition-all shadow-md active:scale-95"
+                          title={`Execute instant purchase with 0% FX loss funded by ${card.name}`}
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Easy Pay</span>
+                        </button>
+
+                        {/* Refill Full Institutional Yield */}
+                        <button
+                          onClick={() => handleRefillCard(card.id)}
+                          className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer font-bold transition-all active:scale-95"
+                          title="Replenish card balance to full immense value"
+                        >
+                          <RefreshCw className="w-3 h-3 text-amber-400" />
+                          <span>Refill</span>
+                        </button>
+
                         {/* Real PayID Instant Transfer directly from this Card */}
                         <button
                           onClick={() => {
@@ -1496,6 +1608,14 @@ export const VBankVirtualCreditCards: React.FC = () => {
             )
           );
         }}
+      />
+
+      <EasyPayPurchaseModal
+        card={selectedEasyPayCard}
+        allCards={cards}
+        isOpen={isEasyPayModalOpen}
+        onClose={() => setIsEasyPayModalOpen(false)}
+        onCardBalanceUpdated={handleCardBalanceUpdated}
       />
 
       <ExternalAppAutoLoginModal

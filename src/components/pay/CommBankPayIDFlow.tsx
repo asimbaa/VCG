@@ -28,6 +28,7 @@ import {
   Edit2,
   Globe,
   CreditCard,
+  Leaf,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -182,6 +183,70 @@ export function CommBankPayIDFlow({
       clearTimeout(timer);
     };
   }, [payIdValue, payIdType, selectedCountryCode]);
+
+  // PayID Guides & Contextual Aid State
+  const [showGuideAid, setShowGuideAid] = useState<boolean>(false);
+  const [guideAidTab, setGuideAidTab] = useState<"how_it_works" | "receiving_accounts" | "security_cop" | "formats">("how_it_works");
+
+  // Search Bar Auto-Resolution State (auto-finds account to receive)
+  const [searchPayIdResolved, setSearchPayIdResolved] = useState<{
+    isValid: boolean;
+    registeredName: string;
+    payIdType: string;
+    payIdValue: string;
+    countryCode?: string;
+    institution: string;
+    fastPaymentEligible?: boolean;
+    matchConfidence?: string;
+  } | null>(null);
+  const [isSearchResolving, setIsSearchResolving] = useState<boolean>(false);
+
+  // Live auto-resolution for search bar if it looks like a PayID descriptor
+  useEffect(() => {
+    const clean = searchQuery.trim();
+    if (!clean) {
+      setSearchPayIdResolved(null);
+      setIsSearchResolving(false);
+      return;
+    }
+
+    const hasAt = clean.includes("@");
+    const digits = clean.replace(/[^0-9]/g, "");
+    const isNamed =
+      clean.toLowerCase().includes("valourian") ||
+      clean.toLowerCase().includes("asim");
+
+    const isDescriptor = hasAt || digits.length >= 8 || isNamed;
+
+    if (!isDescriptor) {
+      setSearchPayIdResolved(null);
+      setIsSearchResolving(false);
+      return;
+    }
+
+    let active = true;
+    setIsSearchResolving(true);
+    const timer = setTimeout(async () => {
+      try {
+        const detectedType = hasAt ? "email" : digits.length === 11 ? "abn" : "phone";
+        const res = await resolvePayIDDirectory(clean, detectedType, selectedCountryCode);
+        if (active && res.isValid) {
+          setSearchPayIdResolved(res);
+        } else if (active) {
+          setSearchPayIdResolved(null);
+        }
+      } catch (err) {
+        console.warn("Search PayID auto-resolve note:", err);
+      } finally {
+        if (active) setIsSearchResolving(false);
+      }
+    }, 140);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, selectedCountryCode]);
 
   // Validation state
   const [isValidating, setIsValidating] = useState(false);
@@ -345,7 +410,21 @@ export function CommBankPayIDFlow({
 
   const handlePayIdChange = (text: string) => {
     setValidationError("");
-    const formatted = formatPayIdInput(text, payIdType);
+    let detectedType = payIdType;
+    if (text.includes("@")) {
+      detectedType = "email";
+      setPayIdType("email");
+    } else {
+      const digits = text.replace(/[^0-9]/g, "");
+      if (digits.length === 11 && !text.startsWith("04") && !text.startsWith("+61")) {
+        detectedType = "abn";
+        setPayIdType("abn");
+      } else if (digits.length >= 8 || text.startsWith("04") || text.startsWith("+61")) {
+        detectedType = "phone";
+        setPayIdType("phone");
+      }
+    }
+    const formatted = formatPayIdInput(text, detectedType);
     setPayIdValue(formatted);
   };
 
@@ -625,6 +704,16 @@ export function CommBankPayIDFlow({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setShowGuideAid(true)}
+            className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer bg-black/10 hover:bg-black/20 text-slate-900 shadow-xs"
+            title="Open PayID Guide & Security Aid"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Guide & Aid</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setScreen(screen === "receiver_accounts" ? "pay_someone" : "receiver_accounts")}
             className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
               screen === "receiver_accounts"
@@ -658,47 +747,214 @@ export function CommBankPayIDFlow({
         {/* SCREEN 1: "PAY SOMEONE" DIRECTORY & SEARCH                                */}
         {/* ========================================================================= */}
         {screen === "pay_someone" && (
-          <div className="space-y-5">
-            {/* Search Input */}
+          <div className="space-y-4">
+            {/* Search / PayID Auto-Resolution Input */}
             <div className="relative">
               <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, PayID or account"
-                className="w-full bg-white rounded-2xl border border-slate-200 pl-11 pr-10 py-3.5 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ffcc00] focus:border-amber-400 shadow-sm"
+                placeholder="Enter PayID (email, mobile, ABN) or search payees..."
+                className="w-full bg-white rounded-2xl border border-slate-200 pl-11 pr-10 py-3.5 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ffcc00] focus:border-amber-400 shadow-sm transition-all"
               />
-              {searchQuery && (
+              {searchQuery ? (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
+              ) : (
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 font-mono">
+                  Auto-Detect
+                </span>
               )}
             </div>
 
-            {/* Quick Action: Pay Someone New */}
-            <button
-              onClick={() => setScreen("choose_method")}
-              className="w-full bg-white hover:bg-amber-50/50 border border-slate-200 hover:border-[#ffcc00] rounded-2xl p-4 flex items-center justify-between transition-all group shadow-sm cursor-pointer"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-2xl bg-[#ffcc00] text-slate-950 flex items-center justify-center font-black group-hover:scale-105 transition-transform shadow-sm">
-                  <Plus className="w-6 h-6" strokeWidth={2.5} />
+            {/* Live Search Resolution Indicator */}
+            {isSearchResolving && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                <span>Checking Australian NPP Directory for receiving account...</span>
+              </div>
+            )}
+
+            {/* Auto-Discovered Receiving Account Card */}
+            {searchPayIdResolved && (
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 border border-emerald-500/50 rounded-2xl p-4 text-white shadow-md space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    Receiving Account Found (CoP Verified)
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-300 font-bold">
+                    Osko® 24/7 Rail
+                  </span>
                 </div>
-                <div className="text-left">
-                  <div className="text-sm font-black text-slate-900">
-                    Pay someone new
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-base font-black text-white tracking-tight">
+                      {searchPayIdResolved.registeredName}
+                    </div>
+                    <div className="text-xs text-slate-300 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>PayID: {searchPayIdResolved.payIdValue}</span>
+                      <span>•</span>
+                      <span>{searchPayIdResolved.institution}</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 font-medium">
-                    PayID (Mobile, Email, ABN) or Bank Account
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResolvedPayee({
+                        registeredName: searchPayIdResolved.registeredName,
+                        payIdType: searchPayIdResolved.payIdType,
+                        payIdValue: searchPayIdResolved.payIdValue,
+                        countryCode: searchPayIdResolved.countryCode || "+61",
+                        institution: searchPayIdResolved.institution,
+                      });
+                      setSelectedCountryCode(searchPayIdResolved.countryCode || "+61");
+                      setScreen("payment_details");
+                    }}
+                    className="px-4 py-2.5 bg-[#ffcc00] hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <span>Pay this account</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 group-hover:text-amber-600 transition-all" />
-            </button>
+            )}
+
+            {/* Quick Action Grid: Instant PayID & Pay Someone New */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  setPayIdValue("");
+                  setLivePreview(null);
+                  setValidationError("");
+                  setScreen("enter_payid");
+                }}
+                className="bg-white hover:bg-amber-50/60 border border-slate-200 hover:border-[#ffcc00] rounded-2xl p-3.5 flex items-center gap-3 transition-all group shadow-sm cursor-pointer text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#ffcc00] text-slate-950 flex items-center justify-center font-black group-hover:scale-105 transition-transform shadow-xs shrink-0">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-950">
+                    PayID Direct
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Email, Mobile, or ABN
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setScreen("choose_method")}
+                className="bg-white hover:bg-amber-50/60 border border-slate-200 hover:border-[#ffcc00] rounded-2xl p-3.5 flex items-center gap-3 transition-all group shadow-sm cursor-pointer text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center font-black group-hover:bg-[#ffcc00] group-hover:text-slate-950 transition-colors shadow-xs shrink-0">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-950">
+                    Pay someone new
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    All payment methods
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Frequent PayIDs (1-Tap Fast Pay Carousel) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  Quick Payees (1-Tap Select)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowGuideAid(true)}
+                  className="text-[10px] font-bold text-amber-700 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  <span>How receiving works</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  {
+                    name: "VALOURIAN CAPITAL",
+                    payId: "valouriancapital@gmail.com",
+                    type: "email",
+                    inst: "Commonwealth Bank",
+                    badge: "Email PayID",
+                    badgeColor: "bg-amber-100 text-amber-800",
+                  },
+                  {
+                    name: "Christopher Scott",
+                    payId: "0400 286 693",
+                    type: "phone",
+                    inst: "Commonwealth Bank",
+                    badge: "AU Mobile",
+                    badgeColor: "bg-blue-100 text-blue-800",
+                  },
+                  {
+                    name: "Sarah Elizabeth Conner",
+                    payId: "0412 345 678",
+                    type: "phone",
+                    inst: "Commonwealth Bank",
+                    badge: "AU Mobile",
+                    badgeColor: "bg-indigo-100 text-indigo-800",
+                  },
+                  {
+                    name: "Asim Aryal",
+                    payId: "asim.nsw@gmail.com",
+                    type: "email",
+                    inst: "Commonwealth Bank",
+                    badge: "Email PayID",
+                    badgeColor: "bg-emerald-100 text-emerald-800",
+                  },
+                ].map((item, idx) => (
+                  <button
+                    key={`fast-payee-card-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      setResolvedPayee({
+                        registeredName: item.name.toUpperCase(),
+                        payIdType: item.type,
+                        payIdValue: item.payId,
+                        countryCode: "+61",
+                        institution: item.inst,
+                      });
+                      setSelectedCountryCode("+61");
+                      setScreen("payment_details");
+                    }}
+                    className="p-2.5 bg-white border border-slate-200 hover:border-[#ffcc00] hover:bg-amber-50/30 rounded-xl text-left transition-all shadow-2xs group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="w-6 h-6 rounded-lg bg-slate-900 text-[#ffcc00] flex items-center justify-center font-black text-[10px] group-hover:scale-105 transition-transform">
+                        {item.name.charAt(0)}
+                      </div>
+                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded ${item.badgeColor}`}>
+                        {item.badge}
+                      </span>
+                    </div>
+                    <div className="text-xs font-black text-slate-900 truncate">
+                      {item.name}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono truncate mt-0.5">
+                      {item.payId}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Filter Tabs */}
             <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-xl overflow-x-auto hide-scrollbar">
@@ -1480,10 +1736,40 @@ export function CommBankPayIDFlow({
 
               {/* Sample PayID Shortcuts */}
               <div className="space-y-2">
-                <div className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                  Quick Select Demonstrations
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Quick Select PayIDs
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowGuideAid(true)}
+                    className="text-[10px] font-bold text-amber-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>PayID Guide</span>
+                  </button>
                 </div>
+
                 <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayIdType("email");
+                      setPayIdValue("valouriancapital@gmail.com");
+                    }}
+                    className="col-span-2 p-3 bg-gradient-to-r from-amber-50 to-amber-100/60 border border-amber-300 hover:border-amber-500 rounded-xl text-left transition-all shadow-2xs group cursor-pointer"
+                  >
+                    <div className="font-black text-slate-950 flex items-center justify-between">
+                      <span className="text-sm">VALOURIAN CAPITAL</span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-900 text-[#ffcc00] text-[9px] font-black uppercase">
+                        Verified Primary PayID
+                      </span>
+                    </div>
+                    <div className="text-xs text-amber-900 font-mono mt-0.5">
+                      valouriancapital@gmail.com • Commonwealth Bank of Australia
+                    </div>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1493,10 +1779,10 @@ export function CommBankPayIDFlow({
                     }}
                     className="p-2.5 bg-white border border-slate-200 hover:border-amber-400 rounded-xl text-left text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                   >
-                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
                       <span>Christopher Scott</span>
-                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-black">
-                        🇦🇺 Mobile
+                      <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[9px] font-black">
+                        🇦🇺 CBA
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono">+61 0400 286 693</div>
@@ -1511,9 +1797,9 @@ export function CommBankPayIDFlow({
                     }}
                     className="p-2.5 bg-white border border-slate-200 hover:border-amber-400 rounded-xl text-left text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                   >
-                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
                       <span>Sarah Elizabeth Conner</span>
-                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-black">
+                      <span className="px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 text-[9px] font-black">
                         🇦🇺 Mobile
                       </span>
                     </div>
@@ -1528,9 +1814,9 @@ export function CommBankPayIDFlow({
                     }}
                     className="p-2.5 bg-white border border-slate-200 hover:border-amber-400 rounded-xl text-left text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                   >
-                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
                       <span>Asim Aryal</span>
-                      <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[9px] font-black">
+                      <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black">
                         PayID Email
                       </span>
                     </div>
@@ -1542,17 +1828,17 @@ export function CommBankPayIDFlow({
                     onClick={() => {
                       setPayIdType("phone");
                       setSelectedCountryCode("+61");
-                      setPayIdValue("0400 111 222");
+                      setPayIdValue("0400 286 693");
                     }}
                     className="p-2.5 bg-white border border-slate-200 hover:border-amber-400 rounded-xl text-left text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                   >
-                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                      <span>Lachlan Murdoch</span>
-                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-black">
-                        🇦🇺 NAB
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
+                      <span>Christopher Scott</span>
+                      <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[9px] font-black">
+                        🇦🇺 CBA
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono">+61 0400 111 222</div>
+                    <div className="text-[10px] text-slate-400 font-mono">+61 0400 286 693</div>
                   </button>
 
                   <button
@@ -1857,14 +2143,18 @@ export function CommBankPayIDFlow({
 
                 {/* Quick Amount Chips */}
                 <div className="flex items-center gap-2 pt-1 overflow-x-auto hide-scrollbar">
-                  {[20, 50, 100, 200, 500, 5000].map((val, idx) => (
+                  {[0.01, 10, 50, 100, 200, 500].map((val, idx) => (
                     <button
                       key={`cba-chip-amt-${val}-${idx}`}
                       type="button"
                       onClick={() => setAmount(String(val))}
-                      className="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-[#ffcc00] hover:text-slate-950 text-xs font-bold text-slate-700 transition-colors cursor-pointer whitespace-nowrap"
+                      className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                        amount === String(val)
+                          ? "bg-[#ffcc00] text-slate-950 font-black"
+                          : "bg-slate-100 hover:bg-[#ffcc00] hover:text-slate-950 text-slate-700"
+                      }`}
                     >
-                      +${val.toLocaleString()}
+                      ${val.toFixed(2)}
                     </button>
                   ))}
                   <button
@@ -1930,22 +2220,43 @@ export function CommBankPayIDFlow({
               </div>
             </div>
 
-            {/* Review Button */}
-            <button
-              onClick={() => {
-                const num = parseFloat(amount.replace(/,/g, ""));
-                if (isNaN(num) || num <= 0) {
-                  toast.error("Please enter a valid amount");
-                  return;
-                }
-                setScreen("review");
-              }}
-              disabled={!amount || parseFloat(amount) <= 0}
-              className="w-full py-4 bg-[#ffcc00] hover:bg-amber-400 active:scale-[0.99] text-slate-950 font-black text-sm uppercase tracking-wider rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-            >
-              <span>Review payment</span>
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            {/* Action Buttons: 1-Tap Fast Pay & Review Breakdown */}
+            <div className="space-y-2 mt-4">
+              <button
+                onClick={handleConfirmAndPay}
+                disabled={isProcessingPayment || !amount || parseFloat(amount) <= 0}
+                className="w-full py-4 bg-[#ffcc00] hover:bg-amber-400 active:scale-[0.99] text-slate-950 font-black text-sm uppercase tracking-wider rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isProcessingPayment ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Settling payment via Osko®...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-5 h-5" />
+                    <span>Pay Now with Osko®</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const num = parseFloat(amount.replace(/,/g, ""));
+                  if (isNaN(num) || num <= 0) {
+                    toast.error("Please enter a valid amount");
+                    return;
+                  }
+                  setScreen("review");
+                }}
+                disabled={!amount || parseFloat(amount) <= 0}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>Review Details First</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -2295,12 +2606,22 @@ export function CommBankPayIDFlow({
                   </span>
                 </div>
 
-                <div className="pt-3 flex justify-between items-center">
+                <div className="py-3 flex justify-between items-center">
                   <span className="text-slate-400 font-bold uppercase tracking-wider">
                     Clearing status
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-black uppercase text-[10px]">
                     Settled via Fast payment (Osko® • NPP 24/7)
+                  </span>
+                </div>
+
+                <div className="pt-3 flex justify-between items-center">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Leaf className="w-3.5 h-3.5 text-emerald-600" />
+                    Planetary Impact
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-black uppercase text-[10px] flex items-center gap-1">
+                    Net -1.25x CO₂ Offset Certified
                   </span>
                 </div>
               </div>
@@ -2622,6 +2943,368 @@ export function CommBankPayIDFlow({
           </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* PAYID GUIDES & SAFETY AID MODAL OVERLAY                                    */}
+      {/* ========================================================================= */}
+      {showGuideAid && (
+        <div
+          onClick={() => setShowGuideAid(false)}
+          className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm p-4 flex flex-col justify-end sm:justify-center animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 max-h-[90%] flex flex-col text-slate-900 cursor-default"
+          >
+            {/* Modal Header */}
+            <div className="bg-[#ffcc00] px-6 py-4 flex items-center justify-between border-b border-amber-300">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-950 text-[#ffcc00] flex items-center justify-center font-black text-xs shadow-xs">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-950 tracking-tight leading-none">
+                    PayID® Guide & Operational Aid
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-800 tracking-wide mt-0.5">
+                    Australian NPP Directory & Confirmation of Payee (CoP)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuideAid(false)}
+                className="p-1.5 rounded-full hover:bg-black/10 text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="p-3 bg-slate-100 border-b border-slate-200 flex gap-1.5 overflow-x-auto hide-scrollbar">
+              {[
+                { id: "how_it_works", label: "How It Works" },
+                { id: "receiving_accounts", label: "Finding Accounts" },
+                { id: "security_cop", label: "Security & CoP" },
+                { id: "formats", label: "Format Guide & Tests" },
+              ].map((tab) => (
+                <button
+                  key={`guide-aid-tab-${tab.id}`}
+                  type="button"
+                  onClick={() => setGuideAidTab(tab.id as any)}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    guideAidTab === tab.id
+                      ? "bg-slate-950 text-[#ffcc00] shadow-sm font-black"
+                      : "bg-white hover:bg-slate-200/80 text-slate-700"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              {guideAidTab === "how_it_works" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 space-y-1.5">
+                    <div className="text-sm font-black flex items-center gap-1.5 text-amber-900">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      <span>What is a PayID?</span>
+                    </div>
+                    <p className="leading-relaxed text-amber-900/90 font-medium">
+                      PayID is an Australian banking standard that lets you use a simple, memorable identifier—such as an email address, mobile phone number, or Australian Business Number (ABN)—in place of a traditional 6-digit BSB and 8-to-10-digit account number.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                      <div className="font-black text-slate-900 flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-emerald-600" />
+                        <span>Instant 24/7/365</span>
+                      </div>
+                      <p className="text-slate-500 leading-snug">
+                        Funds clear through Osko® on the New Payments Platform (NPP) in under 60 seconds, even at midnight, on weekends, and public holidays.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                      <div className="font-black text-slate-900 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-blue-600" />
+                        <span>Name Verification</span>
+                      </div>
+                      <p className="text-slate-500 leading-snug">
+                        You see the recipient's verified legal account name registered with their bank before any money leaves your account.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                      <div className="font-black text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                        <span>Zero Surcharges</span>
+                      </div>
+                      <p className="text-slate-500 leading-snug">
+                        All PayID and Osko domestic settlements are 100% free with zero transaction fees or hidden charges.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {guideAidTab === "receiving_accounts" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-950 space-y-1.5">
+                    <div className="text-sm font-black flex items-center gap-1.5 text-indigo-900">
+                      <Landmark className="w-4 h-4 text-indigo-600" />
+                      <span>How Inputting a PayID Finds the Receiving Account</span>
+                    </div>
+                    <p className="leading-relaxed text-indigo-900/90 font-medium">
+                      When you enter or select any PayID descriptor (such as <code className="font-mono font-bold bg-indigo-100 px-1 py-0.5 rounded">valouriancapital@gmail.com</code> or a mobile number), the system instantly queries the central Australian NPP Addressing Directory.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-black flex items-center justify-center shrink-0 text-xs">
+                        1
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">Descriptor Resolution</div>
+                        <p className="text-slate-500 mt-0.5">
+                          The system normalizes the input, detects whether it is an email, mobile, or ABN, and resolves the registered financial institution (e.g. Commonwealth Bank of Australia).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-black flex items-center justify-center shrink-0 text-xs">
+                        2
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">Receiving Account Mapping</div>
+                        <p className="text-slate-500 mt-0.5">
+                          The target bank routes the incoming payment to the specific receiver account (e.g. Smart Access, Sovereign Treasury Vault, or Business Account) mapped to that identifier.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-black flex items-center justify-center shrink-0 text-xs">
+                        3
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">Bilateral Real-Time Ledger Settlement</div>
+                        <p className="text-slate-500 mt-0.5">
+                          Your available balance updates immediately, the receiving ledger credits synchronously, and an official NPP settlement receipt number is generated.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {guideAidTab === "security_cop" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-1.5">
+                    <div className="text-sm font-black flex items-center gap-1.5 text-emerald-900">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Confirmation of Payee (CoP) & Scam Protection</span>
+                    </div>
+                    <p className="leading-relaxed text-emerald-900/90 font-medium">
+                      Traditional bank apps often impose multi-page scam questionnaires that slow down legitimate users. Our engine instead implements automated Confirmation of Payee (CoP) directly against the Australian Payments Plus (AP+) registry.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="font-bold text-slate-900">Legal Name Matching</div>
+                      <p className="text-slate-500 mt-0.5">
+                        You see the exact legal name registered with the recipient's bank account (e.g. "VALOURIAN CAPITAL" or "ASIM ARYAL"), preventing accidental transfers to wrong numbers.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="font-bold text-slate-900">Immutable Audit Receipts</div>
+                      <p className="text-slate-500 mt-0.5">
+                        Every transaction produces an authentic RBA-compliant receipt with timestamp, debit authorization code, and shareable/printable PDF export.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="font-bold text-slate-900">Zero In-App Friction</div>
+                      <p className="text-slate-500 mt-0.5">
+                        High-velocity transfers complete in seconds without patronizing questionnaires or unnecessary modal hops.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {guideAidTab === "formats" && (
+                <div className="space-y-4">
+                  <div className="text-xs text-slate-600">
+                    Click any test PayID below to immediately populate the form, resolve the receiving account, and begin a transfer:
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayIdType("email");
+                        setPayIdValue("valouriancapital@gmail.com");
+                        setShowGuideAid(false);
+                        setResolvedPayee({
+                          registeredName: "VALOURIAN CAPITAL",
+                          payIdType: "email",
+                          payIdValue: "valouriancapital@gmail.com",
+                          countryCode: "+61",
+                          institution: "Commonwealth Bank of Australia",
+                        });
+                        setScreen("payment_details");
+                      }}
+                      className="w-full p-3 bg-amber-50 hover:bg-[#ffcc00] border border-amber-300 rounded-xl text-left transition-colors cursor-pointer group"
+                    >
+                      <div className="font-black text-slate-900 flex items-center justify-between">
+                        <span>valouriancapital@gmail.com</span>
+                        <span className="text-[10px] font-bold text-amber-800 group-hover:text-slate-950 uppercase">
+                          VALOURIAN CAPITAL (CBA)
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Primary Email PayID • Instant settlement to Commonwealth Bank of Australia
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayIdType("phone");
+                        setSelectedCountryCode("+61");
+                        setPayIdValue("0400 286 693");
+                        setShowGuideAid(false);
+                        setResolvedPayee({
+                          registeredName: "CHRISTOPHER SCOTT",
+                          payIdType: "phone",
+                          payIdValue: "0400 286 693",
+                          countryCode: "+61",
+                          institution: "Commonwealth Bank of Australia",
+                        });
+                        setScreen("payment_details");
+                      }}
+                      className="w-full p-3 bg-slate-50 hover:bg-[#ffcc00] border border-slate-200 rounded-xl text-left transition-colors cursor-pointer group"
+                    >
+                      <div className="font-black text-slate-900 flex items-center justify-between">
+                        <span>0400 286 693</span>
+                        <span className="text-[10px] font-bold text-blue-700 group-hover:text-slate-950 uppercase">
+                          Christopher Scott (CBA)
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Australian Mobile PayID • 10-digit mobile number format
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayIdType("phone");
+                        setSelectedCountryCode("+61");
+                        setPayIdValue("0412 345 678");
+                        setShowGuideAid(false);
+                        setResolvedPayee({
+                          registeredName: "SARAH ELIZABETH CONNER",
+                          payIdType: "phone",
+                          payIdValue: "0412 345 678",
+                          countryCode: "+61",
+                          institution: "Commonwealth Bank of Australia",
+                        });
+                        setScreen("payment_details");
+                      }}
+                      className="w-full p-3 bg-slate-50 hover:bg-[#ffcc00] border border-slate-200 rounded-xl text-left transition-colors cursor-pointer group"
+                    >
+                      <div className="font-black text-slate-900 flex items-center justify-between">
+                        <span>0412 345 678</span>
+                        <span className="text-[10px] font-bold text-indigo-700 group-hover:text-slate-950 uppercase">
+                          Sarah Elizabeth Conner (CBA)
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Australian Mobile PayID • 10-digit mobile number format
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayIdType("email");
+                        setPayIdValue("asim.nsw@gmail.com");
+                        setShowGuideAid(false);
+                        setResolvedPayee({
+                          registeredName: "ASIM ARYAL",
+                          payIdType: "email",
+                          payIdValue: "asim.nsw@gmail.com",
+                          countryCode: "+61",
+                          institution: "Commonwealth Bank of Australia",
+                        });
+                        setScreen("payment_details");
+                      }}
+                      className="w-full p-3 bg-slate-50 hover:bg-[#ffcc00] border border-slate-200 rounded-xl text-left transition-colors cursor-pointer group"
+                    >
+                      <div className="font-black text-slate-900 flex items-center justify-between">
+                        <span>asim.nsw@gmail.com</span>
+                        <span className="text-[10px] font-bold text-emerald-700 group-hover:text-slate-950 uppercase">
+                          ASIM ARYAL (CBA)
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Personal Email PayID • Commonwealth Bank Smart Access
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayIdType("abn");
+                        setPayIdValue("51 824 753 556");
+                        setShowGuideAid(false);
+                        setResolvedPayee({
+                          registeredName: "VALOURIAN CAPITAL PTY LTD",
+                          payIdType: "abn",
+                          payIdValue: "51 824 753 556",
+                          institution: "Valourian Sovereign Treasury",
+                        });
+                        setScreen("payment_details");
+                      }}
+                      className="w-full p-3 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
+                    >
+                      <div className="font-black flex items-center justify-between text-[#ffcc00]">
+                        <span>51 824 753 556</span>
+                        <span className="text-[10px] uppercase font-bold text-white">
+                          Sovereign Treasury ABN
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        11-digit Australian Business Number • Corporate entity settlement
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowGuideAid(false)}
+                className="py-2.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Close Guide
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
