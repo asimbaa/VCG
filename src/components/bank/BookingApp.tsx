@@ -1669,7 +1669,7 @@ export function BookingApp({ user, balances, setBalances }: {
                     
                     <div className="space-y-4 text-xs font-sans">
                       <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <img src={confirmedBookingData.image} alt={confirmedBookingData.hotelName} className="w-20 h-20 object-cover rounded-lg shrink-0 border border-slate-200" />
+                        <img src={confirmedBookingData.image} alt={confirmedBookingData.hotelName} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="%230f172a"/><text x="50%" y="52%" fill="%2338bdf8" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">VALOURIAN STAY</text></svg>'; }} className="w-20 h-20 object-cover rounded-lg shrink-0 border border-slate-200" />
                         <div>
                           <h3 className="font-extrabold text-sm text-[#003580]">{confirmedBookingData.hotelName}</h3>
                           <p className="text-[10px] text-slate-400 mt-0.5">{confirmedBookingData.location}</p>
@@ -1725,7 +1725,7 @@ export function BookingApp({ user, balances, setBalances }: {
                     className="bg-white rounded-[1.5rem] shadow-xl border border-slate-200 overflow-hidden"
                   >
                     <div className="h-56 w-full bg-slate-200 overflow-hidden relative">
-                       <img src={selectedHotel.image} alt={selectedHotel.name} className="w-full h-full object-cover" />
+                       <img src={selectedHotel.image} alt={selectedHotel.name} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><rect width="800" height="400" fill="%230f172a"/><text x="50%" y="52%" fill="%2338bdf8" font-family="sans-serif" font-size="24" font-weight="bold" text-anchor="middle">LUXURY SUITE</text></svg>'; }} className="w-full h-full object-cover" />
                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-6">
                           <div>
                             <div className="flex items-center gap-1.5 mb-1 bg-amber-400 text-[#003580] w-fit px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-widest">
@@ -2387,7 +2387,7 @@ export function BookingApp({ user, balances, setBalances }: {
                         className="bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row overflow-hidden hover:shadow-lg transition-all duration-300"
                       >
                         <div className="w-full sm:w-64 h-48 bg-slate-100 relative overflow-hidden shrink-0">
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
+                          <img src={item.image} alt={item.name} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%230f172a"/><text x="50%" y="52%" fill="%2338bdf8" font-family="sans-serif" font-size="18" font-weight="bold" text-anchor="middle">SOVEREIGN HOTEL</text></svg>'; }} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
                           <div className="absolute top-3 left-3 bg-[#003580] text-amber-400 font-extrabold px-2 py-0.5 rounded text-[8px] tracking-wider uppercase">
                             VIP CHOICE
                           </div>

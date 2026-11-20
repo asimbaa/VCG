@@ -194,10 +194,10 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-6 shrink-0">
+        <div className="flex overflow-x-auto hide-scrollbar whitespace-nowrap border-b border-slate-800 bg-slate-950/40 px-4 sm:px-6 shrink-0">
           <button
             onClick={() => setActiveTab('online')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'online'
                 ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -207,17 +207,17 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('physical')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'physical'
                 ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <Smartphone className="w-4 h-4" /> Physical POS & In-Store Terminals
+            <Smartphone className="w-4 h-4" /> Physical POS &amp; In-Store Terminals
           </button>
           <button
             onClick={() => setActiveTab('amex')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'amex'
                 ? 'border-blue-500 text-blue-400 bg-blue-500/10'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -227,7 +227,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('raw')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'raw'
                 ? 'border-amber-500 text-amber-400 bg-amber-500/10'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -237,7 +237,7 @@ export const CardDetailsCopyModal: React.FC<CardDetailsCopyModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('autologin')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'autologin'
                 ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
                 : 'border-transparent text-slate-400 hover:text-white'

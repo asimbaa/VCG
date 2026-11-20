@@ -3,7 +3,7 @@ import {
   CreditCard, ShieldCheck, Zap, ArrowRight, RefreshCw, Send, CheckCircle2, 
   Smartphone, Eye, EyeOff, Copy, QrCode, Wifi, Cloud, Lock, Unlock, Globe,
   Sparkles, ExternalLink, Flame, ShieldAlert, Cpu, ShoppingBag, TrendingUp,
-  Leaf
+  Leaf, Share2, Plus, Search, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useGlobalCurrency } from '../../contexts/CurrencyContext';
 import { NFCTapModal } from '../pay/NFCTapModal';
@@ -31,6 +31,8 @@ import { CardBenefitsShowcaseModal } from './CardBenefitsShowcaseModal';
 import { LuxuryConciergeSection } from './LuxuryConciergeSection';
 import { EasyPayPurchaseModal } from './EasyPayPurchaseModal';
 import { IOSAppleWalletCardDeck } from './IOSAppleWalletCardDeck';
+import { ShareCardModal } from './ShareCardModal';
+import { IssueCardStudioModal } from './IssueCardStudioModal';
 import toast from 'react-hot-toast';
 
 export interface BankCard {
@@ -67,6 +69,10 @@ export interface BankCard {
   loungeAccess?: boolean;
   travelInsuranceCovered?: boolean;
   purchaseProtectionCovered?: boolean;
+  cardCategory?: 'debit' | 'credit';
+  formFactor?: 'virtual' | 'physical' | 'virtual_and_physical';
+  vipPerks?: string[];
+  shareable?: boolean;
 }
 
 const INITIAL_CARDS: BankCard[] = [
@@ -390,6 +396,98 @@ const INITIAL_CARDS: BankCard[] = [
     dualRouting: 'eftpos_domestic',
     appleGooglePayEnrolled: true
   },
+  {
+    id: 'debit_valourian_platinum',
+    type: 'physical',
+    cardCategory: 'debit',
+    formFactor: 'virtual_and_physical',
+    name: 'Valourian Private Wealth Platinum Debit',
+    number: '5241 8820 4419 7712',
+    fullNumber: '5241 8820 4419 7712',
+    balance: 2500000000,
+    currency: 'AUD',
+    status: 'active',
+    limit: 'unlimited',
+    cvv: '712',
+    dynamicCvv: '712',
+    expiry: '08/33',
+    network: 'Mastercard',
+    bsb: '182-512',
+    accountNumber: '8499210101',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true,
+    shareable: true
+  },
+  {
+    id: 'debit_cba_sovereign',
+    type: 'physical',
+    cardCategory: 'debit',
+    formFactor: 'virtual_and_physical',
+    name: 'CBA Sovereign Everyday Access Debit',
+    number: '5163 7200 4419 8815',
+    fullNumber: '5163 7200 4419 8815',
+    balance: 850000000,
+    currency: 'AUD',
+    status: 'active',
+    limit: 850000000,
+    cvv: '815',
+    dynamicCvv: '815',
+    expiry: '11/31',
+    network: 'Mastercard',
+    bsb: '062-140',
+    accountNumber: '11680690',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true,
+    shareable: true
+  },
+  {
+    id: 'debit_valourian_business',
+    type: 'virtual',
+    cardCategory: 'debit',
+    formFactor: 'virtual_and_physical',
+    name: 'Valourian Global Multi-Currency Business Debit',
+    number: '4532 9910 4419 2200',
+    fullNumber: '4532 9910 4419 2200',
+    balance: 1200000000,
+    currency: 'AUD',
+    status: 'active',
+    limit: 'unlimited',
+    cvv: '200',
+    dynamicCvv: '200',
+    expiry: '05/32',
+    network: 'Visa',
+    bsb: '182-512',
+    accountNumber: '8499210102',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true,
+    shareable: true
+  },
+  {
+    id: 'debit_valourian_green',
+    type: 'physical',
+    cardCategory: 'debit',
+    formFactor: 'virtual_and_physical',
+    name: 'Valourian Green Impact Everyday Debit',
+    number: '4111 8820 4419 5534',
+    fullNumber: '4111 8820 4419 5534',
+    balance: 450000000,
+    currency: 'AUD',
+    status: 'active',
+    limit: 450000000,
+    cvv: '534',
+    dynamicCvv: '534',
+    expiry: '09/32',
+    network: 'Visa',
+    bsb: '182-512',
+    accountNumber: '8499210103',
+    payId: TARGET_LINK_EMAIL,
+    dualRouting: 'eftpos_domestic',
+    appleGooglePayEnrolled: true,
+    shareable: true
+  },
 ];
 
 const EXCHANGE_RATES: Record<string, number> = {
@@ -427,39 +525,30 @@ export const normalizeCard = (c: any): BankCard => {
     dualRouting: c?.dualRouting === 'global_credit' ? 'global_credit' : 'eftpos_domestic',
     appleGooglePayEnrolled: c?.appleGooglePayEnrolled !== false,
     burnerMode: Boolean(c?.burnerMode),
+    cardCategory:
+      c?.cardCategory === 'debit' || String(c?.id || '').startsWith('debit_') || String(c?.name || '').toLowerCase().includes('debit')
+        ? 'debit'
+        : 'credit',
+    formFactor: c?.formFactor || 'virtual_and_physical',
+    vipPerks: Array.isArray(c?.vipPerks) ? c.vipPerks : undefined,
+    shareable: c?.shareable !== false,
   };
 };
 
 export const VBankVirtualCreditCards: React.FC = () => {
   const { formatConverted: format, currency, setCurrency } = useGlobalCurrency() as any;
   const [cards, setCards] = useState<BankCard[]>(() => {
-    try {
-      const saved = window.localStorage.getItem('valourian_vbank_virtual_cards_v9') || window.localStorage.getItem('valourian_digital_cards_v8');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const map = new Map<string, BankCard>();
-          parsed.forEach((c: any, idx: number) => {
-            const card = normalizeCard(c);
-            const key = card.id || `vcard-${idx}`;
-            if (!map.has(key)) map.set(key, card);
-          });
-          // Ensure newly added cards (like AMEX Australia suites) are merged
-          INITIAL_CARDS.forEach(c => {
-            if (!map.has(c.id)) map.set(c.id, normalizeCard(c));
-          });
-          return Array.from(map.values());
-        }
-      }
-    } catch (e) {}
+    const unified = unifiedBankCardSync.getCards();
+    if (unified.length > 0) return unified.map(normalizeCard);
     return INITIAL_CARDS.map(normalizeCard);
   });
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem('valourian_vbank_virtual_cards_v9', JSON.stringify(cards));
-    } catch {}
-  }, [cards]);
+    const unsub = unifiedBankCardSync.subscribe((nextUnified) => {
+      setCards(nextUnified.map(normalizeCard));
+    });
+    return unsub;
+  }, []);
 
   const [selectedCopyModalCard, setSelectedCopyModalCard] = useState<any | null>(null);
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
@@ -485,20 +574,28 @@ export const VBankVirtualCreditCards: React.FC = () => {
   const [benefitsModalInitialTab, setBenefitsModalInitialTab] = useState<"cashback" | "aviation" | "concierge" | "lounge" | "immense">("cashback");
   const [isEasyPayModalOpen, setIsEasyPayModalOpen] = useState(false);
   const [selectedEasyPayCard, setSelectedEasyPayCard] = useState<BankCard | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedShareCard, setSelectedShareCard] = useState<BankCard | null>(null);
+  const [isIssueStudioOpen, setIsIssueStudioOpen] = useState(false);
+  const [showVaultToolsDrawer, setShowVaultToolsDrawer] = useState(false);
+  const [expandedCardControls, setExpandedCardControls] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [networkFilter, setNetworkFilter] = useState<'all' | 'Mastercard' | 'Visa' | 'AMEX'>('all');
+  const [listCategoryFilter, setListCategoryFilter] = useState<'all' | 'debit' | 'credit'>('all');
 
   const handleRefillCard = (cardId: string) => {
-    setCards(prev => prev.map(c => {
-      if (c.id === cardId) {
-        const refillAmt = c.id === 'diamond_infinity' ? 10000000000 : (c.limit === 'unlimited' ? 1000000000 : (typeof c.limit === 'number' ? c.limit : 940000000));
-        toast.success(`Replenished ${c.name} with institutional sovereign liquidity! Now fully refilled.`);
-        return {
-          ...c,
-          balance: refillAmt,
-          status: 'active' as const
-        };
-      }
-      return c;
-    }));
+    const existing = cards.find((c) => c.id === cardId);
+    const refillAmt =
+      cardId === 'diamond_infinity'
+        ? 10000000000
+        : existing?.limit === 'unlimited'
+        ? 1000000000
+        : typeof existing?.limit === 'number'
+        ? Math.max(existing.limit, 940000000)
+        : 940000000;
+    unifiedBankCardSync.updateCard(cardId, (c) => ({ ...c, balance: refillAmt, status: 'active' }));
+    setCards(prev => prev.map(c => (c.id === cardId ? { ...c, balance: refillAmt, status: 'active' as const } : c)));
+    toast.success(`Replenished ${existing?.name || 'Card'} with institutional liquidity.`);
   };
 
   const handleCardBalanceUpdated = (cardId: string, newBalance: number) => {
@@ -660,45 +757,34 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
   // Modern Feature 1: Quantum Rotating Dynamic CVV
   const handleRotateCvv = (cardId: string) => {
-    const newCvv = Math.floor(100 + Math.random() * 900).toString();
+    const newCvv = unifiedBankCardSync.rotateCvv(cardId);
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, dynamicCvv: newCvv } : c));
-    toast.success(`Dynamic Quantum CVV rotated: ${newCvv} (Valid for 60s & secured)`);
+    toast.success(`Dynamic Quantum CVV rotated: ${newCvv} (Secured)`);
   };
 
   // Modern Feature 2: Dual Routing Toggle (eftpos vs Global Mastercard/Visa)
   const handleToggleDualRouting = (cardId: string) => {
-    setCards(prev => prev.map(c => {
-      if (c.id === cardId) {
-        const nextRouting = c.dualRouting === 'eftpos_domestic' ? 'global_credit' : 'eftpos_domestic';
-        toast.success(`Network rail toggled to: ${nextRouting === 'eftpos_domestic' ? 'Australian Domestic eftpos (Least-Cost)' : 'Global Multi-Currency Mastercard/Visa'}`);
-        return { ...c, dualRouting: nextRouting };
-      }
-      return c;
+    unifiedBankCardSync.updateCard(cardId, (c) => ({
+      ...c,
+      dualRouting: c.dualRouting === 'eftpos_domestic' ? 'global_credit' : 'eftpos_domestic'
     }));
+    const current = cards.find(c => c.id === cardId);
+    const nextRouting = current?.dualRouting === 'eftpos_domestic' ? 'global_credit' : 'eftpos_domestic';
+    toast.success(`Network rail toggled to: ${nextRouting === 'eftpos_domestic' ? 'Australian Domestic eftpos' : 'Global Multi-Currency Rail'}`);
   };
 
   // Modern Feature 3: Single-Use Burner Mode
   const handleToggleBurnerMode = (cardId: string) => {
-    setCards(prev => prev.map(c => {
-      if (c.id === cardId) {
-        const nextBurner = !c.burnerMode;
-        toast.success(nextBurner ? "Burner Mode Activated: Token will auto-destruct after 1 checkout" : "Standard Multi-Use Card Restored");
-        return { ...c, burnerMode: nextBurner };
-      }
-      return c;
-    }));
+    const current = cards.find(c => c.id === cardId);
+    const nextBurner = !current?.burnerMode;
+    unifiedBankCardSync.updateCard(cardId, (c) => ({ ...c, burnerMode: !c.burnerMode }));
+    toast.success(nextBurner ? "Burner Mode Activated: Token will auto-destruct after 1 checkout" : "Standard Multi-Use Card Restored");
   };
 
   // Modern Feature 4: Freeze / Unfreeze
   const handleToggleFreeze = (cardId: string) => {
-    setCards(prev => prev.map(c => {
-      if (c.id === cardId) {
-        const nextStatus = c.status === 'active' ? 'frozen' : 'active';
-        toast.success(nextStatus === 'frozen' ? "Card instantly frozen globally" : "Card reactivated globally");
-        return { ...c, status: nextStatus };
-      }
-      return c;
-    }));
+    const frozen = unifiedBankCardSync.toggleFreeze(cardId);
+    toast.success(frozen ? "Card instantly frozen globally" : "Card reactivated globally");
   };
 
   // Modern Feature 5: Fast Copy for app.link.com
@@ -894,149 +980,158 @@ export const VBankVirtualCreditCards: React.FC = () => {
       />
 
       <div className="space-y-6">
-        {/* Top Header Card */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950/80 to-slate-900 border border-indigo-500/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+        {/* Clean Luxury Hero Header */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950/70 to-slate-900 border border-indigo-500/20 rounded-2xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
           
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-            <div>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
+            <div className="space-y-3 min-w-0">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                  <CreditCard className="w-6 h-6" />
+                <div className="w-11 h-11 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                  <CreditCard className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                      VBank Virtual Credit Cards
-                      <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono px-2 py-0.5 rounded-full font-bold">
-                        LIVE GLOBALLY OPERATIONAL
-                      </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                      VBank Sovereign Cards
                     </h1>
                     <SectionWisdomTooltip 
                       title="Sovereign Virtual & Physical Cards"
                       concept="Multi-Rail Payments"
                       insights={[
-                        "Pre-authenticated on APCA, eftpos least-cost domestic routing, and worldwide Mastercard/Visa networks.",
+                        "Pre-authenticated on APCA, eftpos least-cost domestic routing, and worldwide Mastercard/Visa/AMEX networks.",
                         "Zero foreign transaction fees on all cross-border transactions worldwide.",
-                        "Tap card to smartphone to instantly view available funds and inject multi-billion liquidity."
+                        "Mint custom Luhn-verified Debit & Credit cards in 1 tap and share VIP access instantly."
                       ]}
                       regulatory="APRA Banking Act & PCI-DSS Level 1 Compliance"
-                      actionTip="Use 'Tap to Phone & Fund' to inspect chip balance or add funds directly to any card."
+                      actionTip="Click Issue Card to mint a brand-new Luhn-valid Debit or Credit card in seconds."
                     />
                   </div>
-                  <p className="text-sm text-slate-400 mt-0.5">
-                    Active Live Globally Operational (Including Australia Innately) • Enrolled in Link.com ({TARGET_LINK_EMAIL})
+                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                    APCA &amp; eftpos AU · 0% Cross-Border FX · Quantum Dynamic CVV · Link.com ({TARGET_LINK_EMAIL})
                   </p>
                 </div>
               </div>
 
-              {/* Badges */}
-              <div className="flex flex-wrap items-center gap-2 mt-4">
+              {/* Clean Primary Utility Bar */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  onClick={() => setIsIssueStudioOpen(true)}
+                  className="min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Issue Debit / Credit Card</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedShareCard(cards[0] || null);
+                    setIsShareModalOpen(true);
+                  }}
+                  className="min-h-[44px] bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 text-cyan-300" />
+                  <span>Share &amp; VIP Swarm</span>
+                </button>
                 <button
                   onClick={() => setIsNfcReaderModalOpen(true)}
-                  className="bg-gradient-to-r from-amber-500/30 to-emerald-500/30 hover:from-amber-500/40 hover:to-emerald-500/40 border border-emerald-500/50 text-emerald-200 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                  title="Tap card to smartphone to read balance and inject immense funds"
+                  className="min-h-[44px] bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Tap Card to Phone & Fund
-                </button>
-                <span className="bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Australia Innately (eftpos / APCA RBA Live)
-                </span>
-                <span className="bg-blue-600/30 border border-blue-500/40 text-blue-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" /> 100% Globally Cleared
-                </span>
-                <span className="bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5" /> Quantum Dynamic CVV
-                </span>
-                <button
-                  onClick={() => setIsLinkModalOpen(true)}
-                  className="bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/50 text-emerald-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-emerald-400" /> Open Link.com 38+ Cards Sync Hub
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <span>Tap to Phone &amp; Fund</span>
                 </button>
                 <button
-                  onClick={() => setIsAmexRegistrationModalOpen(true)}
-                  className="bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/50 text-blue-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                  onClick={() => smsEmailDispatchService.dispatchAllCardsPackage(cards)}
+                  className="min-h-[44px] bg-blue-600/20 hover:bg-blue-600/35 border border-blue-500/40 text-blue-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <Smartphone className="w-3.5 h-3.5 text-blue-400" /> AMEX AU App Registration Hub
+                  <Send className="w-3.5 h-3.5 text-blue-300" />
+                  <span>Email All Cards</span>
                 </button>
                 <button
-                  onClick={() => {
-                    const active = unifiedBankCardSync.getActivePaymentCard();
-                    setSelectedGeniusCard(active);
-                    setIsGeniusModalOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/50 text-emerald-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                  type="button"
+                  onClick={() => setShowVaultToolsDrawer((prev) => !prev)}
+                  className="min-h-[44px] bg-slate-800/70 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Card Innovations &amp; Luhn Proof
-                </button>
-                <button
-                  onClick={() => {
-                    const active = unifiedBankCardSync.getActivePaymentCard();
-                    setSelectedCopyModalCard(active);
-                    setIsAutoLoginModalOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 border border-amber-500/50 text-amber-200 text-[10px] font-extrabold uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
-                  title="Auto-Login and 1-Click Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas with asim.nsw@gmail.com"
-                >
-                  <ShoppingBag className="w-3.5 h-3.5 text-amber-400" /> External Apps Auto-Login (Amazon • Tesla • Uber)
-                </button>
-                <button
-                  onClick={() => {
-                    const active = unifiedBankCardSync.getActivePaymentCard();
-                    setRateExpansionInitialCardId(active?.id);
-                    setIsRateExpansionModalOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-400 hover:to-indigo-500 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-emerald-500/30 cursor-pointer animate-pulse"
-                  title="Pay via Bank Card to expand card APY to 15.00% - 25.00% p.a. & 10% - 15% cashback"
-                >
-                  <TrendingUp className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Massive Rate Expansion (Pay via Card)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const active = unifiedBankCardSync.getActivePaymentCard();
-                    setPosModalInitialCardId(active?.id);
-                    setIsGlobalPOSModalOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-amber-500/30 cursor-pointer"
-                  title="Test card charges across USA, UK, EU, and Australia merchants with instant pre-arrival clearance"
-                >
-                  <Globe className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Global POS Simulator (USA • UK • EU • AUS)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setBenefitsModalInitialTab("cashback");
-                    setIsBenefitsModalOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-lg hover:shadow-emerald-500/30 cursor-pointer"
-                  title="Restored Elite Benefits: 5% Uncapped Cashback, Private Jet Fleet, 24/7 Diplomatic Concierge"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Restored Elite Benefits (5% Cashback &amp; Jets)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    smsEmailDispatchService.dispatchAllCardsPackage(cards);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-md tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                  title="Email entire portfolio of legitimate credit &amp; debit cards to asim.nsw@gmail.com"
-                >
-                  <Send className="w-3.5 h-3.5 text-white" />
-                  <span>Email All Cards Package</span>
+                  <span>More Vault Tools</span>
+                  {showVaultToolsDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
               </div>
+
+              {/* Collapsible Power-User Tools */}
+              {showVaultToolsDrawer && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10 animate-fadeIn">
+                  <button
+                    onClick={() => setIsLinkModalOpen(true)}
+                    className="min-h-[38px] bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" /> Link.com 38+ Cards Hub
+                  </button>
+                  <button
+                    onClick={() => setIsAmexRegistrationModalOpen(true)}
+                    className="min-h-[38px] bg-blue-500/15 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" /> AMEX AU Registration
+                  </button>
+                  <button
+                    onClick={() => {
+                      const active = unifiedBankCardSync.getActivePaymentCard();
+                      setSelectedGeniusCard(active);
+                      setIsGeniusModalOpen(true);
+                    }}
+                    className="min-h-[38px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> Innovations &amp; Luhn Proof
+                  </button>
+                  <button
+                    onClick={() => {
+                      const active = unifiedBankCardSync.getActivePaymentCard();
+                      setSelectedCopyModalCard(active);
+                      setIsAutoLoginModalOpen(true);
+                    }}
+                    className="min-h-[38px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-200 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5 text-amber-400" /> Auto-Login (Amazon · Tesla · Uber)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const active = unifiedBankCardSync.getActivePaymentCard();
+                      setRateExpansionInitialCardId(active?.id);
+                      setIsRateExpansionModalOpen(true);
+                    }}
+                    className="min-h-[38px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Massive Rate Expansion
+                  </button>
+                  <button
+                    onClick={() => {
+                      const active = unifiedBankCardSync.getActivePaymentCard();
+                      setPosModalInitialCardId(active?.id);
+                      setIsGlobalPOSModalOpen(true);
+                    }}
+                    className="min-h-[38px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-200 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-amber-400" /> Global POS Simulator
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBenefitsModalInitialTab("cashback");
+                      setIsBenefitsModalOpen(true);
+                    }}
+                    className="min-h-[38px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-200 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> 5% Cashback &amp; Jets
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Quick Actions & Currency */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl p-1">
                 {(['AUD', 'USD', 'EUR', 'GBP'] as const).map((curr, idx) => (
                   <button
                     key={`vbank-curr-${curr}-${idx}`}
                     onClick={() => setCurrency && setCurrency(curr)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       currency === curr ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1047,9 +1142,9 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
               <button
                 onClick={() => setIsNfcModalOpen(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold tracking-wider uppercase flex items-center gap-2 transition-all shadow-md cursor-pointer"
+                className="min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold tracking-wider uppercase flex items-center gap-2 transition-all shadow-md cursor-pointer"
               >
-                <Wifi className="w-4 h-4" /> Tap to Pay (NFC)
+                <Wifi className="w-4 h-4 rotate-90" /> Tap to Pay (NFC)
               </button>
             </div>
           </div>
@@ -1086,25 +1181,105 @@ export const VBankVirtualCreditCards: React.FC = () => {
             setIsEasyPayModalOpen(true);
           }}
           onRefillCard={handleRefillCard}
+          onSelectShare={(c) => {
+            setSelectedShareCard(c);
+            setIsShareModalOpen(true);
+          }}
+          onOpenIssueStudio={() => setIsIssueStudioOpen(true)}
         />
 
         {/* Main Grid: Card Stack + Operations Panel */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Card Stack (2 Columns) */}
           <div className="xl:col-span-2 space-y-4">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-indigo-400" />
-                VBank & Australian Institutional Virtual Cards ({cards.length})
-              </h2>
-              <span className="text-xs text-slate-400 font-mono">
-                Holders: <strong className="text-white">{TARGET_LINK_HOLDER}</strong>
-              </span>
+            {/* Search & Category + Network Filter Bar */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-400" />
+                  <span>VBank Debit &amp; Credit Cards</span>
+                  <span className="text-xs font-mono text-emerald-400 tabular-nums">
+                    ({cards.filter((c) => {
+                      const matchesCat = listCategoryFilter === 'all' ? true : listCategoryFilter === 'debit' ? c.cardCategory === 'debit' : c.cardCategory !== 'debit';
+                      const matchesNet = networkFilter === 'all' ? true : (c.network || 'Mastercard') === networkFilter;
+                      const q = searchQuery.trim().toLowerCase();
+                      const matchesQ = !q || c.name.toLowerCase().includes(q) || String(c.fullNumber || c.number).includes(q) || String(c.network || '').toLowerCase().includes(q);
+                      return matchesCat && matchesNet && matchesQ;
+                    }).length})
+                  </span>
+                </h2>
+
+                <div className="relative flex-1 min-w-[200px] max-w-xs">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search card, last 4, network..."
+                    className="w-full min-h-[40px] bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl pl-8 pr-3 text-xs text-white placeholder:text-slate-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['all', 'debit', 'credit'] as const).map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setListCategoryFilter(cat)}
+                      className={`min-h-[38px] px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        listCategoryFilter === cat
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'bg-slate-800 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {cat === 'all' ? 'All Cards' : cat === 'debit' ? 'Bank Debit' : 'Credit & Black'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['all', 'Mastercard', 'Visa', 'AMEX'] as const).map((net) => (
+                    <button
+                      key={net}
+                      onClick={() => setNetworkFilter(net)}
+                      className={`min-h-[38px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                        networkFilter === net
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {net === 'all' ? 'All Rails' : net}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
-              {cards.map((card, idx) => {
+              {cards
+                .filter((c) => {
+                  const matchesCat =
+                    listCategoryFilter === 'all'
+                      ? true
+                      : listCategoryFilter === 'debit'
+                      ? c.cardCategory === 'debit'
+                      : c.cardCategory !== 'debit';
+                  const matchesNet =
+                    networkFilter === 'all'
+                      ? true
+                      : (c.network || 'Mastercard') === networkFilter;
+                  const q = searchQuery.trim().toLowerCase();
+                  const matchesQ =
+                    !q ||
+                    c.name.toLowerCase().includes(q) ||
+                    String(c.fullNumber || c.number).includes(q) ||
+                    String(c.network || '').toLowerCase().includes(q);
+                  return matchesCat && matchesNet && matchesQ;
+                })
+                .map((card, idx) => {
                 const isRevealed = revealedCards[card.id];
+                const isControlsExpanded = Boolean(expandedCardControls[card.id]);
                 const rawNum = card?.fullNumber || card?.number || '';
                 const cleanNum = String(rawNum).replace(/\s+/g, '');
                 const last4 = (card as any)?.last4 || (cleanNum.length >= 4 ? cleanNum.slice(-4) : '••••');
@@ -1114,48 +1289,64 @@ export const VBankVirtualCreditCards: React.FC = () => {
                 return (
                   <div 
                     key={`vbank-card-${card.id || 'c'}-${idx}`} 
-                    className={`bg-slate-900/90 border transition-all rounded-xl p-5 ${
+                    className={`bg-slate-900/90 border transition-all rounded-2xl p-5 ${
                       isFrozen ? 'border-red-500/30 opacity-75' : 'border-white/10 hover:border-indigo-500/40 hover:bg-slate-900'
                     }`}
                   >
                     {/* Top Row: Icon, Name, Balance */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="flex items-start gap-3.5">
+                      <div className="flex items-start gap-3.5 min-w-0">
                         <div className={`p-3 rounded-xl shrink-0 ${
                           card.type === 'virtual' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-amber-500/20 text-amber-400'
                         }`}>
                           {card.type === 'virtual' ? <Cloud className="w-6 h-6" /> : <CreditCard className="w-6 h-6" />}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-white font-bold text-base">{card.name}</h3>
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold uppercase">
-                              {card.network || 'Mastercard'}
+                        <div className="min-w-0">
+                          <h3 className="text-white font-bold text-base leading-snug">{card.name}</h3>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono text-slate-400 mt-0.5">
+                            <span className="text-indigo-300 font-semibold uppercase">
+                              {card.cardCategory === 'debit' ? 'Bank Debit' : 'Bank Credit'}
                             </span>
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold flex items-center gap-1">
-                              <Leaf className="w-2.5 h-2.5 text-emerald-400" /> Net -1.25x CO₂
+                            <span>·</span>
+                            <span>{card.network || 'Mastercard'}</span>
+                            <span>·</span>
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <Leaf className="w-3 h-3" /> Net -1.25x CO₂
                             </span>
                             {card.burnerMode && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                                <Flame className="w-2.5 h-2.5" /> BURNER ACTIVE
-                              </span>
+                              <>
+                                <span>·</span>
+                                <span className="text-rose-400 font-bold flex items-center gap-1">
+                                  <Flame className="w-3 h-3" /> Burner
+                                </span>
+                              </>
+                            )}
+                            {isFrozen && (
+                              <>
+                                <span>·</span>
+                                <span className="text-red-400 font-bold">Frozen</span>
+                              </>
                             )}
                           </div>
 
                           {/* Card Number & Reveal */}
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <span className="text-sm font-mono text-emerald-300 font-bold tracking-wider">{displayNum}</span>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <span className="text-sm font-mono text-emerald-300 font-bold tracking-wider tabular-nums">
+                              {displayNum}
+                            </span>
                             <button 
                               onClick={() => toggleReveal(card.id)} 
-                              className="text-slate-400 hover:text-white transition-colors"
+                              className="compact-touch p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                               title={isRevealed ? "Hide details" : "Reveal full card details"}
+                              aria-label={isRevealed ? "Hide details" : "Reveal full card details"}
                             >
                               {isRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                             <button 
                               onClick={() => copyToClipboard(cleanNum, 'Card number')} 
-                              className="text-slate-400 hover:text-white transition-colors"
+                              className="compact-touch p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Copy Card Number"
+                              aria-label="Copy Card Number"
                             >
                               <Copy className="w-4 h-4" />
                             </button>
@@ -1165,7 +1356,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
                                 navigator.clipboard.writeText(pkg.formattedClipboardText);
                                 toast.success("Full Card Credentials Package Copied! Ready to paste into any checkout.");
                               }}
-                              className="text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono flex items-center gap-1 font-bold cursor-pointer"
+                              className="compact-touch text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-mono flex items-center gap-1 font-bold cursor-pointer"
                               title="Copy full checkout package"
                             >
                               <Copy className="w-3 h-3" />
@@ -1174,7 +1365,7 @@ export const VBankVirtualCreditCards: React.FC = () => {
                           </div>
 
                           {/* Australian Details: BSB & Account */}
-                          <div className="flex flex-wrap items-center gap-4 mt-2 text-xs font-mono text-slate-400">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs font-mono text-slate-400 tabular-nums">
                             <span>BSB: <strong className="text-emerald-400">{card.bsb || '021-000'}</strong></span>
                             <span>ACC: <strong className="text-emerald-400">{card.accountNumber || '8499210045'}</strong></span>
                             <span>PAYID: <strong className="text-indigo-300">{card.payId || TARGET_LINK_EMAIL}</strong></span>
@@ -1182,16 +1373,16 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
                           {/* Revealed Expiry and CVV */}
                           {isRevealed && (
-                            <div className="flex flex-wrap items-center gap-4 mt-2.5 pt-2.5 border-t border-white/5 text-xs text-slate-300 font-mono">
+                            <div className="flex flex-wrap items-center gap-4 mt-2.5 pt-2.5 border-t border-white/5 text-xs text-slate-300 font-mono tabular-nums">
                               <span>EXP: <strong className="text-white">{card.expiry || '12/28'}</strong></span>
                               <div className="flex items-center gap-1.5">
                                 <span>CVV: <strong className="text-white">{card.dynamicCvv || card.cvv || '843'}</strong></span>
                                 <button 
                                   onClick={() => handleRotateCvv(card.id)} 
-                                  className="text-[10px] bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1 cursor-pointer"
+                                  className="compact-touch text-[10px] bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1 cursor-pointer"
                                   title="Rotate Dynamic Security Code"
                                 >
-                                  <RefreshCw className="w-2.5 h-2.5" /> Rotate CVV
+                                  <RefreshCw className="w-2.5 h-2.5" /> Rotate
                                 </button>
                               </div>
                               <span>PIN: <strong className="text-amber-300">{card.pin || '4912'}</strong></span>
@@ -1202,228 +1393,213 @@ export const VBankVirtualCreditCards: React.FC = () => {
 
                       {/* Right: Balance & Limit */}
                       <div className="text-left sm:text-right shrink-0">
-                        <div className="text-lg font-black text-white">{format(typeof card.balance === 'number' ? card.balance : 0)}</div>
-                        <div className="text-xs text-emerald-400 font-medium">
+                        <div className="text-lg font-black text-white tabular-nums">
+                          {format(typeof card.balance === 'number' ? card.balance : 0)}
+                        </div>
+                        <div className="text-xs text-emerald-400 font-medium tabular-nums">
                           Limit: {card.limit === 'unlimited' ? 'Unlimited AUD' : format(typeof card.limit === 'number' ? card.limit : 0)}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-1">
-                          Settlement: 0% FX Worldwide
+                        <div className="text-[11px] text-slate-400 font-mono mt-1">
+                          0% FX Worldwide
                         </div>
                       </div>
                     </div>
 
-                    {/* Bottom Features Row: Innovative & Modern Actions */}
-                    <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Dual Routing Toggle */}
-                        <button
-                          onClick={() => handleToggleDualRouting(card.id)}
-                          className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1.5 cursor-pointer font-medium"
-                          title="Toggle between eftpos Domestic Australian routing and Global Network rails"
-                        >
-                          <Globe className="w-3 h-3 text-indigo-400" />
-                          Rail: {card.dualRouting === 'eftpos_domestic' ? 'eftpos AU (Direct)' : 'Global Mastercard'}
-                        </button>
+                    {/* Clean Primary Action Toolbar + Collapsible Secondary Controls */}
+                    <div className="mt-4 pt-3 border-t border-white/10 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedEasyPayCard(card);
+                              setIsEasyPayModalOpen(true);
+                            }}
+                            className="min-h-[40px] text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-black transition-all shadow-md"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Easy Pay</span>
+                          </button>
 
-                        {/* Burner Toggle */}
-                        <button
-                          onClick={() => handleToggleBurnerMode(card.id)}
-                          className={`text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer font-medium ${
-                            card.burnerMode 
-                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' 
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                          }`}
-                          title="Auto-destruct token after single checkout"
-                        >
-                          <Flame className="w-3 h-3 text-rose-400" />
-                          Burner: {card.burnerMode ? 'ON' : 'OFF'}
-                        </button>
+                          <button
+                            onClick={() => {
+                              setSelectedShareCard(card);
+                              setIsShareModalOpen(true);
+                            }}
+                            className="min-h-[40px] text-xs bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border border-cyan-500/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-bold transition-all"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-cyan-300" />
+                            <span>Share &amp; VIP</span>
+                          </button>
 
-                        {/* Freeze Toggle */}
-                        <button
-                          onClick={() => handleToggleFreeze(card.id)}
-                          className={`text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer font-medium ${
-                            isFrozen 
-                              ? 'bg-red-500/20 text-red-300 border-red-500/40' 
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                          }`}
-                        >
-                          {isFrozen ? <Lock className="w-3 h-3 text-red-400" /> : <Unlock className="w-3 h-3 text-emerald-400" />}
-                          {isFrozen ? 'FROZEN' : 'ACTIVE'}
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => {
+                              setPayIdSelectedCardId(card.id);
+                              setIsPayIdFlowOpen(true);
+                            }}
+                            className="min-h-[40px] text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-bold transition-all"
+                          >
+                            <Send className="w-3.5 h-3.5 text-blue-400" />
+                            <span>PayID</span>
+                          </button>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Easy Pay & Instant Purchase Anywhere */}
-                        <button
-                          onClick={() => {
-                            setSelectedEasyPayCard(card);
-                            setIsEasyPayModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-black transition-all shadow-md active:scale-95"
-                          title={`Execute instant purchase with 0% FX loss funded by ${card.name}`}
-                        >
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>Easy Pay</span>
-                        </button>
+                          <button
+                            onClick={() => {
+                              setNfcSelectedCardId(card.id);
+                              setIsNfcModalOpen(true);
+                            }}
+                            className="min-h-[40px] text-xs bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-bold transition-all"
+                          >
+                            <Wifi className="w-3.5 h-3.5 text-emerald-400 rotate-90" />
+                            <span>NFC Tap</span>
+                          </button>
 
-                        {/* Refill Full Institutional Yield */}
-                        <button
-                          onClick={() => handleRefillCard(card.id)}
-                          className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer font-bold transition-all active:scale-95"
-                          title="Replenish card balance to full immense value"
-                        >
-                          <RefreshCw className="w-3 h-3 text-amber-400" />
-                          <span>Refill</span>
-                        </button>
-
-                        {/* Real PayID Instant Transfer directly from this Card */}
-                        <button
-                          onClick={() => {
-                            setPayIdSelectedCardId(card.id);
-                            setIsPayIdFlowOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-blue-600/30 via-indigo-600/30 to-purple-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-300 border border-blue-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-blue-500/20 active:scale-95"
-                          title={`Send real-time NPP PayID transfer directly from ${card.name}`}
-                        >
-                          <Send className="w-3.5 h-3.5 text-blue-400" />
-                          <span>PayID Transfer</span>
-                        </button>
-
-                        {/* Virtual NFC Tap to Pay against Terminal */}
-                        <button
-                          onClick={() => {
-                            setNfcSelectedCardId(card.id);
-                            setIsNfcModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-emerald-600/30 via-teal-600/30 to-cyan-600/30 hover:from-emerald-600/50 hover:to-teal-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
-                          title="Test Virtual NFC Contactless Tap with Framer Motion 3D Animation & Haptic Feedback"
-                        >
-                          <Wifi className="w-3.5 h-3.5 text-emerald-400 rotate-90" />
-                          <span>Virtual NFC Tap</span>
-                        </button>
-
-                        {/* Classic Card Features & Value Yield Suite */}
-                        <button
-                          onClick={() => openClassicModal(card)}
-                          className="text-[11px] bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-amber-500/20"
-                          title="Open Classic Bank Card Features, Controls, PIN & Rewards Yield Suite"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Classic Features & Yield</span>
-                        </button>
-
-                        {/* Card Genius Innovations & Luhn Accuracy Proof */}
-                        <button
-                          onClick={() => openGeniusModal(card)}
-                          className="text-[11px] bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
-                          title="Open 3D Holographic Card Stage, Luhn MOD 10 Step-by-Step Proof, and Native Pass Provisioning"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Innovations &amp; Luhn Proof</span>
-                        </button>
-
-                        {/* Copy Details for Online Merchants & POS Terminals */}
-                        <button
-                          onClick={() => {
-                            setSelectedCopyModalCard(card);
-                            setIsCopyModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-emerald-600/30 to-teal-600/30 hover:from-emerald-600/50 hover:to-teal-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                          title="Copy Card Details for Online Merchants & Physical POS Terminals"
-                        >
-                          <Copy className="w-3 h-3 text-emerald-400" />
-                          Copy Details & Merchant POS
-                        </button>
-
-                        {/* Auto-Login to Amazon, Tesla, Uber, Uber Eats, etc. */}
-                        <button
-                          onClick={() => {
-                            setSelectedCopyModalCard(card);
-                            setIsAutoLoginModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                          title="Auto-Login & Saved Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas"
-                        >
-                          <ShoppingBag className="w-3 h-3 text-amber-400" />
-                          Auto-Login &amp; Apps Vault
-                        </button>
-
-                        {/* Massive Rate Expansion */}
-                        <button
-                          onClick={() => {
-                            setRateExpansionInitialCardId(card.id);
-                            setIsRateExpansionModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm ring-1 ring-emerald-500/20 active:scale-95"
-                          title="Pay via this card to activate Massive Rate Expansion (up to 25% APY & 15% cashback)"
-                        >
-                          <TrendingUp className="w-3 h-3 text-emerald-400" />
-                          <span>Expand APY Rate</span>
-                        </button>
-
-                        {/* Instant SMS & Email Dispatch for this card */}
-                        <button
-                          onClick={() => smsEmailDispatchService.dispatchCardCredentials(card)}
-                          className="text-[11px] bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/40 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                          title="Send card credentials via encrypted SMS to +61 401 044 335 and email to asim.nsw@gmail.com"
-                        >
-                          <Send className="w-3 h-3 fill-amber-400" />
-                          Send SMS &amp; Email
-                        </button>
-
-                        {/* Global Merchant POS Simulator for this specific card */}
-                        <button
-                          onClick={() => {
-                            setPosModalInitialCardId(card.id);
-                            setIsGlobalPOSModalOpen(true);
-                          }}
-                          className="text-[11px] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-amber-600/30 hover:from-amber-500/40 hover:to-orange-500/40 text-amber-200 border border-amber-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm active:scale-95"
-                          title="Authorize and test pre-arrival charges at merchants across USA, UK, EU, and Australia"
-                        >
-                          <Globe className="w-3 h-3 text-amber-400" />
-                          <span>Global POS Test</span>
-                        </button>
-
-                        {/* If AMEX, show AMEX App Sync */}
-                        {(card.network === 'AMEX' || String(card.fullNumber || card.number || '').startsWith('3')) && (
                           <button
                             onClick={() => {
                               setSelectedCopyModalCard(card);
                               setIsCopyModalOpen(true);
                             }}
-                            className="text-[11px] bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                            title="Open AMEX Australia Official App Sync"
+                            className="min-h-[40px] text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-bold transition-all"
                           >
-                            <ShieldCheck className="w-3 h-3 text-blue-400" />
-                            AMEX App Sync
+                            <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>POS Details</span>
                           </button>
-                        )}
+                        </div>
 
-                        {/* Cross-Device Wallet Hub: Android, iOS, Windows, Mac */}
                         <button
-                          onClick={() => {
-                            setSelectedWalletCard(card);
-                            setIsWalletModalOpen(true);
-                          }}
-                          className="text-[11px] bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                          title="Open Cross-Device Wallet Hub (Android, iOS, Windows, Mac)"
+                          type="button"
+                          onClick={() =>
+                            setExpandedCardControls((prev) => ({
+                              ...prev,
+                              [card.id]: !prev[card.id],
+                            }))
+                          }
+                          className="min-h-[40px] text-xs bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer font-semibold"
                         >
-                          <Smartphone className="w-3 h-3 text-cyan-400" />
-                          Cross-Device Wallet
-                        </button>
-
-                        {/* 1-Click Fast Enroll for app.link.com */}
-                        <button
-                          onClick={() => handleFastCopyForLink(card)}
-                          className="text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold transition-all shadow-sm"
-                          title="Copy credentials and open app.link.com to save this card immediately"
-                        >
-                          <Zap className="w-3 h-3 fill-emerald-400" />
-                          Add to app.link.com
-                          <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                          <span>More Controls</span>
+                          {isControlsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         </button>
                       </div>
+
+                      {isControlsExpanded && (
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 animate-fadeIn">
+                          <button
+                            onClick={() => handleToggleDualRouting(card.id)}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1.5 cursor-pointer font-medium"
+                          >
+                            <Globe className="w-3 h-3 text-indigo-400" />
+                            Rail: {card.dualRouting === 'eftpos_domestic' ? 'eftpos AU' : 'Global Network'}
+                          </button>
+
+                          <button
+                            onClick={() => handleToggleBurnerMode(card.id)}
+                            className={`min-h-[36px] text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer font-medium ${
+                              card.burnerMode 
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' 
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                            }`}
+                          >
+                            <Flame className="w-3 h-3 text-rose-400" />
+                            Burner: {card.burnerMode ? 'ON' : 'OFF'}
+                          </button>
+
+                          <button
+                            onClick={() => handleToggleFreeze(card.id)}
+                            className={`min-h-[36px] text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer font-medium ${
+                              isFrozen 
+                                ? 'bg-red-500/20 text-red-300 border-red-500/40' 
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                            }`}
+                          >
+                            {isFrozen ? <Lock className="w-3 h-3 text-red-400" /> : <Unlock className="w-3 h-3 text-emerald-400" />}
+                            {isFrozen ? 'Frozen' : 'Active'}
+                          </button>
+
+                          <button
+                            onClick={() => handleRefillCard(card.id)}
+                            className="min-h-[36px] text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer font-bold"
+                          >
+                            <RefreshCw className="w-3 h-3 text-amber-400" />
+                            Refill
+                          </button>
+
+                          <button
+                            onClick={() => openClassicModal(card)}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-400" />
+                            Classic Yield
+                          </button>
+
+                          <button
+                            onClick={() => openGeniusModal(card)}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Sparkles className="w-3 h-3 text-emerald-400" />
+                            Luhn Proof
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedCopyModalCard(card);
+                              setIsAutoLoginModalOpen(true);
+                            }}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <ShoppingBag className="w-3 h-3 text-amber-400" />
+                            Auto-Login Apps
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setRateExpansionInitialCardId(card.id);
+                              setIsRateExpansionModalOpen(true);
+                            }}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <TrendingUp className="w-3 h-3 text-emerald-400" />
+                            Expand APY
+                          </button>
+
+                          <button
+                            onClick={() => smsEmailDispatchService.dispatchCardCredentials(card)}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Send className="w-3 h-3" />
+                            Email/SMS
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setPosModalInitialCardId(card.id);
+                              setIsGlobalPOSModalOpen(true);
+                            }}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Globe className="w-3 h-3 text-amber-400" />
+                            Global POS
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedWalletCard(card);
+                              setIsWalletModalOpen(true);
+                            }}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Smartphone className="w-3 h-3 text-cyan-400" />
+                            Device Wallet
+                          </button>
+
+                          <button
+                            onClick={() => handleFastCopyForLink(card)}
+                            className="min-h-[36px] text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer font-bold"
+                          >
+                            <Zap className="w-3 h-3" />
+                            Link.com
+                            <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1622,6 +1798,29 @@ export const VBankVirtualCreditCards: React.FC = () => {
         isOpen={isAutoLoginModalOpen}
         onClose={() => setIsAutoLoginModalOpen(false)}
         initialCard={selectedCopyModalCard}
+      />
+
+      <ShareCardModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        card={selectedShareCard || cards[0]}
+        allCards={cards}
+        onPreviewClaimPortal={(inviteId) =>
+          window.dispatchEvent(new CustomEvent('valourian_open_claim_portal', { detail: { inviteId } }))
+        }
+      />
+
+      <IssueCardStudioModal
+        isOpen={isIssueStudioOpen}
+        onClose={() => setIsIssueStudioOpen(false)}
+        onOpenEasyPay={(c) => {
+          setSelectedEasyPayCard(c);
+          setIsEasyPayModalOpen(true);
+        }}
+        onOpenShare={(c) => {
+          setSelectedShareCard(c);
+          setIsShareModalOpen(true);
+        }}
       />
     </>
   );

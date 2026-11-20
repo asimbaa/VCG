@@ -24,8 +24,8 @@ import {
   Search,
   Gem
 } from "lucide-react";
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, orderBy, Timestamp } from "firebase/firestore";
-import { db, auth } from "../../firebase";
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { db, auth, handleFirestoreError, OperationType } from "../../firebase";
 import { unifiedBankCardSync, UnifiedBankCard } from "../../services/unifiedBankCardSync";
 import { smsEmailDispatchService, USER_EMAIL, USER_NAME } from "../../services/smsEmailDispatchService";
 import toast from "react-hot-toast";
@@ -315,10 +315,11 @@ export const LuxuryConciergeSection: React.FC = () => {
 
   // 2. Real-Time Auto-InAppUpdates from Firestore
   useEffect(() => {
-    if (!db) return;
+    const uid = auth.currentUser?.uid;
+    if (!db || !uid) return;
 
     try {
-      const q = query(collection(db, "luxury_concierge_bookings"), orderBy("createdAt", "desc"));
+      const q = query(collection(db, "luxury_concierge_bookings"), where("userId", "==", uid));
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -350,13 +351,13 @@ export const LuxuryConciergeSection: React.FC = () => {
           }
         },
         (error) => {
-          console.warn("Firestore real-time concierge listener notice:", error);
+          handleFirestoreError(error, OperationType.LIST, "luxury_concierge_bookings");
         }
       );
 
       return () => unsubscribe();
     } catch (e) {
-      console.warn("Firestore listener setup error:", e);
+      handleFirestoreError(e, OperationType.LIST, "luxury_concierge_bookings");
     }
   }, []);
 
@@ -375,15 +376,15 @@ export const LuxuryConciergeSection: React.FC = () => {
 
     // 2. Persist to Firestore for multi-device sync
     try {
-      if (db) {
+      if (db && auth.currentUser) {
         await addDoc(collection(db, "luxury_concierge_bookings"), {
           ...booking,
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: auth.currentUser.uid,
           serverTimestamp: Timestamp.now()
         });
       }
     } catch (e) {
-      console.warn("Firestore write notice:", e);
+      handleFirestoreError(e, OperationType.CREATE, "luxury_concierge_bookings");
     }
   };
 

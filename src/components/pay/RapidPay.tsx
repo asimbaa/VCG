@@ -45,15 +45,19 @@ import {
   Upload,
   Camera,
   Key,
-  Building2
+  Building2,
+  Share2
 } from "lucide-react";
 import { CryptoKeysModal } from "../bank/CryptoKeysModal";
+import { ShareCardModal } from "../bank/ShareCardModal";
+import { cardShareService } from "../../services/cardShareService";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { CurrencySelector } from "../ui/CurrencySelector";
-import { db , addDoc, setDoc, updateDoc, deleteDoc, createPaymentEvent } from "../../firebase";
+import { auth, db, addDoc, setDoc, updateDoc, deleteDoc, createPaymentEvent, handleFirestoreError, OperationType } from "../../firebase";
 import { getAuth } from "firebase/auth";
 import {
   collection,
@@ -487,6 +491,7 @@ export function RapidPay({ user }: { user: any }) {
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [cryptoAmount, setCryptoAmount] = useState("");
   const [showCryptoKeysModal, setShowCryptoKeysModal] = useState(false);
+  const [showShareCardModal, setShowShareCardModal] = useState(false);
   const [cryptoHistory, setCryptoHistory] = useState<any[]>([
     {
       id: "tx-101",
@@ -583,20 +588,28 @@ export function RapidPay({ user }: { user: any }) {
 
   // Fetch real-time transactions
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !auth.currentUser) return;
     const q = query(
       collection(db, "transactions"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
       orderBy("date", "desc"),
       limit(10)
     );
-    const unsub = onSnapshot(q, (snap) => {
-      const txns = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setHistory(txns);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const txns = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        setHistory(txns);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, "transactions");
+      }
+    );
     
     // Automatically verify that all previous payments are sent and accepted/received
-    reconcileAndSettleAllPayments(user.uid).catch(console.warn);
+    reconcileAndSettleAllPayments(auth.currentUser.uid).catch((err) => {
+      handleFirestoreError(err, OperationType.LIST, "transactions");
+    });
 
     return () => unsub();
   }, [user]);
@@ -605,30 +618,56 @@ export function RapidPay({ user }: { user: any }) {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Listen to user balance
-    const userDocRef = doc(db, "users", user.uid);
-    const unsubUser = onSnapshot(userDocRef, (docSnap) => {
-      let data = docSnap.exists() ? docSnap.data() : { balances: {} };
-      if (!data.balances) data.balances = {};
-      
+    const applyMergedLocalFallback = () => {
       let localVip: any = {};
       let localVal: any = {};
       try {
         localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
         localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
-      } catch (e) {}
-
-      ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach(cur => {
-        let amt = parseFloat(data.balances[cur]);
-        if (isNaN(amt) || amt <= 0) {
-          // If the user is the master account or balances missing, ensure massive asset pool
-          amt = localVip[cur] || localVal[cur] || 940000000.00; 
-        }
-        data.balances[cur] = amt;
+      } catch {}
+      const balances: Record<string, number> = {};
+      ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach((cur) => {
+        balances[cur] = localVip[cur] || localVal[cur] || 940000000.0;
       });
+      setUserData({ balances });
+    };
 
-      setUserData(data);
-    });
+    const currentUid = auth.currentUser?.uid;
+    let unsubUser: (() => void) | null = null;
+    if (currentUid) {
+      const userDocRef = doc(db, "users", currentUid);
+      unsubUser = onSnapshot(
+        userDocRef,
+        (docSnap) => {
+          let data = docSnap.exists() ? docSnap.data() : { balances: {} };
+          if (!data.balances) data.balances = {};
+          
+          let localVip: any = {};
+          let localVal: any = {};
+          try {
+            localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
+            localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
+          } catch (e) {}
+
+          ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach(cur => {
+            let amt = parseFloat(data.balances[cur]);
+            if (isNaN(amt) || amt <= 0) {
+              // If the user is the master account or balances missing, ensure massive asset pool
+              amt = localVip[cur] || localVal[cur] || 940000000.00; 
+            }
+            data.balances[cur] = amt;
+          });
+
+          setUserData(data);
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${currentUid}`);
+          applyMergedLocalFallback();
+        }
+      );
+    } else {
+      applyMergedLocalFallback();
+    }
 
     // Helper to merge local digital cards and institutional cards into Link.com
     const getMergedLocalCards = () => {
@@ -675,7 +714,7 @@ export function RapidPay({ user }: { user: any }) {
 
     // Auto-sync all banking cards into asim.nsw@gmail.com's link.com account
     syncAllCardsToLinkAccount(TARGET_LINK_EMAIL).catch((err) => {
-      console.warn("Link.com initial background sync:", err);
+      console.debug("Link.com initial background sync:", err);
     });
 
     const combineUniqueCards = (fsCards: any[], localCards: any[]) => {
@@ -700,45 +739,69 @@ export function RapidPay({ user }: { user: any }) {
       return Array.from(uniqueMap.values());
     };
 
-    // Listen to credit cards in funding_sources
-    const fundingQ = query(
-      collection(db, "funding_sources"),
-      where("userId", "==", user.uid),
-      where("type", "==", "credit_card")
-    );
-    const unsubFunding = onSnapshot(fundingQ, (snap) => {
-      const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      const allCards = combineUniqueCards(cards, getMergedLocalCards());
-      setCreditCards(allCards);
-    });
+    let unsubFunding: (() => void) | null = null;
+    let unsubDigitalBsb: (() => void) | null = null;
 
-    // Listen to digital BSB cards in funding_sources
-    const digitalBsbQ = query(
-      collection(db, "funding_sources"),
-      where("userId", "==", user.uid),
-      where("type", "==", "digital_bsb_card")
-    );
-    const unsubDigitalBsb = onSnapshot(digitalBsbQ, (snap) => {
-      const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      const allCards = combineUniqueCards(cards, getMergedLocalCards());
-      setBsbLinkedCards(allCards);
+    if (currentUid) {
+      // Listen to credit cards in funding_sources
+      const fundingQ = query(
+        collection(db, "funding_sources"),
+        where("userId", "==", currentUid),
+        where("type", "==", "credit_card")
+      );
+      unsubFunding = onSnapshot(
+        fundingQ,
+        (snap) => {
+          const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+          const allCards = combineUniqueCards(cards, getMergedLocalCards());
+          setCreditCards(allCards);
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, "funding_sources");
+        }
+      );
 
-      if (allCards.length > 0) {
-        setSelectedBsbCard((prev: any) => {
-          if (prev) {
-            return allCards.find((c: any) => c.id === prev.id) || allCards[0];
+      // Listen to digital BSB cards in funding_sources
+      const digitalBsbQ = query(
+        collection(db, "funding_sources"),
+        where("userId", "==", currentUid),
+        where("type", "==", "digital_bsb_card")
+      );
+      unsubDigitalBsb = onSnapshot(
+        digitalBsbQ,
+        (snap) => {
+          const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+          const allCards = combineUniqueCards(cards, getMergedLocalCards());
+          setBsbLinkedCards(allCards);
+
+          if (allCards.length > 0) {
+            setSelectedBsbCard((prev: any) => {
+              if (prev) {
+                return allCards.find((c: any) => c.id === prev.id) || allCards[0];
+              }
+              return allCards[0];
+            });
+          } else {
+            setSelectedBsbCard(null);
           }
-          return allCards[0];
-        });
-      } else {
-        setSelectedBsbCard(null);
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, "funding_sources");
+        }
+      );
+    } else {
+      const localCards = getMergedLocalCards();
+      setCreditCards(localCards);
+      setBsbLinkedCards(localCards);
+      if (localCards.length > 0) {
+        setSelectedBsbCard((prev: any) => prev || localCards[0]);
       }
-    });
+    }
 
     return () => {
-      unsubUser();
-      unsubFunding();
-      unsubDigitalBsb();
+      if (unsubUser) unsubUser();
+      if (unsubFunding) unsubFunding();
+      if (unsubDigitalBsb) unsubDigitalBsb();
     };
   }, [user]);
 
@@ -2880,22 +2943,39 @@ export function RapidPay({ user }: { user: any }) {
                   <h4 className="text-sm font-bold text-indigo-900">Share Card Access</h4>
                   <p className="text-xs text-indigo-700/80 mt-0.5">Generate a secure link to let someone download the app and use this digital card with a custom limit.</p>
                </div>
-               <button 
-                  onClick={() => {
-                     if (!selectedBsbCard) {
-                        toast.error("Select a card first");
-                        return;
-                     }
-                     const shareUrl = `https://valourian.com/cards/activate/${selectedBsbCard.id}?limit=25000`;
-                     toast.success("Card Share Link Generated", {
-                        description: `Secure link copied. They will receive instructions to download the Valourian app on iOS/Android to provision their card.`,
-                     });
-                     console.log("Share link:", shareUrl);
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl whitespace-nowrap transition-colors"
-               >
-                  Generate Invite Link
-               </button>
+               <div className="flex flex-wrap items-center gap-2">
+                 <button 
+                    onClick={async () => {
+                       if (!selectedBsbCard) {
+                          toast.error("Select a card first");
+                          return;
+                       }
+                       const res = await cardShareService.createSharedCardInvitesBatch({
+                         card: selectedBsbCard,
+                         grantedLimitAUD: 25000,
+                         cardMode: "virtual_and_physical",
+                         autoShareVipBenefits: true,
+                         sendEmail: false,
+                       });
+                       if (res.primaryUrl) {
+                         navigator.clipboard.writeText(res.primaryUrl);
+                         toast.success("Live Magic Claim Link Copied!", {
+                           description: `Shareable virtual + physical pass (${res.primaryUrl}) copied to clipboard.`,
+                         });
+                       }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl whitespace-nowrap transition-colors cursor-pointer"
+                 >
+                    Copy Instant Share Link
+                 </button>
+                 <button
+                    onClick={() => setShowShareCardModal(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+                 >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Email / VIP Swarm
+                 </button>
+               </div>
             </div>
 
             {/* Live Worldwide Order Terminal, */}
@@ -3357,7 +3437,7 @@ export function RapidPay({ user }: { user: any }) {
                           value={payingRecipient}
                           onChange={(e) => setPayingRecipient(e.target.value)}
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-yellow-500 text-white font-bold"
-                          placeholder="Jane Doe"
+                          placeholder="e.g. Asim Aryal or Merchant"
                           disabled={status === "processing"}
                         />
                       </div>
@@ -4874,6 +4954,18 @@ export function RapidPay({ user }: { user: any }) {
         isOpen={showCryptoKeysModal}
         onClose={() => setShowCryptoKeysModal(false)}
         defaultShowFullKeys={true}
+      />
+
+      {/* Share Debit / Credit Card & Auto-VIP Modal */}
+      <ShareCardModal
+        isOpen={showShareCardModal}
+        onClose={() => setShowShareCardModal(false)}
+        card={(selectedBsbCard as any) || (unifiedBankCardSync.getCards()[0] as any)}
+        allCards={unifiedBankCardSync.getCards() as any}
+        onPreviewClaimPortal={(inviteId) => {
+          setShowShareCardModal(false);
+          window.dispatchEvent(new CustomEvent("valourian_open_claim_portal", { detail: { inviteId } }));
+        }}
       />
     </div>
     </>

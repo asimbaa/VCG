@@ -390,24 +390,25 @@ export function SovereignNotificationsBar({
           {/* Bell Icon with Unread Count Badge */}
           <button
             onClick={() => setIsFeedDrawerOpen(!isFeedDrawerOpen)}
-            className="relative p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+            className="compact-touch relative p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
             title="Open Sovereign Notifications Feed"
           >
             <Bell className="w-4 h-4 text-emerald-400" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-slate-950 font-black text-[9px] rounded-full flex items-center justify-center animate-pulse">
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-slate-950 font-black text-[9px] rounded-full flex items-center justify-center tabular-nums">
                 {unreadCount}
               </span>
             )}
           </button>
 
-          <div 
+          <button
+            type="button"
             onClick={() => setIsFeedDrawerOpen(true)}
-            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider text-emerald-400 shrink-0 cursor-pointer hover:bg-emerald-500/20 transition-colors"
+            className="compact-touch flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider text-emerald-400 shrink-0 cursor-pointer hover:bg-emerald-500/20 transition-colors whitespace-nowrap"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-            LIVE FEED ({unreadCount})
-          </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            FEED ({unreadCount})
+          </button>
 
           {ALERTS.length > 0 && (
             <AnimatePresence mode="wait">
@@ -468,9 +469,9 @@ export function SovereignNotificationsBar({
             </button>
           </div>
 
-          {/* Quick Command Form */}
-          <form onSubmit={handleQuickCommand} className="flex items-center gap-1 flex-1 sm:flex-initial">
-            <div className="relative flex-1 sm:w-64 md:w-80">
+          {/* Quick Command Form (desktop / tablet row; mobile accessible via chevron drawer) */}
+          <form onSubmit={handleQuickCommand} className="hidden sm:flex items-center gap-1 flex-initial">
+            <div className="relative sm:w-64 md:w-80">
               <Terminal className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
@@ -490,14 +491,14 @@ export function SovereignNotificationsBar({
               ) : (
                 <Send className="w-3 h-3" />
               )}
-              <span className="hidden sm:inline">Run</span>
+              <span>Run</span>
             </button>
           </form>
 
           {/* Toggle Expand Details */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
+            className="compact-touch p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
             title="Expand Command Center & Shortcuts"
           >
             <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
@@ -612,7 +613,7 @@ export function SovereignNotificationsBar({
                           <Clock className="w-3 h-3" />
                           <span>{item.time}</span>
                           {!item.read && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                           )}
                         </div>
                       </div>
@@ -675,6 +676,28 @@ export function SovereignNotificationsBar({
             className="border-t border-slate-800 bg-slate-950/90 px-4 sm:px-6 py-4 overflow-hidden"
           >
             <div className="max-w-7xl mx-auto space-y-4">
+
+              {/* Mobile Quick Command Box */}
+              <form onSubmit={handleQuickCommand} className="flex sm:hidden items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Terminal className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={commandInput}
+                    onChange={(e) => setCommandInput(e.target.value)}
+                    placeholder="Run command (e.g. 'tap card', 'pay bpay bill')..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500/50 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isProcessingCmd || !commandInput.trim()}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Run
+                </button>
+              </form>
               
               {/* Command Response Display if available */}
               {lastCommandResponse && (

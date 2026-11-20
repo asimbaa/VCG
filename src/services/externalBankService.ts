@@ -6,7 +6,7 @@
  */
 
 import { collection, doc, setDoc, getDocs, getDoc, query, where, addDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { renderAutoTable } from "../utils/safePdfAutoTable";
@@ -354,10 +354,10 @@ class ExternalBankService {
     return paymentRecord;
   }
 
-  private async persistToFirestore(account: ExternalBankAccount, payment: ExternalPaymentRecord, userId?: string) {
+  private async persistToFirestore(account: ExternalBankAccount, payment: ExternalPaymentRecord, _userId?: string) {
     try {
-      if (!db) return;
-      const uid = userId || "asim_aryal";
+      const uid = auth.currentUser?.uid;
+      if (!db || !uid) return;
 
       // 1. Save in external_accounts collection
       await setDoc(doc(db, "external_bank_accounts", account.id), {
@@ -389,7 +389,7 @@ class ExternalBankService {
         speedNote: `Settled instantly into external ${account.bankName} account via New Payments Platform (NPP). Available for immediate withdrawal or card spend.`
       });
     } catch (err) {
-      console.warn("Firestore sync external account note:", err);
+      handleFirestoreError(err, OperationType.WRITE, "external_bank_accounts");
     }
   }
 

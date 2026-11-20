@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, FileText, Key, Map as MapIcon, ChevronRight, Download, ExternalLink, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { collection, query, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 
 export function MessageCenter({ user }: { user: any }) {
@@ -13,17 +13,23 @@ export function MessageCenter({ user }: { user: any }) {
   const [isSearchListening, setIsSearchListening] = useState(false);
   
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !auth.currentUser) return;
     
     const q = query(
-      collection(db, "users", user.uid, "emails"),
+      collection(db, "users", auth.currentUser.uid, "emails"),
       orderBy("id", "desc")
     );
     
-    const unsub = onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map(d => ({ ...d.data(), docIdField: d.id }));
-      setDbMessages(msgs);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const msgs = snap.docs.map(d => ({ ...d.data(), docIdField: d.id }));
+        setDbMessages(msgs);
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, `users/${auth.currentUser?.uid}/emails`);
+      }
+    );
     
     return () => unsub();
   }, [user]);

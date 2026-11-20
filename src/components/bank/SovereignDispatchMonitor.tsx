@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { collection, query, onSnapshot, setDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, query, where, onSnapshot, setDoc, doc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 import { Truck, Navigation, Activity, ShieldCheck, Battery, Thermometer, MapPin, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -60,7 +60,12 @@ export const SovereignDispatchMonitor = () => {
     }, [fleet]);
 
     useEffect(() => {
-        const q = query(collection(db, 'active_orders'));
+        const uid = auth.currentUser?.uid;
+        if (!uid) {
+            setLoading(false);
+            return;
+        }
+        const q = query(collection(db, 'active_orders'), where('userId', '==', uid));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const vehicles: FleetVehicle[] = [];
             querySnapshot.forEach((doc) => {

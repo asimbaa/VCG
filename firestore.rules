@@ -1,52 +1,416 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper to check if the authenticated user is Mr. Asim Aryal
-    function isAsim() {
-      return request.auth != null && 
-             request.auth.token != null && 
-             'email' in request.auth.token && 
-             request.auth.token.email == "asim.nsw@gmail.com";
-    }
-
-    // Allow the test connectivity check document to be publicly accessible
-    match /test/{document} {
-      allow read, write: if true;
-    }
-
-    // Driver Ratings rules
-    match /driver_ratings/{ratingId} {
-      allow read, create: if request.auth != null;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-
-    // Favorite Routes rules
-    match /favorite_routes/{routeId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Completed Trips rules
-    match /completed_trips/{tripId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Scheduled Rides rules (plural + singular collections)
-    match /scheduled_rides/{rideId} {
-      allow read, write: if request.auth != null;
-    }
-    match /scheduled_ride/{rideId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Emergency Contacts rules
-    match /emergency_contacts/{contactId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Default fallback allow rule that ensures asim.nsw@gmail.com has absolute control,
-    // and also allows other access securely or with a safe fallback
+    // 1. Master Global Safety Net (Default Deny)
     match /{document=**} {
-      allow read, write: if isAsim() || true;
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.@]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() &&
+             request.auth.token != null &&
+             (!('email' in request.auth.token) || request.auth.token.email_verified == true);
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && uid is string && request.auth.uid == uid;
+    }
+
+    function isAsim() {
+      return isSignedIn() &&
+             request.auth.token != null &&
+             'email' in request.auth.token &&
+             request.auth.token.email == "asim.nsw@gmail.com" &&
+             request.auth.token.email_verified == true;
+    }
+
+    // Validation Blueprints
+    function isValidSharedCardInvite(data) {
+      return data.keys().hasAll([
+               'inviteId', 'ownerUid', 'cardId', 'cardName', 'cardCategory',
+               'network', 'maskedLast4', 'senderName', 'senderEmail',
+               'grantedLimitAUD', 'cardMode', 'allowPhysicalCard',
+               'physicalDispatchStatus', 'autoShareVipBenefits', 'vipBenefits',
+               'status', 'shareUrl', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'inviteId', 'ownerUid', 'cardId', 'cardName', 'cardCategory',
+               'network', 'maskedLast4', 'senderName', 'senderEmail',
+               'recipientEmail', 'recipientName', 'grantedLimitAUD', 'cardMode',
+               'allowPhysicalCard', 'physicalDispatchStatus', 'autoShareVipBenefits',
+               'vipBenefits', 'status', 'claimedByName', 'claimedByEmail',
+               'claimedAt', 'shareUrl', 'createdAt'
+             ]) &&
+             isValidId(data.inviteId) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.cardId is string && data.cardId.size() >= 1 && data.cardId.size() <= 64 &&
+             data.cardName is string && data.cardName.size() >= 1 && data.cardName.size() <= 120 &&
+             data.cardCategory in ['debit', 'credit'] &&
+             data.network is string && data.network.size() >= 1 && data.network.size() <= 32 &&
+             data.maskedLast4 is string && data.maskedLast4.size() >= 1 && data.maskedLast4.size() <= 8 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+             data.senderEmail is string && data.senderEmail.size() >= 3 && data.senderEmail.size() <= 120 &&
+             (!('recipientEmail' in data) || (data.recipientEmail is string && data.recipientEmail.size() <= 120)) &&
+             (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() <= 100)) &&
+             data.grantedLimitAUD is number && (data.grantedLimitAUD == -1 || data.grantedLimitAUD >= 0) &&
+             data.cardMode in ['virtual_instant', 'virtual_and_physical'] &&
+             data.allowPhysicalCard is bool &&
+             data.physicalDispatchStatus in ['not_requested', 'queued_production', 'courier_dispatched'] &&
+             data.autoShareVipBenefits is bool &&
+             data.vipBenefits is list && data.vipBenefits.size() <= 8 &&
+             (data.vipBenefits.size() == 0 || (data.vipBenefits[0] is string && data.vipBenefits[0].size() <= 120)) &&
+             data.status in ['pending', 'claimed', 'revoked'] &&
+             (!('claimedByName' in data) || (data.claimedByName is string && data.claimedByName.size() <= 100)) &&
+             (!('claimedByEmail' in data) || (data.claimedByEmail is string && data.claimedByEmail.size() <= 120)) &&
+             (!('claimedAt' in data) || (data.claimedAt is string && data.claimedAt.size() <= 64)) &&
+             data.shareUrl is string && data.shareUrl.size() >= 1 && data.shareUrl.size() <= 260 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidEmailDispatchLog(data) {
+      return data.keys().hasAll(['logId', 'ownerUid', 'to', 'subject', 'channel', 'status', 'createdAt']) &&
+             data.keys().hasOnly(['logId', 'ownerUid', 'to', 'subject', 'channel', 'status', 'previewUrl', 'messageId', 'createdAt']) &&
+             isValidId(data.logId) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.to is string && data.to.size() >= 1 && data.to.size() <= 250 &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 250 &&
+             data.channel in ['gmail_api', 'smtp', 'ethereal_sandbox', 'local_relay', 'failed'] &&
+             data.status in ['delivered', 'sandbox_preview', 'queued_retry', 'failed'] &&
+             (!('previewUrl' in data) || (data.previewUrl is string && data.previewUrl.size() <= 500)) &&
+             (!('messageId' in data) || (data.messageId is string && data.messageId.size() <= 250)) &&
+             data.createdAt == request.time;
+    }
+
+    function isValidDriverRating(data) {
+      return data.keys().hasAll(['userId', 'driverName', 'rating', 'createdAt']) &&
+             data.keys().hasOnly(['userId', 'driverName', 'rating', 'feedback', 'pickup', 'destination', 'createdAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.driverName is string && data.driverName.size() >= 1 && data.driverName.size() <= 120 &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             (!('feedback' in data) || (data.feedback is string && data.feedback.size() <= 1000)) &&
+             (!('pickup' in data) || (data.pickup is string && data.pickup.size() <= 250)) &&
+             (!('destination' in data) || (data.destination is string && data.destination.size() <= 250));
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['title', 'message']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 2000 &&
+             (!('userId' in data) || (data.userId is string && data.userId.size() <= 128)) &&
+             (!('type' in data) || (data.type is string && data.type.size() <= 64)) &&
+             (!('read' in data) || data.read is bool);
+    }
+
+    // Read-only startup connectivity check document
+    match /test/connection {
+      allow get: if true;
+      allow list, create, update, delete: if false;
+    }
+
+    // Users & PII-Isolated Subcollections
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isAsim() || isOwner(userId));
+      allow list: if isAsim() || (isSignedIn() && existing().uid == request.auth.uid);
+      allow create, update: if isValidId(userId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      allow delete: if isValidId(userId) && isAsim();
+
+      match /emails/{emailId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update, delete: if isValidId(emailId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      }
+
+      match /payment_events/{eventId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update: if isValidId(eventId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+        allow delete: if isValidId(eventId) && isAsim();
+      }
+
+      match /cheque_records/{chequeId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update: if isValidId(chequeId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+        allow delete: if isValidId(chequeId) && isAsim();
+      }
+
+      match /smtp_configs/{configId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update, delete: if isValidId(configId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      }
+    }
+
+    // Shareable Debit & Credit Card Invitations
+    match /shared_card_invites/{inviteId} {
+      allow get: if isValidId(inviteId) && isSignedIn() && (isAsim() || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && (isAsim() || existing().ownerUid == request.auth.uid);
+      allow create: if isValidId(inviteId) && isVerifiedUser() &&
+                    isValidSharedCardInvite(incoming()) &&
+                    (isAsim() || incoming().ownerUid == request.auth.uid);
+      allow update: if isValidId(inviteId) && isVerifiedUser() &&
+                    isValidSharedCardInvite(incoming()) &&
+                    existing().status != 'revoked' &&
+                    incoming().ownerUid == existing().ownerUid &&
+                    incoming().inviteId == existing().inviteId &&
+                    (
+                      isAsim() ||
+                      (
+                        existing().ownerUid == request.auth.uid &&
+                        incoming().diff(existing()).affectedKeys().hasOnly([
+                          'status', 'claimedByName', 'claimedByEmail', 'claimedAt',
+                          'physicalDispatchStatus', 'createdAt'
+                        ])
+                      )
+                    );
+      allow delete: if isValidId(inviteId) && isAsim();
+    }
+
+    // Email Dispatch Audit Logs (Immutable to non-admins)
+    match /email_dispatch_logs/{logId} {
+      allow get: if isValidId(logId) && isSignedIn() && (isAsim() || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && (isAsim() || existing().ownerUid == request.auth.uid);
+      allow create: if isValidId(logId) && isVerifiedUser() &&
+                    isValidEmailDispatchLog(incoming()) &&
+                    (isAsim() || incoming().ownerUid == request.auth.uid);
+      allow update, delete: if isValidId(logId) && isAsim();
+    }
+
+    // Notifications Feed
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isValidId(notificationId) && isVerifiedUser() && isValidNotification(incoming());
+      allow update: if isValidId(notificationId) && isVerifiedUser() && isValidNotification(incoming()) &&
+                    (isAsim() || (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read'])));
+      allow delete: if isValidId(notificationId) && isAsim();
+    }
+
+    // Financial Ledger & Card Records
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(transactionId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(transactionId) && isAsim();
+    }
+
+    match /virtual_cards/{cardId} {
+      allow get: if isValidId(cardId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(cardId) && isVerifiedUser() && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(cardId) && isAsim();
+    }
+
+    match /cards/{cardId} {
+      allow get: if isValidId(cardId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(cardId) && isVerifiedUser() && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(cardId) && isAsim();
+    }
+
+    match /saved_recipients/{recipientId} {
+      allow get: if isValidId(recipientId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(recipientId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(recipientId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /recurring_transfers/{transferId} {
+      allow get: if isValidId(transferId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(transferId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(transferId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /funding_sources/{sourceId} {
+      allow get: if isValidId(sourceId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(sourceId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(sourceId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /draft_transactions/{draftId} {
+      allow get: if isValidId(draftId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(draftId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(draftId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /brand_assets/{assetId} {
+      allow get: if isValidId(assetId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(assetId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(assetId) && isAsim();
+    }
+
+    match /cba_account_balances/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isAsim() || isOwner(userId));
+      allow list: if isAsim();
+      allow create, update: if isValidId(userId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      allow delete: if isValidId(userId) && isAsim();
+    }
+
+    match /external_bank_accounts/{accountId} {
+      allow get: if isValidId(accountId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(accountId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(accountId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /link_accounts/{accountId} {
+      allow get, list: if isAsim() || (isSignedIn() && existing().email == request.auth.token.email);
+      allow create, update: if isValidId(accountId) && isVerifiedUser() && (isAsim() || incoming().email == request.auth.token.email);
+      allow delete: if isValidId(accountId) && isAsim();
+    }
+
+    match /backups/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isAsim() || isOwner(userId));
+      allow list: if isAsim();
+      allow create, update: if isValidId(userId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      allow delete: if isValidId(userId) && isAsim();
+    }
+
+    // Mobility, Logistics & Telemetry Collections
+    match /driver_ratings/{ratingId} {
+      allow get: if isValidId(ratingId) && isSignedIn();
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isValidId(ratingId) && isVerifiedUser() && isValidDriverRating(incoming()) && (isAsim() || incoming().userId == request.auth.uid);
+      allow update: if isValidId(ratingId) && isVerifiedUser() && isValidDriverRating(incoming()) && (isAsim() || (existing().userId == request.auth.uid && incoming().userId == existing().userId));
+      allow delete: if isValidId(ratingId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /favorite_routes/{routeId} {
+      allow get: if isValidId(routeId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(routeId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(routeId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /completed_trips/{tripId} {
+      allow get: if isValidId(tripId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(tripId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(tripId) && isAsim();
+    }
+
+    match /scheduled_rides/{rideId} {
+      allow get: if isValidId(rideId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(rideId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(rideId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /scheduled_ride/{rideId} {
+      allow get: if isValidId(rideId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(rideId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(rideId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /emergency_contacts/{contactId} {
+      allow get: if isValidId(contactId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(contactId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(contactId) && isAsim();
+    }
+
+    match /active_orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(orderId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(orderId) && isAsim();
+    }
+
+    // Executive-Only Infrastructure & Settlement Collections
+    match /ledger/{entryId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(entryId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /settlements/{settlementId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(settlementId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /bpay_settlements/{settlementId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(settlementId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /atm_withdrawals/{withdrawalId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(withdrawalId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /global_transfer_schemas/{schemaId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(schemaId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /system_health_flourishing/{docId} {
+      allow get, list: if isAsim();
+      allow create, update: if isValidId(docId) && isAsim();
+      allow delete: if isAsim();
+    }
+
+    match /ai_sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(sessionId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(sessionId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /luxury_concierge_bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(bookingId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(bookingId) && isAsim();
+    }
+
+    match /global_vouchers/{voucherId} {
+      allow get: if isValidId(voucherId) && isSignedIn() && (isAsim() || existing().creatorId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().creatorId == request.auth.uid);
+      allow create, update: if isValidId(voucherId) && isVerifiedUser() && (isAsim() || incoming().creatorId == request.auth.uid);
+      allow delete: if isValidId(voucherId) && isAsim();
+    }
+
+    match /scheduled_orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(orderId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(orderId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+    }
+
+    match /vouchers/{voucherId} {
+      allow get: if isValidId(voucherId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(voucherId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(voucherId) && isAsim();
+    }
+
+    match /payment_events/{eventId} {
+      allow get: if isValidId(eventId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create, update: if isValidId(eventId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(eventId) && isAsim();
     }
   }
 }

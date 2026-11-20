@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../../firebase";
 import { 
   Package, 
   Key, 
@@ -86,9 +86,9 @@ export default function LogisticsDashboard({ user }: { user: any }) {
 
   // Synchronize prior real transactions from Firestore
   useEffect(() => {
-    if (!user?.uid && !user?.email) return;
+    const userUid = auth.currentUser?.uid;
+    if (!userUid) return;
 
-    const userUid = user?.uid || "asim_aryal";
     const q = query(collection(db, "transactions"), where("userId", "==", userUid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items: any[] = [];
@@ -105,7 +105,7 @@ export default function LogisticsDashboard({ user }: { user: any }) {
       });
       setDynamicTransactions(items);
     }, (err) => {
-      console.warn("Transactions onSnapshot info:", err);
+      handleFirestoreError(err, OperationType.LIST, "transactions");
     });
 
     return () => unsubscribe();

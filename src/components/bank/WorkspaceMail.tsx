@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Inbox, Send, Archive, Star, Clock, File, Search, ChevronRight, CheckCircle2, UserCircle2, Paperclip, MoreVertical, Plus, Reply, AlertCircle, Settings, LogOut, Check, Download, Lock, X, RefreshCw, Fingerprint, Zap, Bot, FileText, Loader2, Gift } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { db } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, getDocs, getDoc, doc, setDoc, where, deleteDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { sendWorkspaceEmail, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
+import { sendWorkspaceEmail, sendUnifiedEmail, getEmailDispatchLogs, getBackendEmailStatus, EMAIL_DISPATCH_EVENT, EmailDispatchLogEntry, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
 
 const mockEmails = [
   {
@@ -573,6 +573,16 @@ export function WorkspaceMail({ user }: { user: any }) {
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [showSmtpSettings, setShowSmtpSettings] = useState(false);
+  const [showDeliveryLog, setShowDeliveryLog] = useState(false);
+  const [dispatchLogs, setDispatchLogs] = useState<EmailDispatchLogEntry[]>(() => getEmailDispatchLogs());
+  const [backendStatus, setBackendStatus] = useState<{ smtpConfigured: boolean; smtpHost: string; mode: string; fromAddress: string } | null>(null);
+
+  useEffect(() => {
+    getBackendEmailStatus().then(setBackendStatus).catch(() => {});
+    const onDispatched = () => setDispatchLogs(getEmailDispatchLogs());
+    window.addEventListener(EMAIL_DISPATCH_EVENT, onDispatched);
+    return () => window.removeEventListener(EMAIL_DISPATCH_EVENT, onDispatched);
+  }, []);
 
   // Dynamic SMTP keys
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
@@ -646,12 +656,12 @@ export function WorkspaceMail({ user }: { user: any }) {
   const [activeBoardTab, setActiveBoardTab] = useState<"mail" | "credentials">("mail");
 
   useEffect(() => {
-    if (!user || !user.uid) {
+    if (!user?.uid || !auth.currentUser) {
       setEmails(mockEmails);
       return;
     }
 
-    const emailsColRef = collection(db, "users", user.uid, "emails");
+    const emailsColRef = collection(db, "users", auth.currentUser.uid, "emails");
     
     let unsubscribe: (() => void) | undefined;
 
@@ -1460,7 +1470,20 @@ export function WorkspaceMail({ user }: { user: any }) {
         </div>
 
         {/* Profile & Accounts */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+           <button
+             onClick={() => { setDispatchLogs(getEmailDispatchLogs()); setShowDeliveryLog(!showDeliveryLog); }}
+             className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
+               showDeliveryLog
+                 ? 'bg-emerald-600 text-white border-emerald-600'
+                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+             }`}
+             title="View live Email Delivery Log and open sandbox previews"
+           >
+             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+             <span className="hidden sm:inline">Delivery Log</span>
+             <span className="font-mono text-[11px]">({dispatchLogs.length})</span>
+           </button>
            <button className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors hidden md:block">
              <Settings className="w-5 h-5" />
            </button>
@@ -1516,6 +1539,50 @@ export function WorkspaceMail({ user }: { user: any }) {
            </div>
         </div>
       </div>
+
+      {showDeliveryLog && (
+        <div className="border-b border-slate-200 bg-slate-50 px-4 sm:px-6 py-3 shrink-0 max-h-60 overflow-y-auto">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span>Transmission Audit Log</span>
+              {backendStatus && (
+                <span className="text-[11px] font-mono text-slate-500">
+                  · Relay: {backendStatus.smtpConfigured ? backendStatus.smtpHost : 'Ethereal Sandbox / Gmail API'}
+                </span>
+              )}
+            </div>
+            <button onClick={() => setShowDeliveryLog(false)} className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer">
+              Close
+            </button>
+          </div>
+          {dispatchLogs.length === 0 ? (
+            <p className="text-xs text-slate-500 py-2">No emails transmitted in this browser session yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {dispatchLogs.slice(0, 12).map((log) => (
+                <div key={log.logId} className="bg-white border border-slate-200 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-slate-900 truncate">{log.subject}</div>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">
+                      To: {log.to} · Channel: {log.channel} · Status: {log.status}
+                    </div>
+                  </div>
+                  {log.previewUrl && (
+                    <a
+                      href={log.previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[11px] border border-emerald-200 shrink-0"
+                    >
+                      Open Rendered Email
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden relative">
          {/* Sidebar */}
@@ -1779,7 +1846,7 @@ export function WorkspaceMail({ user }: { user: any }) {
                    <div className="flex items-start justify-between mb-8 text-xs sm:text-sm">
                       <div className="flex items-center gap-3">
                          <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden">
-                            {selectedEmail.sender === "Elon Musk" ? <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg" className="w-full h-full object-cover" referrerPolicy="no-referrer"  loading="lazy" /> : selectedEmail.sender[0]}
+                            {selectedEmail.sender === "Elon Musk" ? <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg" alt="Elon Musk" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="32" fill="%230f172a"/><text x="50%" y="58%" fill="%23ffffff" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle">EM</text></svg>'; }} /> : selectedEmail.sender[0]}
                          </div>
                          <div>
                             <div className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
@@ -2259,17 +2326,22 @@ export function WorkspaceMail({ user }: { user: any }) {
                        if (user && user.uid) {
                          const emailDocRef = doc(collection(db, "users", user.uid, "emails"), String(newEmail.id));
                          await setDoc(emailDocRef, newEmail);
-                         toast.success("Email transmitted securely via Valourian Priority Gateway!");
-                          fetch("/api/send-email", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              to: to,
-                              subject: subj,
-                              body: body,
-                              sender: selectedAccount.name, customSmtp: smtpPass ? { host: smtpHost, port: parseInt(smtpPort), user: smtpUser, pass: smtpPass, from: selectedAccount.email } : null
-                            })
-                          }).catch(err => console.warn(err));
+                         const htmlFormatted = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:auto;background:#0f172a;color:#f8fafc;padding:24px;border-radius:14px;"><h2 style="margin:0 0 12px 0;color:#10b981;font-size:18px;">${subj}</h2><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#e2e8f0;">${body.replace(/</g, "&lt;")}</div></div>`;
+                         const dispatchRes = await sendUnifiedEmail({
+                           to,
+                           subject: subj,
+                           htmlBody: htmlFormatted,
+                           textBody: body,
+                           senderName: selectedAccount.name,
+                           customSmtp: smtpPass ? { host: smtpHost, port: parseInt(smtpPort), user: smtpUser, pass: smtpPass, from: selectedAccount.email } : null,
+                           silentToast: true,
+                         });
+                         setDispatchLogs(getEmailDispatchLogs());
+                         if (dispatchRes.previewUrl) {
+                           toast.success("Email transmitted! Click 'Delivery Log' in the header to inspect the rendered email.");
+                         } else {
+                           toast.success(`Email transmitted via ${dispatchRes.channel} to ${to}!`);
+                         }
 
                          if (to.toLowerCase().includes("scotpac") || to.toLowerCase().includes("david")) {
                            toast.info("Priority handshake established. David is receiving the transmission...");

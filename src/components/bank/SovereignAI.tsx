@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { collection, query, onSnapshot, setDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, query, where, onSnapshot, setDoc, doc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 
 
@@ -119,32 +119,42 @@ export const SovereignAI: React.FC<{
   }, [sessions]);
 
   useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
     // Only save to firestore if it's not the initial load to prevent overwriting
     if (sessions.length > 0) {
       sessions.forEach(session => {
-        setDoc(doc(db, 'ai_sessions', session.id), session).catch(console.error);
+        setDoc(doc(db, 'ai_sessions', session.id), { ...session, userId: uid }).catch(console.warn);
       });
     }
   }, [sessions]);
 
   useEffect(() => {
-    const q = query(collection(db, 'ai_sessions'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fbSessions: ChatSession[] = [];
-      snapshot.forEach(doc => fbSessions.push(doc.data() as ChatSession));
-      if (fbSessions.length > 0) {
-        // Merge or just set if we want full cloud authoritative
-        // For now we'll just set it to keep it simple, sorted by updated
-        const sorted = fbSessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        setSessions(prev => {
-            // Only update if cloud has more or different data to prevent infinite loops
-            if (JSON.stringify(prev) !== JSON.stringify(sorted)) {
-                return sorted;
-            }
-            return prev;
-        });
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const q = query(collection(db, 'ai_sessions'), where('userId', '==', uid));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fbSessions: ChatSession[] = [];
+        snapshot.forEach(doc => fbSessions.push(doc.data() as ChatSession));
+        if (fbSessions.length > 0) {
+          // Merge or just set if we want full cloud authoritative
+          // For now we'll just set it to keep it simple, sorted by updated
+          const sorted = fbSessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+          setSessions(prev => {
+              // Only update if cloud has more or different data to prevent infinite loops
+              if (JSON.stringify(prev) !== JSON.stringify(sorted)) {
+                  return sorted;
+              }
+              return prev;
+          });
+        }
+      },
+      (err) => {
+        console.warn("SovereignAI session sync notice:", err);
       }
-    });
+    );
     return () => unsubscribe();
   }, []);
 

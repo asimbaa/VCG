@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { jsPDF } from "jspdf";
 import { renderAutoTable } from "../../utils/safePdfAutoTable";
-import { db, handleFirestoreError, OperationType } from "../../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../../firebase";
 import {
   collection,
   query,
@@ -103,14 +103,19 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
 
   // 2. Real-Time Indexed Firestore Retrieval
   const setupFirestoreSubscription = useCallback(() => {
-    if (!db) return () => {};
+    const uid = auth.currentUser?.uid;
+    if (!db || !uid) {
+      setLoading(false);
+      setIsRefreshing(false);
+      return () => {};
+    }
 
     const txCollectionRef = collection(db, "transactions");
     
     // Primary query using composite index (userId + date desc)
     let q = query(
       txCollectionRef,
-      where("userId", "==", userId),
+      where("userId", "==", uid),
       orderBy("date", "desc"),
       limit(100)
     );
@@ -151,30 +156,15 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        if (!snapshot.empty) {
-          handleDocs(snapshot.docs);
-        } else {
-          // Fallback if userId has alternate capitalization or simulated records
-          const fallbackQuery = query(txCollectionRef, limit(100));
-          getDocs(fallbackQuery).then((fbSnap) => {
-            const userDocs = fbSnap.docs.filter((d) => {
-              const u = d.data().userId;
-              return !u || u === userId || u === "asim_aryal" || u === "ceo-founder-override";
-            });
-            handleDocs(userDocs.length > 0 ? userDocs : fbSnap.docs);
-          }).catch((err) => {
-            handleFirestoreError(err, OperationType.LIST, "transactions");
-          });
-        }
+        handleDocs(snapshot.docs);
       },
       (error) => {
-        console.warn("Transactions index fallback active, fetching with safe query:", error);
-        // Fallback query if compound index is building
-        const safeQuery = query(txCollectionRef, limit(50));
+        // Fallback query without orderBy if compound index is missing, strictly scoped to uid
+        const safeQuery = query(txCollectionRef, where("userId", "==", uid), limit(50));
         getDocs(safeQuery).then((safeSnap) => {
           handleDocs(safeSnap.docs);
-        }).catch((err) => {
-          handleFirestoreError(err, OperationType.LIST, "transactions");
+        }).catch(() => {
+          handleFirestoreError(error, OperationType.LIST, "transactions");
         });
       }
     );
@@ -201,9 +191,15 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
+      const uid = auth.currentUser?.uid;
+      if (!db || !uid) {
+        setLastRefreshed(new Date());
+        toast.info("Synced with local ledger records.");
+        return;
+      }
       const q = query(
         collection(db, "transactions"),
-        where("userId", "==", userId),
+        where("userId", "==", uid),
         limit(100)
       );
       const snap = await getDocs(q);
@@ -220,7 +216,7 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
       setLastRefreshed(new Date());
       toast.success("Transaction Ledger Synchronized 100% with Firestore Database.");
     } catch (e) {
-      console.warn("Manual refresh fallback:", e);
+      handleFirestoreError(e, OperationType.LIST, "transactions");
       toast.info("Refreshed with cached memory records.");
     } finally {
       setIsRefreshing(false);

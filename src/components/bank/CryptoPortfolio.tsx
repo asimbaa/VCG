@@ -251,7 +251,7 @@ const [isProcessing, setIsProcessing] = useState(false);
                 prices.map((coin, cIdx) => (
                   <div key={`crypto-coin-${coin.id}-${cIdx}`} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center bg-slate-50 md:bg-transparent p-4 rounded-2xl md:rounded-none md:border-b md:border-slate-50 hover:bg-slate-50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <img src={coin.image} alt={coin.name} className="w-10 h-10 md:w-8 md:h-8 rounded-full" />
+                      <img src={coin.image} alt={coin.name} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="32" fill="%230f172a"/><text x="50%" y="56%" fill="%2310b981" font-family="monospace" font-size="22" font-weight="bold" text-anchor="middle">₿</text></svg>'; }} className="w-10 h-10 md:w-8 md:h-8 rounded-full" />
                       <div>
                         <div className="font-bold text-slate-900">{coin.name}</div>
                         <div className="text-xs text-slate-500 font-medium">{coin.symbol}</div>

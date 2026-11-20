@@ -18,7 +18,7 @@ import {
   query, 
   where 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { toast } from "sonner";
 
 export interface AtmCashSession {
@@ -172,22 +172,32 @@ export async function createCbaCardlessCash(amount: number, sourceAccount: strin
     expiresAt: expires.toISOString()
   };
 
-  try {
-    await addDoc(collection(db, "atm_withdrawals"), {
-      ...session,
-      userId: "asim_aryal",
-      sourceAccount
-    });
+  const activeUid = auth.currentUser?.uid;
+  const isVerifiedFounder = Boolean(
+    auth.currentUser?.emailVerified &&
+      auth.currentUser.email?.toLowerCase() === "asim.nsw@gmail.com"
+  );
+  if (activeUid) {
+    try {
+      if (isVerifiedFounder) {
+        await addDoc(collection(db, "atm_withdrawals"), {
+          ...session,
+          userId: activeUid,
+          sourceAccount
+        });
+      }
 
-    await addDoc(collection(db, "notifications"), {
-      title: `CBA Cardless Cash Generated: $${amount} AUD`,
-      message: `Cardless Cash Code: ${claimCode} • Cash PIN: ${pin}. Valid for 30 minutes at any CBA ATM. SMS sent to ${USER_LOCAL_PHONE}.`,
-      category: "payments",
-      tag: "COMMBANK CARDLESS CASH",
-      createdAt: now.toISOString()
-    });
-  } catch (e) {
-    console.warn("Firestore ATM session save notice:", e);
+      await addDoc(collection(db, "notifications"), {
+        userId: activeUid,
+        title: `CBA Cardless Cash Generated: $${amount} AUD`,
+        message: `Cardless Cash Code: ${claimCode} • Cash PIN: ${pin}. Valid for 30 minutes at any CBA ATM. SMS sent to ${USER_LOCAL_PHONE}.`,
+        category: "payments",
+        tag: "COMMBANK CARDLESS CASH",
+        createdAt: now.toISOString()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, "atm_withdrawals");
+    }
   }
 
   playAtmAudio("success");
@@ -216,22 +226,32 @@ export async function createWestpacEmergencyCash(amount: number, sourceAccount: 
     expiresAt: expires.toISOString()
   };
 
-  try {
-    await addDoc(collection(db, "atm_withdrawals"), {
-      ...session,
-      userId: "asim_aryal",
-      sourceAccount
-    });
+  const activeUid = auth.currentUser?.uid;
+  const isVerifiedFounder = Boolean(
+    auth.currentUser?.emailVerified &&
+      auth.currentUser.email?.toLowerCase() === "asim.nsw@gmail.com"
+  );
+  if (activeUid) {
+    try {
+      if (isVerifiedFounder) {
+        await addDoc(collection(db, "atm_withdrawals"), {
+          ...session,
+          userId: activeUid,
+          sourceAccount
+        });
+      }
 
-    await addDoc(collection(db, "notifications"), {
-      title: `Westpac Emergency Cash: $${amount} AUD`,
-      message: `Emergency Cash Code: ${westpacCode}. Valid at all Westpac / St.George ATMs. SMS dispatched to ${USER_LOCAL_PHONE}.`,
-      category: "payments",
-      tag: "WESTPAC CASH PICKUP",
-      createdAt: now.toISOString()
-    });
-  } catch (e) {
-    console.warn("Firestore Westpac ATM save notice:", e);
+      await addDoc(collection(db, "notifications"), {
+        userId: activeUid,
+        title: `Westpac Emergency Cash: $${amount} AUD`,
+        message: `Emergency Cash Code: ${westpacCode}. Valid at all Westpac / St.George ATMs. SMS dispatched to ${USER_LOCAL_PHONE}.`,
+        category: "payments",
+        tag: "WESTPAC CASH PICKUP",
+        createdAt: now.toISOString()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, "atm_withdrawals");
+    }
   }
 
   playAtmAudio("success");
@@ -269,34 +289,44 @@ export async function createCryptoAtmWithdrawal(params: {
     expiresAt: expires.toISOString()
   };
 
-  try {
-    await addDoc(collection(db, "atm_withdrawals"), {
-      ...session,
-      userId: "asim_aryal"
-    });
+  const activeUid = auth.currentUser?.uid;
+  const isVerifiedFounder = Boolean(
+    auth.currentUser?.emailVerified &&
+      auth.currentUser.email?.toLowerCase() === "asim.nsw@gmail.com"
+  );
+  if (activeUid) {
+    try {
+      if (isVerifiedFounder) {
+        await addDoc(collection(db, "atm_withdrawals"), {
+          ...session,
+          userId: activeUid
+        });
+      }
 
-    await addDoc(collection(db, "transactions"), {
-      userId: "asim_aryal",
-      date: now.toISOString(),
-      type: "crypto_atm_withdrawal",
-      amount: params.audAmount,
-      currency: "AUD",
-      cryptoAsset: params.cryptoAsset,
-      cryptoAmount: params.cryptoAmount,
-      recipient: `${params.atmNetwork} Cash Dispenser`,
-      status: "completed",
-      description: `Crypto ATM Cash Withdrawal: ${params.cryptoAmount} ${params.cryptoAsset} → $${params.audAmount.toFixed(2)} AUD cash via ${USER_LOCAL_PHONE}`
-    });
+      await addDoc(collection(db, "transactions"), {
+        userId: activeUid,
+        date: now.toISOString(),
+        type: "crypto_atm_withdrawal",
+        amount: params.audAmount,
+        currency: "AUD",
+        cryptoAsset: params.cryptoAsset,
+        cryptoAmount: params.cryptoAmount,
+        recipient: `${params.atmNetwork} Cash Dispenser`,
+        status: "completed",
+        description: `Crypto ATM Cash Withdrawal: ${params.cryptoAmount} ${params.cryptoAsset} → $${params.audAmount.toFixed(2)} AUD cash via ${USER_LOCAL_PHONE}`
+      });
 
-    await addDoc(collection(db, "notifications"), {
-      title: `Australian Crypto ATM Cash Voucher: $${params.audAmount} AUD`,
-      message: `${params.cryptoAmount} ${params.cryptoAsset} allocated for cash withdrawal at ${params.atmNetwork}. SMS PIN: ${claimPin} sent to ${USER_LOCAL_PHONE}.`,
-      category: "crypto",
-      tag: "AUS CRYPTO ATM",
-      createdAt: now.toISOString()
-    });
-  } catch (e) {
-    console.warn("Firestore Crypto ATM session notice:", e);
+      await addDoc(collection(db, "notifications"), {
+        userId: activeUid,
+        title: `Australian Crypto ATM Cash Voucher: $${params.audAmount} AUD`,
+        message: `${params.cryptoAmount} ${params.cryptoAsset} allocated for cash withdrawal at ${params.atmNetwork}. SMS PIN: ${claimPin} sent to ${USER_LOCAL_PHONE}.`,
+        category: "crypto",
+        tag: "AUS CRYPTO ATM",
+        createdAt: now.toISOString()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, "atm_withdrawals");
+    }
   }
 
   playAtmAudio("success");

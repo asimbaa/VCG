@@ -22,7 +22,8 @@ import {
   QrCode,
   FileText,
   Building2,
-  Sparkles
+  Sparkles,
+  Share2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PaymentStatusOverlay } from "./PaymentStatusOverlay";
@@ -40,6 +41,7 @@ import { SectionWisdomTooltip } from "../shared/SectionWisdomTooltip";
 import { CardGeniusInnovationsModal } from "./CardGeniusInnovationsModal";
 import { GlobalMerchantPOSModal } from "./GlobalMerchantPOSModal";
 import { CardBenefitsShowcaseModal } from "./CardBenefitsShowcaseModal";
+import { ShareCardModal } from "./ShareCardModal";
 import { smsEmailDispatchService } from "../../services/smsEmailDispatchService";
 
 export function BankDashboard({ user }: { user: any }) {
@@ -49,6 +51,7 @@ export function BankDashboard({ user }: { user: any }) {
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
   const [isGlobalPOSModalOpen, setIsGlobalPOSModalOpen] = useState(false);
   const [isBenefitsModalOpen, setIsBenefitsModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedClassicCard, setSelectedClassicCard] = useState<UnifiedBankCard | null>(null);
   const [isClassicModalOpen, setIsClassicModalOpen] = useState(false);
   const [selectedGeniusCard, setSelectedGeniusCard] = useState<UnifiedBankCard | null>(null);
@@ -80,7 +83,26 @@ export function BankDashboard({ user }: { user: any }) {
   };
 
   const handleInstantInterbankSweep = () => {
-    toast.success("Institutional Liquidity Sweep Executed: $10,000.00 AUD swept into high-yield 5.85% reserve pool.");
+    const parsed = parseFloat(quickAmount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast.error("Please enter a valid positive sweep amount.");
+      return;
+    }
+    const targetCur = (selectedAccount.currency || "AUD") as "AUD" | "USD" | "EUR" | "GBP";
+    const yieldBonus = Number((parsed * 0.0585).toFixed(2));
+    setBalances((prev: Record<string, number>) => {
+      const next = {
+        ...prev,
+        [targetCur]: (Number(prev[targetCur]) || 0) + parsed + yieldBonus,
+      };
+      try {
+        localStorage.setItem("commbank_vip_balances", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    toast.success(
+      `${clearingRail.replace("_", " ")} Sweep Settled: $${parsed.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${targetCur} + $${yieldBonus.toLocaleString("en-AU", { minimumFractionDigits: 2 })} instant 5.85% yield credited.`
+    );
   };
 
   return (
@@ -93,14 +115,11 @@ export function BankDashboard({ user }: { user: any }) {
         
         <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                APRA ADI Accredited • Tier-1 Core
-              </span>
-              <span className="text-xs text-slate-500 font-mono hidden sm:inline">
-                RBA ES Account #062-951 • 1099 8801
-              </span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
+              <span className="text-emerald-400 font-bold">APRA ADI Accredited</span>
+              <span>·</span>
+              <span>Tier-1 Sovereign Core</span>
+              <span className="hidden sm:inline">· RBA ES #062-951 · 1099 8801</span>
             </div>
             
             <div className="flex items-center gap-3">
@@ -181,7 +200,7 @@ export function BankDashboard({ user }: { user: any }) {
               <span>AUD Primary Reserve</span>
               <span className="text-emerald-400 font-mono">LIVE NPP</span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            <div className="text-xl sm:text-2xl font-black text-white mt-1 tabular-nums truncate">
               ${(balances.AUD || 2450000000000).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-emerald-400 font-mono mt-1 flex items-center gap-1">
@@ -195,7 +214,7 @@ export function BankDashboard({ user }: { user: any }) {
               <span>USD Fedwire Pool</span>
               <span className="text-blue-400 font-mono">TARGET2</span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            <div className="text-xl sm:text-2xl font-black text-white mt-1 tabular-nums truncate">
               ${(balances.USD || 1420000000).toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-slate-400 font-mono mt-1">
@@ -208,7 +227,7 @@ export function BankDashboard({ user }: { user: any }) {
               <span>EUR Institutional</span>
               <span className="text-indigo-400 font-mono">SEPA INST</span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            <div className="text-xl sm:text-2xl font-black text-white mt-1 tabular-nums truncate">
               €{(balances.EUR || 890000000).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-slate-400 font-mono mt-1">
@@ -221,7 +240,7 @@ export function BankDashboard({ user }: { user: any }) {
               <span>Active Linked Accounts</span>
               <span className="text-amber-400 font-mono">{COMMBANK_LINKED_ACCOUNTS.length} CBA</span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            <div className="text-xl sm:text-2xl font-black text-white mt-1 tabular-nums">
               {COMMBANK_LINKED_ACCOUNTS.length} Vaults
             </div>
             <div className="text-[10px] text-slate-400 font-mono mt-1">
@@ -251,8 +270,7 @@ export function BankDashboard({ user }: { user: any }) {
             }`}
           >
             <Building2 className="w-3.5 h-3.5" />
-            <span>External Bank Accounts & Salary Rails</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>External Bank Accounts &amp; Salary Rails</span>
           </button>
         </div>
       </div>
@@ -315,7 +333,7 @@ export function BankDashboard({ user }: { user: any }) {
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                      <div className="text-sm font-black text-white font-mono">
+                      <div className="text-sm font-black text-white font-mono tabular-nums">
                         ${(acc.defaultBalance || 940000000).toLocaleString("en-AU", { minimumFractionDigits: 2 })} AUD
                       </div>
                       <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">
@@ -449,7 +467,15 @@ export function BankDashboard({ user }: { user: any }) {
                   className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Classic Features, Security Controls & Yield</span>
+                  <span>Classic Features, Security Controls &amp; Yield</span>
+                </button>
+
+                <button
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share Debit / Credit Card &amp; VIP Perks</span>
                 </button>
               </div>
             </div>
@@ -548,6 +574,17 @@ export function BankDashboard({ user }: { user: any }) {
       <CardBenefitsShowcaseModal
         isOpen={isBenefitsModalOpen}
         onClose={() => setIsBenefitsModalOpen(false)}
+      />
+
+      {/* Share Debit & Credit Card & VIP Modal */}
+      <ShareCardModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        card={unifiedBankCardSync.getActivePaymentCard() as any}
+        allCards={unifiedBankCardSync.getCards() as any}
+        onPreviewClaimPortal={(inviteId) =>
+          window.dispatchEvent(new CustomEvent('valourian_open_claim_portal', { detail: { inviteId } }))
+        }
       />
     </div>
   );

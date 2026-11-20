@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ShoppingBag, CheckCircle2, ShieldCheck, Zap, CreditCard, 
   ArrowRight, Copy, Download, RefreshCw, Smartphone, Globe, 
-  Sparkles, Lock, Leaf, Check, ExternalLink
+  Sparkles, Lock, Leaf, Check, ExternalLink, Receipt, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { BankCard } from './VBankVirtualCreditCards';
-import { AU_DEFAULT_BILLING, numpyCardSuperService } from '../../services/numpyCardSuperService';
+import { AU_DEFAULT_BILLING } from '../../services/numpyCardSuperService';
+import { unifiedBankCardSync, MerchantTransaction } from '../../services/unifiedBankCardSync';
 
 interface EasyPayPurchaseModalProps {
   card: BankCard | null;
@@ -40,13 +41,25 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedReceipt, setCompletedReceipt] = useState<any | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [modalTab, setModalTab] = useState<'checkout' | 'passbook'>('checkout');
+  const [recentTransactions, setRecentTransactions] = useState<MerchantTransaction[]>(() =>
+    unifiedBankCardSync.getRecentTransactions()
+  );
 
-  // Sync selected card when prop changes
+  // Sync selected card & ledger when prop or global tx history changes
   React.useEffect(() => {
     if (card?.id) {
       setSelectedCardId(card.id);
     }
   }, [card?.id]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setRecentTransactions(unifiedBankCardSync.getRecentTransactions());
+    const onTx = () => setRecentTransactions(unifiedBankCardSync.getRecentTransactions());
+    window.addEventListener('valourian_transaction_recorded', onTx);
+    return () => window.removeEventListener('valourian_transaction_recorded', onTx);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -105,13 +118,22 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
       : selectedMerchant.name;
 
     setTimeout(() => {
-      const newBal = typeof activeCard.balance === 'number' ? Math.max(0, activeCard.balance - numAmount) : 940000000;
+      const spendRes = unifiedBankCardSync.spendFromCard(activeCard.id, {
+        merchantName,
+        merchantLocation: 'Sydney NSW Australia (Global Zero-FX)',
+        region: 'AUS',
+        foreignAmount: numAmount,
+        foreignCurrency: activeCard.currency || 'AUD',
+        category: selectedMerchant.category,
+      });
+
+      const newBal = spendRes?.newBalance ?? (typeof activeCard.balance === 'number' ? Math.max(0, activeCard.balance - numAmount) : 940000000);
       if (onCardBalanceUpdated) {
         onCardBalanceUpdated(activeCard.id, newBal);
       }
 
-      const authCode = `AUTH-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-      const receiptNo = `VAL-PAY-${Date.now().toString(36).toUpperCase()}`;
+      const authCode = spendRes?.transaction?.authorizationCode || `AUTH-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const receiptNo = spendRes?.transaction?.id || `VAL-PAY-${Date.now().toString(36).toUpperCase()}`;
       const receiptData = {
         receiptNumber: receiptNo,
         authCode,
@@ -119,6 +141,7 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
         merchant: merchantName,
         category: selectedMerchant.category,
         amount: numAmount,
+        cashbackEarned: spendRes?.cashbackEarned ?? Number((numAmount * 0.05).toFixed(2)),
         currency: activeCard.currency || 'AUD',
         cardName: activeCard.name,
         cardLast4: last4,
@@ -130,13 +153,14 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
       };
 
       setCompletedReceipt(receiptData);
+      setRecentTransactions(unifiedBankCardSync.getRecentTransactions());
       setIsProcessing(false);
       playChime();
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([80, 50, 100]);
       }
       toast.success(`Purchase of $${numAmount.toFixed(2)} AUD Approved at ${merchantName}!`);
-    }, 450);
+    }, 320);
   };
 
   const handleCopyReceipt = () => {
@@ -174,34 +198,105 @@ STATUS       : 100% SETTLED & VERIFIED
         onClick={(e) => e.stopPropagation()}
       >
         {/* iOS-Style Modal Header */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 backdrop-blur-sm sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 backdrop-blur-sm sticky top-0 z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
               <ShoppingBag className="w-5 h-5 font-bold" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-white">Easy Pay & Instant Purchase</h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                  0% FX
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                True operating details • Instant sub-second global merchant clearance
+            <div className="min-w-0">
+              <h3 className="text-base font-black text-white truncate">Easy Pay &amp; Instant Purchase</h3>
+              <p className="text-xs text-slate-400 truncate">
+                0% Cross-Border FX · Real Luhn Clearance · Passbook Sync
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            aria-label="Close modal"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Mode Switcher */}
+        <div className="px-5 pt-3 pb-2 border-b border-slate-800/80 flex items-center gap-2 bg-slate-900 shrink-0">
+          <button
+            type="button"
+            onClick={() => setModalTab('checkout')}
+            className={`min-h-[40px] px-4 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              modalTab === 'checkout'
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-slate-800 text-slate-300 hover:text-white'
+            }`}
+          >
+            Instant Checkout
+          </button>
+          <button
+            type="button"
+            onClick={() => setModalTab('passbook')}
+            className={`min-h-[40px] px-4 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+              modalTab === 'passbook'
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-slate-800 text-slate-300 hover:text-white'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Passbook Receipts</span>
+            <span className="font-mono tabular-nums">({recentTransactions.length})</span>
+          </button>
+        </div>
+
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-5 flex-1">
-          {completedReceipt ? (
+          {modalTab === 'passbook' ? (
+            <div className="space-y-3">
+              {recentTransactions.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+                  <Receipt className="w-7 h-7 text-slate-500 mx-auto" />
+                  <p className="text-sm font-semibold text-slate-300">No merchant purchases recorded yet</p>
+                  <p className="text-xs text-slate-500">
+                    Authorize any checkout on the Instant Checkout tab to generate a signed zero-FX receipt here.
+                  </p>
+                </div>
+              ) : (
+                recentTransactions.slice(0, 20).map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="text-sm font-bold text-white truncate">{tx.merchantName}</div>
+                      <div className="text-[11px] font-mono text-slate-400">
+                        {tx.cardName} (•••• {tx.cardLast4}) · {tx.authorizationCode}
+                      </div>
+                      <div className="text-[11px] text-emerald-400 font-mono tabular-nums">
+                        +${tx.cashbackEarned.toFixed(2)} AUD cashback · {tx.rail}
+                      </div>
+                    </div>
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+                      <div className="text-base font-black font-mono text-white tabular-nums">
+                        ${tx.convertedAUD.toLocaleString('en-AU', { minimumFractionDigits: 2 })} AUD
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `RECEIPT ${tx.id} | AUTH ${tx.authorizationCode} | ${tx.merchantName} | $${tx.convertedAUD.toFixed(2)} AUD | CARD •••• ${tx.cardLast4}`
+                          );
+                          toast.success('Passbook receipt copied.');
+                        }}
+                        className="compact-touch px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : completedReceipt ? (
             /* Completed Receipt View */
             <div className="space-y-5 animate-fadeIn">
               <div className="text-center py-4 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl p-5">
@@ -300,14 +395,53 @@ STATUS       : 100% SETTLED & VERIFIED
                   </div>
                 </div>
 
-                <div className="font-mono text-sm sm:text-base font-black text-slate-200 tracking-wider mb-2">
-                  {formattedNum}
+                <div className="flex items-center justify-between font-mono text-sm sm:text-base font-black text-slate-200 tracking-wider mb-2">
+                  <span>{formattedNum}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(rawNum);
+                      toast.success(`Copied ${rawNum} (digits only) for merchant checkout!`);
+                    }}
+                    className="text-xs px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-lg flex items-center gap-1 font-bold cursor-pointer transition-colors"
+                    title="Copy card digits without spaces"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Digits</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                  <div>HOLDER: <strong className="text-white">{cardholder}</strong></div>
-                  <div>EXP: <strong className="text-white">{expiry}</strong></div>
-                  <div>CVV: <strong className="text-emerald-400">{cvv}</strong></div>
+                  <div 
+                    onClick={() => {
+                      navigator.clipboard.writeText(cardholder);
+                      toast.success(`Copied Cardholder Name: ${cardholder}`);
+                    }}
+                    className="cursor-pointer hover:text-white transition-colors"
+                    title="Click to copy name"
+                  >
+                    HOLDER: <strong className="text-white">{cardholder}</strong>
+                  </div>
+                  <div 
+                    onClick={() => {
+                      navigator.clipboard.writeText(expiry);
+                      toast.success(`Copied Expiry: ${expiry}`);
+                    }}
+                    className="cursor-pointer hover:text-white transition-colors"
+                    title="Click to copy expiry"
+                  >
+                    EXP: <strong className="text-white">{expiry}</strong>
+                  </div>
+                  <div 
+                    onClick={() => {
+                      navigator.clipboard.writeText(cvv);
+                      toast.success(`Copied CVV: ${cvv}`);
+                    }}
+                    className="cursor-pointer hover:text-white transition-colors"
+                    title="Click to copy CVV"
+                  >
+                    CVV: <strong className="text-emerald-400">{cvv}</strong>
+                  </div>
                 </div>
               </div>
 

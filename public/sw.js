@@ -6,7 +6,7 @@
  * Infinite Usable Tokens Reservoir: Always Full, Welcome, & Instantly Available
  */
 
-const BUILD_VERSION = 'mw0p50q9' !== '__' + 'BUILD_HASH__' ? 'mw0p50q9' : 'v3.0.0';
+const BUILD_VERSION = 'mw97l46h' !== '__' + 'BUILD_HASH__' ? 'mw97l46h' : 'v3.0.0';
 const CACHE_CORE_NAME = `valourian-core-${BUILD_VERSION}`;
 const CACHE_CARD_NAME = `valourian-cards-immense-${BUILD_VERSION}`;
 const CACHE_DATA_NAME = `valourian-ledger-immense-${BUILD_VERSION}`;

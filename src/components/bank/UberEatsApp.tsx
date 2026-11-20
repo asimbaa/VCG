@@ -43,7 +43,7 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { db, createPaymentEvent } from "../../firebase";
+import { auth, db, createPaymentEvent } from "../../firebase";
 import { getAuth } from "firebase/auth";
 import {
   collection,
@@ -1233,17 +1233,16 @@ export function UberEatsApp({
 
   // Load and sync past orders
   const loadScheduledOrders = async () => {
-    if (!user || !user.uid) return;
+    const uid = auth.currentUser?.uid;
+    if (!user?.uid || !uid) return;
     setIsLoadingScheduled(true);
     try {
-      const q = query(collection(db, "scheduled_orders"));
+      const q = query(collection(db, "scheduled_orders"), where("userId", "==", uid));
       const querySnapshot = await getDocs(q);
       const list: any[] = [];
       querySnapshot.forEach((docSnap) => {
         const d = docSnap.data();
-        if (d.userId === user.uid) {
-          list.push({ id: docSnap.id, ...d });
-        }
+        list.push({ id: docSnap.id, ...d });
       });
       list.sort(
         (a, b) =>
@@ -1415,22 +1414,31 @@ export function UberEatsApp({
 
   // Fetch Global Vouchers
   useEffect(() => {
-    if (!user || !user.uid) return;
+    const uid = auth.currentUser?.uid;
+    if (!user?.uid || !uid) return;
     setIsSyncingVouchers(true);
-    const q = query(collection(db, "global_vouchers"), where("creatorId", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const vouchers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setMyVouchers(vouchers);
-      setIsSyncingVouchers(false);
-    });
+    const q = query(collection(db, "global_vouchers"), where("creatorId", "==", uid));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const vouchers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMyVouchers(vouchers);
+        setIsSyncingVouchers(false);
+      },
+      (err) => {
+        console.warn("Global vouchers snapshot notice:", err);
+        setIsSyncingVouchers(false);
+      }
+    );
     return () => unsub();
   }, [user]);
 
   // Synchronize Active Order from fast Firestore 'active_orders' collection
   useEffect(() => {
-    if (!user || !user.uid) return;
+    const uid = auth.currentUser?.uid;
+    if (!user?.uid || !uid) return;
     const unsub = onSnapshot(
-      query(collection(db, "active_orders"), where("userId", "==", user.uid)),
+      query(collection(db, "active_orders"), where("userId", "==", uid)),
       (snapshot) => {
         if (!snapshot.empty) {
           const activeDocs = snapshot.docs.filter(
@@ -1470,6 +1478,9 @@ export function UberEatsApp({
           }
         }
       },
+      (err) => {
+        console.warn("Active orders snapshot notice:", err);
+      }
     );
     return () => unsub();
   }, [user]);

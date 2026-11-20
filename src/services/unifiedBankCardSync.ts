@@ -4,8 +4,8 @@
  * Ensures consistent cards, live balances, cashback rewards, daily interest, and classic features everywhere.
  */
 
-import { db } from "../firebase";
-import { collection, doc, setDoc, getDocs } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export interface UnifiedBankCard {
   id: string;
@@ -57,7 +57,14 @@ export interface UnifiedBankCard {
   zeroDeclineGuaranteed?: boolean;
   quantumDynamicCvvToken?: string;
   appleGooglePayPassProvisioned?: boolean;
-  
+
+  // Debit vs Credit, Virtual + Physical & Shareable VIP Perks
+  cardCategory?: "debit" | "credit";
+  formFactor?: "virtual" | "physical" | "virtual_and_physical";
+  physicalShippingStatus?: "delivered" | "in_transit" | "available_for_dispatch";
+  vipPerks?: string[];
+  shareable?: boolean;
+
   lastUpdated: string;
 }
 
@@ -706,6 +713,289 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
     zeroDeclineGuaranteed: true,
     appleGooglePayPassProvisioned: true,
     lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "diamond_infinity",
+    name: "Valourian Sovereign Diamond Infinity Reserve",
+    number: "5500 8821 4492 1198",
+    fullNumber: "5500882144921198",
+    last4: "1198",
+    balance: 10000000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: "unlimited",
+    cvv: "119",
+    dynamicCvv: "119",
+    expiry: "04/35",
+    network: "Mastercard",
+    bsb: "021-000",
+    accountNumber: "8499210099",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.05,
+    accumulatedCashback: 148000.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 124000.00,
+    rewardsPoints: 8500000,
+    roundUpSavings: 14200.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 250000000,
+    atmDailyLimit: 2500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "apple_card_titanium",
+    name: "Apple Card Titanium Sovereign Edition",
+    number: "5521 7719 3019 4482",
+    fullNumber: "5521771930194482",
+    last4: "4482",
+    balance: 500000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: "unlimited",
+    cvv: "448",
+    dynamicCvv: "448",
+    expiry: "10/33",
+    network: "Mastercard",
+    bsb: "021-000",
+    accountNumber: "8499210060",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.04,
+    accumulatedCashback: 32000.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 29500.00,
+    rewardsPoints: 2100000,
+    roundUpSavings: 4500.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 25000000,
+    atmDailyLimit: 500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    cardCategory: "credit",
+    formFactor: "virtual_and_physical",
+    physicalShippingStatus: "available_for_dispatch",
+    vipPerks: ["5% Daily Cashback", "0% FX Worldwide", "Apple Pay Direct", "5.10% APY Vault"],
+    shareable: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "debit_valourian_platinum",
+    name: "Valourian Private Wealth Platinum Debit",
+    number: "5241 8820 4419 7712",
+    fullNumber: "5241882044197712",
+    last4: "7712",
+    balance: 2500000000,
+    currency: "AUD",
+    type: "physical",
+    status: "active",
+    limit: "unlimited",
+    cvv: "712",
+    dynamicCvv: "712",
+    expiry: "08/33",
+    network: "Mastercard",
+    bsb: "182-512",
+    accountNumber: "8499210101",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.05,
+    accumulatedCashback: 64200.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 88500.00,
+    rewardsPoints: 4200000,
+    roundUpSavings: 9200.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 100000000,
+    atmDailyLimit: 2000000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    cardCategory: "debit",
+    formFactor: "virtual_and_physical",
+    physicalShippingStatus: "delivered",
+    vipPerks: ["Direct Instant Bank Settlement", "5% Debit Cashback", "0% ATM & FX Worldwide", "Airport Lounge + Concierge", "Shareable Virtual + Physical Metal"],
+    shareable: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "debit_cba_sovereign",
+    name: "CBA Sovereign Everyday Access Debit",
+    number: "5163 7200 4419 8815",
+    fullNumber: "5163720044198815",
+    last4: "8815",
+    balance: 850000000,
+    currency: "AUD",
+    type: "physical",
+    status: "active",
+    limit: 850000000,
+    cvv: "815",
+    dynamicCvv: "815",
+    expiry: "11/31",
+    network: "Mastercard",
+    bsb: "062-140",
+    accountNumber: "11680690",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.045,
+    accumulatedCashback: 38400.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 41200.00,
+    rewardsPoints: 2650000,
+    roundUpSavings: 5400.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 50000000,
+    atmDailyLimit: 1000000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    cardCategory: "debit",
+    formFactor: "virtual_and_physical",
+    physicalShippingStatus: "delivered",
+    vipPerks: ["CommBank NPP Osko Direct", "0% International FX", "4.5% Instant Cashback", "Apple Pay & Google Wallet", "Shareable Team Allowance"],
+    shareable: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "debit_valourian_business",
+    name: "Valourian Global Multi-Currency Business Debit",
+    number: "4532 9910 4419 2200",
+    fullNumber: "4532991044192200",
+    last4: "2200",
+    balance: 1200000000,
+    currency: "AUD",
+    type: "virtual",
+    status: "active",
+    limit: "unlimited",
+    cvv: "200",
+    dynamicCvv: "200",
+    expiry: "05/32",
+    network: "Visa",
+    bsb: "182-512",
+    accountNumber: "8499210102",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.05,
+    accumulatedCashback: 51900.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 67800.00,
+    rewardsPoints: 3400000,
+    roundUpSavings: 7100.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 75000000,
+    atmDailyLimit: 1500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    cardCategory: "debit",
+    formFactor: "virtual_and_physical",
+    physicalShippingStatus: "available_for_dispatch",
+    vipPerks: ["Multi-Currency Visa Direct", "5% VIP Cashback", "0% Cross-Border Settlement", "24/7 Concierge", "Shareable Corporate Access"],
+    shareable: true,
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: "debit_valourian_green",
+    name: "Valourian Green Impact Everyday Debit",
+    number: "4111 8820 4419 5534",
+    fullNumber: "4111882044195534",
+    last4: "5534",
+    balance: 450000000,
+    currency: "AUD",
+    type: "physical",
+    status: "active",
+    limit: 450000000,
+    cvv: "534",
+    dynamicCvv: "534",
+    expiry: "09/32",
+    network: "Visa",
+    bsb: "182-512",
+    accountNumber: "8499210103",
+    payId: TARGET_LINK_EMAIL,
+    pin: "4912",
+    dualRouting: "eftpos_domestic",
+    burnerMode: false,
+    appleGooglePayEnrolled: true,
+    cashbackRate: 0.05,
+    accumulatedCashback: 29100.00,
+    apyInterestRate: 0.051,
+    accruedInterest: 31400.00,
+    rewardsPoints: 1950000,
+    roundUpSavings: 4800.00,
+    roundUpEnabled: true,
+    dailySpendingLimit: 25000000,
+    atmDailyLimit: 500000,
+    onlinePaymentsEnabled: true,
+    internationalPaymentsEnabled: true,
+    contactlessEnabled: true,
+    loungeAccess: true,
+    travelInsuranceCovered: true,
+    purchaseProtectionCovered: true,
+    biometricsEnclaveEnabled: true,
+    supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "SGD"],
+    zeroDeclineGuaranteed: true,
+    appleGooglePayPassProvisioned: true,
+    cardCategory: "debit",
+    formFactor: "virtual_and_physical",
+    physicalShippingStatus: "available_for_dispatch",
+    vipPerks: ["Net -1.25x CO2 Verified", "5% Eco-Boost Cashback", "0% Worldwide FX", "Biodegradable Titanium Physical + Instant Virtual"],
+    shareable: true,
+    lastUpdated: new Date().toISOString()
   }
 ];
 
@@ -751,24 +1041,41 @@ export class UnifiedBankCardSyncService {
     return UnifiedBankCardSyncService.instance;
   }
 
+  private hydrateCardDefaults(c: any): UnifiedBankCard {
+    const inferredCategory: "debit" | "credit" =
+      c.cardCategory === "debit" || String(c.id || "").startsWith("debit_") || String(c.name || "").toLowerCase().includes("debit")
+        ? "debit"
+        : "credit";
+    return {
+      ...c,
+      cardCategory: inferredCategory,
+      formFactor: c.formFactor || "virtual_and_physical",
+      physicalShippingStatus: c.physicalShippingStatus || (c.type === "physical" ? "delivered" : "available_for_dispatch"),
+      vipPerks: Array.isArray(c.vipPerks) && c.vipPerks.length > 0
+        ? c.vipPerks
+        : ["5.0% Uncapped Cashback", "0% FX Worldwide", "Airport Lounge + Concierge", "5.10% APY Vault", "Purchase Protection"],
+      shareable: c.shareable !== false,
+    };
+  }
+
   private loadLocalCache(): UnifiedBankCard[] {
     try {
-      if (typeof window === "undefined") return MASTER_BANK_CARDS;
+      if (typeof window === "undefined") return MASTER_BANK_CARDS.map((m) => this.hydrateCardDefaults(m));
       const cached = localStorage.getItem("valourian_unified_master_cards_v1");
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Merge newly introduced cards
           const map = new Map<string, UnifiedBankCard>();
-          parsed.forEach((c: any) => map.set(c.id, c));
+          parsed.forEach((c: any) => map.set(c.id, this.hydrateCardDefaults(c)));
           MASTER_BANK_CARDS.forEach((m) => {
-            if (!map.has(m.id)) map.set(m.id, m);
+            if (!map.has(m.id)) map.set(m.id, this.hydrateCardDefaults(m));
           });
           return Array.from(map.values());
         }
       }
     } catch {}
-    return MASTER_BANK_CARDS;
+    return MASTER_BANK_CARDS.map((m) => this.hydrateCardDefaults(m));
   }
 
   public getCards(): UnifiedBankCard[] {
@@ -965,6 +1272,175 @@ export class UnifiedBankCardSyncService {
     return newCard;
   }
 
+  public verifyLuhn(pan: string): boolean {
+    const clean = String(pan || "").replace(/\D/g, "");
+    if (clean.length < 13 || clean.length > 19) return false;
+    let sum = 0;
+    let shouldDouble = false;
+    for (let i = clean.length - 1; i >= 0; i--) {
+      let digit = parseInt(clean[i], 10);
+      if (shouldDouble) {
+        digit *= 2;
+        if (digit > 9) digit -= 9;
+      }
+      sum += digit;
+      shouldDouble = !shouldDouble;
+    }
+    return sum % 10 === 0;
+  }
+
+  public generateLuhnPan(network: "Mastercard" | "Visa" | "AMEX"): {
+    fullNumber: string;
+    formattedNumber: string;
+    last4: string;
+    cvv: string;
+  } {
+    const isAmex = network === "AMEX";
+    const prefixes = isAmex
+      ? ["3782", "3760", "3759", "3791"]
+      : network === "Visa"
+      ? ["4564", "4111", "4916", "4532"]
+      : ["5163", "5241", "5500", "5119"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const bodyLen = isAmex ? 10 : 11; // + 4 prefix + 1 check = 15 (AMEX) or 16 (Visa/MC)
+    let body = "";
+    for (let i = 0; i < bodyLen; i++) {
+      body += String(Math.floor(Math.random() * 10));
+    }
+    const partial = prefix + body;
+
+    let checkDigit = 0;
+    for (let d = 0; d <= 9; d++) {
+      if (this.verifyLuhn(partial + d)) {
+        checkDigit = d;
+        break;
+      }
+    }
+
+    const fullNumber = partial + checkDigit;
+    const formattedNumber = isAmex
+      ? `${fullNumber.slice(0, 4)} ${fullNumber.slice(4, 10)} ${fullNumber.slice(10)}`
+      : `${fullNumber.slice(0, 4)} ${fullNumber.slice(4, 8)} ${fullNumber.slice(8, 12)} ${fullNumber.slice(12)}`;
+    const cvv = isAmex
+      ? String(Math.floor(1000 + Math.random() * 9000))
+      : String(Math.floor(100 + Math.random() * 900));
+
+    return {
+      fullNumber,
+      formattedNumber,
+      last4: fullNumber.slice(-4),
+      cvv
+    };
+  }
+
+  public issueCustomCard(options: {
+    name: string;
+    cardCategory: "debit" | "credit";
+    network: "Mastercard" | "Visa" | "AMEX";
+    balance: number;
+    limit?: number | "unlimited";
+    formFactor?: "virtual" | "physical" | "virtual_and_physical";
+    burnerMode?: boolean;
+    pin?: string;
+    vipPerks?: string[];
+  }): UnifiedBankCard {
+    const { fullNumber, formattedNumber, last4, cvv } = this.generateLuhnPan(options.network);
+    const id = `issued_${options.cardCategory}_${Date.now().toString(36)}_${Math.floor(100 + Math.random() * 899)}`;
+    const bsbPool = options.cardCategory === "debit" ? ["062-140", "182-512"] : ["021-000", "182-512", "032-000"];
+    const bsb = options.network === "AMEX" ? "021-000" : bsbPool[Math.floor(Math.random() * bsbPool.length)];
+    const accountNumber = `8499${Math.floor(100000 + Math.random() * 899999)}`;
+    const formFactor = options.formFactor || "virtual_and_physical";
+    const nowYear = (new Date().getFullYear() + 6) % 100;
+    const expMonth = String(Math.floor(1 + Math.random() * 12)).padStart(2, "0");
+    const safeBalance = Math.max(0, Number.isFinite(options.balance) ? options.balance : 100000);
+    const cardLimit: number | "unlimited" =
+      options.limit === "unlimited"
+        ? "unlimited"
+        : typeof options.limit === "number" && options.limit > 0
+        ? Math.max(options.limit, safeBalance)
+        : safeBalance;
+
+    const newCard: UnifiedBankCard = this.hydrateCardDefaults({
+      id,
+      name: options.name.trim() || (options.cardCategory === "debit" ? "Valourian Custom Instant Debit" : "Valourian Custom Sovereign Credit"),
+      number: formattedNumber,
+      fullNumber,
+      last4,
+      balance: safeBalance,
+      currency: "AUD",
+      type: formFactor === "virtual" ? "virtual" : "physical",
+      status: "active",
+      limit: cardLimit,
+      cvv,
+      dynamicCvv: cvv,
+      expiry: `${expMonth}/${String(nowYear).padStart(2, "0")}`,
+      network: options.network,
+      bsb,
+      accountNumber,
+      payId: TARGET_LINK_EMAIL,
+      pin: (options.pin || "4912").slice(0, 4),
+      dualRouting: options.network === "AMEX" ? "global_credit" : "eftpos_domestic",
+      burnerMode: Boolean(options.burnerMode),
+      appleGooglePayEnrolled: true,
+      cashbackRate: options.cardCategory === "debit" ? 0.05 : 0.05,
+      accumulatedCashback: 0,
+      apyInterestRate: 0.051,
+      accruedInterest: 0,
+      rewardsPoints: 100000,
+      roundUpSavings: 0,
+      roundUpEnabled: true,
+      dailySpendingLimit: Math.max(250000, safeBalance),
+      atmDailyLimit: 500000,
+      onlinePaymentsEnabled: true,
+      internationalPaymentsEnabled: true,
+      contactlessEnabled: true,
+      loungeAccess: true,
+      travelInsuranceCovered: true,
+      purchaseProtectionCovered: true,
+      biometricsEnclaveEnabled: true,
+      supportedCurrencies: ["AUD", "USD", "EUR", "GBP", "JPY", "CHF", "SGD"],
+      zeroDeclineGuaranteed: true,
+      appleGooglePayPassProvisioned: true,
+      cardCategory: options.cardCategory,
+      formFactor,
+      physicalShippingStatus: formFactor === "virtual" ? "available_for_dispatch" : "in_transit",
+      vipPerks: options.vipPerks && options.vipPerks.length > 0
+        ? options.vipPerks
+        : [
+            "5.0% Instant Cashback",
+            "0% International FX Worldwide",
+            "Airport Lounge & 24/7 Concierge",
+            options.cardCategory === "debit" ? "Direct NPP Osko Bank Clearing" : "Sovereign Credit Line",
+            options.burnerMode ? "Single-Use Burner Shield" : "Apple Pay & Google Wallet Ready"
+          ],
+      shareable: true,
+      lastUpdated: new Date().toISOString()
+    });
+
+    const nextCards = [newCard, ...this.getCards()];
+    this.saveCards(nextCards);
+    this.setActivePaymentCardId(newCard.id);
+
+    // Best-effort Firestore backup ONLY when signed in under owner's uid
+    const uid = auth?.currentUser?.uid;
+    if (uid) {
+      setDoc(doc(db, "virtual_cards", newCard.id), {
+        userId: uid,
+        cardId: newCard.id,
+        name: newCard.name,
+        last4: newCard.last4,
+        network: newCard.network,
+        cardCategory: newCard.cardCategory,
+        balance: newCard.balance,
+        currency: newCard.currency,
+        status: newCard.status,
+        createdAt: serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+    }
+
+    return newCard;
+  }
+
   public injectImmenseFunds(cardId: string, amount: number): number {
     let nextBal = 0;
     this.updateCard(cardId, (c) => {
@@ -1019,6 +1495,22 @@ export class UnifiedBankCardSyncService {
         const updated = [tx, ...existing].slice(0, 50);
         localStorage.setItem("valourian_merchant_transactions_history", JSON.stringify(updated));
         window.dispatchEvent(new CustomEvent("valourian_transaction_recorded", { detail: { transaction: tx } }));
+      }
+      const uid = auth?.currentUser?.uid;
+      if (uid) {
+        setDoc(doc(db, "transactions", tx.id), {
+          userId: uid,
+          transactionId: tx.id,
+          cardId: tx.cardId,
+          cardName: tx.cardName,
+          cardLast4: tx.cardLast4,
+          merchantName: tx.merchantName,
+          amountAUD: tx.convertedAUD,
+          currency: tx.foreignCurrency,
+          authorizationCode: tx.authorizationCode,
+          status: tx.status,
+          createdAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
       }
     } catch (e) {
       console.warn("Failed to record transaction:", e);

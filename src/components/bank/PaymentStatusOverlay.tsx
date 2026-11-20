@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, handleFirestoreError, OperationType } from '../../firebase';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 export function PaymentStatusOverlay() {
@@ -10,28 +10,33 @@ export function PaymentStatusOverlay() {
 
   useEffect(() => {
     const auth = getAuth();
-    
+    let unsubscribeSnapshot: (() => void) | null = null;
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
       if (!user) return;
-      
+
       const q = query(
         collection(db, 'users', user.uid, 'payment_events'),
         orderBy('timestamp', 'desc'),
         limit(1)
       );
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         if (!snapshot.empty) {
           const data = snapshot.docs[0].data();
           const id = snapshot.docs[0].id;
-          
+
           const now = Date.now();
           const txTime = data.timestamp?.toMillis ? data.timestamp.toMillis() : (data.timestamp || now);
-          
+
           if (now - txTime < 120000) { // Within last 2 minutes
              if (data.status === 'pending' || data.status === 'confirmed' || data.status === 'failed') {
                setActivePayment({ id, ...data });
-               
+
                if (data.status === 'confirmed' || data.status === 'failed') {
                  // Auto-hide after 5 seconds
                  setTimeout(() => {
@@ -41,12 +46,16 @@ export function PaymentStatusOverlay() {
              }
           }
         }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/payment_events`);
       });
-
-      return () => unsubscribe();
     });
 
-    return () => unsubscribeAuth();
+    return () => {
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+      unsubscribeAuth();
+    };
   }, []);
 
   return (

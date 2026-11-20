@@ -36,7 +36,7 @@ import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import { renderAutoTable } from '../../utils/safePdfAutoTable';
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, auth as firebaseAuth, handleFirestoreError, OperationType } from '../../firebase';
 import { unifiedBankCardSync, UnifiedBankCard } from '../../services/unifiedBankCardSync';
 import { smsEmailDispatchService } from '../../services/smsEmailDispatchService';
 import { useGlobalCurrency } from '../../contexts/CurrencyContext';
@@ -374,11 +374,12 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
       };
     });
 
-    // 5. Asynchronously persist into Firestore transactions collection
+    // 5. Asynchronously persist into Firestore transactions & notifications when signed in
     try {
-      if (db) {
+      const activeUid = firebaseAuth.currentUser?.uid;
+      if (db && activeUid) {
         addDoc(collection(db, "transactions"), {
-          userId: user?.uid || "asim_aryal",
+          userId: activeUid,
           type: "nfc_contactless_tap",
           amount: amt,
           currency: "AUD",
@@ -396,19 +397,20 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
           settlementRail: routingRail === "eftpos_least_cost" ? "eftpos Domestic Least-Cost Routing" : "Mastercard/Visa Global Contactless",
           status: "completed",
           date: new Date().toISOString()
-        }).catch(console.warn);
+        }).catch((err) => handleFirestoreError(err, OperationType.CREATE, "transactions"));
 
         addDoc(collection(db, "notifications"), {
+          userId: activeUid,
           title: `Contactless Tap Approved: $${amt.toFixed(2)} AUD`,
           message: `NFC Payment approved at ${merchantName}. Paid via ${selectedCard.name}. +$${cbGain.toFixed(2)} Cashback earned!`,
           type: "financial",
           category: "cards",
           status: "completed",
           createdAt: new Date().toISOString()
-        }).catch(console.warn);
+        }).catch((err) => handleFirestoreError(err, OperationType.CREATE, "notifications"));
       }
     } catch (dbErr) {
-      console.warn("Firestore contactless logging note:", dbErr);
+      handleFirestoreError(dbErr, OperationType.CREATE, "transactions");
     }
 
     // Dispatch global custom event for 0ms instantaneous PaymentHistoryAuditTab sync

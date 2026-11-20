@@ -21,7 +21,8 @@ import {
   where,
   serverTimestamp 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { toast } from "sonner";
 
 export interface CardControls {
@@ -321,15 +322,28 @@ class VirtualCardSyncService {
   }
 
   public subscribe(userId: string, callback: (cards: VirtualCardModel[]) => void): () => void {
-    this.currentUserId = userId || "asim_aryal";
+    this.currentUserId = auth.currentUser?.uid || userId || "asim_aryal";
     this.listeners.add(callback);
     callback(this.cachedCards);
 
-    if (!this.unsubscribeFirestore) {
+    if (!this.unsubscribeFirestore && auth.currentUser) {
       this.startFirestoreSync();
     }
 
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        this.currentUserId = u.uid;
+        if (!this.unsubscribeFirestore && this.listeners.size > 0) {
+          this.startFirestoreSync();
+        }
+      } else if (this.unsubscribeFirestore) {
+        this.unsubscribeFirestore();
+        this.unsubscribeFirestore = null;
+      }
+    });
+
     return () => {
+      unsubAuth();
       this.listeners.delete(callback);
       if (this.listeners.size === 0 && this.unsubscribeFirestore) {
         this.unsubscribeFirestore();
@@ -340,8 +354,11 @@ class VirtualCardSyncService {
 
   private startFirestoreSync() {
     try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
       const cardsColRef = collection(db, "virtual_cards");
-      this.unsubscribeFirestore = onSnapshot(cardsColRef, (snapshot) => {
+      const q = query(cardsColRef, where("userId", "==", uid));
+      this.unsubscribeFirestore = onSnapshot(q, (snapshot) => {
         if (!snapshot.empty) {
           const remoteCards: VirtualCardModel[] = [];
           snapshot.forEach((docSnap) => {
@@ -353,24 +370,26 @@ class VirtualCardSyncService {
           this.seedInitialCardsInFirestore();
         }
       }, (error) => {
-        console.warn("Firestore virtual_cards snapshot notice:", error);
+        handleFirestoreError(error, OperationType.LIST, "virtual_cards");
       });
     } catch (err) {
-      console.warn("Failed to attach Firestore snapshot for virtual_cards:", err);
+      handleFirestoreError(err, OperationType.LIST, "virtual_cards");
     }
   }
 
   private async seedInitialCardsInFirestore() {
     try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
       for (const card of DEFAULT_VIRTUAL_CARDS) {
         await setDoc(doc(db, "virtual_cards", card.id), {
           ...card,
-          userId: this.currentUserId,
+          userId: uid,
           seededAt: new Date().toISOString()
         });
       }
     } catch (e) {
-      console.warn("Seeding initial cards notice:", e);
+      handleFirestoreError(e, OperationType.WRITE, "virtual_cards");
     }
   }
 
@@ -406,6 +425,8 @@ class VirtualCardSyncService {
   }
 
   public async reconcileLiveDatabase(force = false): Promise<VirtualCardModel[]> {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return this.cachedCards;
     const now = Date.now();
     // Throttle reconciliations: at most once every 30 seconds unless forced
     if (!force && now - this.lastSyncTime < 30000) {
@@ -416,14 +437,14 @@ class VirtualCardSyncService {
     this.lastSyncTime = now;
     try {
       const cardsColRef = collection(db, "virtual_cards");
-      const snap = await getDocs(cardsColRef);
+      const snap = await getDocs(query(cardsColRef, where("userId", "==", uid)));
       if (!snap.empty) {
         const remoteCards: VirtualCardModel[] = [];
         snap.forEach(docSnap => remoteCards.push({ id: docSnap.id, ...(docSnap.data() as any) }));
         this.mergeCards(remoteCards);
       }
     } catch (e) {
-      console.warn("Reconcile cards notice:", e);
+      handleFirestoreError(e, OperationType.LIST, "virtual_cards");
     } finally {
       this.isSyncing = false;
     }
@@ -473,16 +494,28 @@ class VirtualCardSyncService {
     this.saveLocalCache();
     this.notifyListeners();
 
-    // 24/7 Firestore persistence
+    // 24/7 Firestore persistence (only when Firebase Auth session is active)
+    const activeUid = auth.currentUser?.uid;
+    if (!activeUid) {
+      return {
+        success: true,
+        authCode,
+        cryptogram: dynamicCryptogram,
+        remainingBalance: newBalance,
+        transactionId: `TXN-LOCAL-${Date.now()}`
+      };
+    }
+
     try {
-      await updateDoc(doc(db, "virtual_cards", card.id), {
+      await setDoc(doc(db, "virtual_cards", card.id), {
+        userId: activeUid,
         balance: newBalance,
         atc: nextAtc,
         lastSyncedAt: new Date().toISOString()
-      });
+      }, { merge: true });
 
       const txnRef = await addDoc(collection(db, "transactions"), {
-        userId: this.currentUserId,
+        userId: activeUid,
         type: "hce_direct_tap",
         cardId: card.id,
         cardName: card.name,
@@ -500,6 +533,7 @@ class VirtualCardSyncService {
       });
 
       await addDoc(collection(db, "notifications"), {
+        userId: activeUid,
         title: `HCE Contactless Tap: $${params.amount.toFixed(2)} ${params.currency}`,
         message: `Direct Tap at ${params.merchantName} approved with zero wallet friction. Cryptogram: ${dynamicCryptogram}. 24/7 balance live synced.`,
         category: "cards",
@@ -515,7 +549,7 @@ class VirtualCardSyncService {
         transactionId: txnRef.id
       };
     } catch (err: any) {
-      console.warn("Firestore tap persistence notice:", err);
+      handleFirestoreError(err, OperationType.WRITE, "virtual_cards");
       return {
         success: true,
         authCode,
@@ -545,11 +579,12 @@ class VirtualCardSyncService {
     this.notifyListeners();
 
     try {
-      if (db) {
-        await setDoc(doc(db, "virtual_cards", cardId), updatedCard, { merge: true });
+      const uid = auth.currentUser?.uid;
+      if (db && uid) {
+        await setDoc(doc(db, "virtual_cards", cardId), { ...updatedCard, userId: uid }, { merge: true });
       }
     } catch (e) {
-      console.warn("Firestore updateCard notice:", e);
+      handleFirestoreError(e, OperationType.WRITE, `virtual_cards/${cardId}`);
     }
 
     return updatedCard;
@@ -741,11 +776,12 @@ class VirtualCardSyncService {
     this.notifyListeners();
 
     try {
-      if (db) {
-        await setDoc(doc(db, "virtual_cards", card.id), card);
+      const uid = auth.currentUser?.uid;
+      if (db && uid) {
+        await setDoc(doc(db, "virtual_cards", card.id), { ...card, userId: uid });
       }
     } catch (e) {
-      console.warn("Firestore issueCard notice:", e);
+      handleFirestoreError(e, OperationType.CREATE, `virtual_cards/${card.id}`);
     }
 
     return card;
@@ -756,10 +792,12 @@ class VirtualCardSyncService {
     this.saveLocalCache();
     this.notifyListeners();
     try {
-      if (db) {
+      if (db && auth.currentUser) {
         await deleteDoc(doc(db, "virtual_cards", cardId));
       }
-    } catch {}
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `virtual_cards/${cardId}`);
+    }
     return true;
   }
 }

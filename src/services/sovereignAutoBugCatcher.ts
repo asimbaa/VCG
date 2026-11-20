@@ -5,7 +5,7 @@
  */
 
 import { collection, doc, setDoc, getDocs, limit, query, orderBy } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import toast from "react-hot-toast";
 
 export type BugSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -301,7 +301,7 @@ class SovereignAutoBugCatcher {
         } catch {}
       }
     } catch (err: any) {
-      console.warn("Audit minor warning:", err?.message);
+      console.debug("Audit minor notice:", err?.message);
     }
 
     if (repairedItems.length > 0) {
@@ -324,7 +324,8 @@ class SovereignAutoBugCatcher {
 
   private async syncToFirestoreTelemetry(bug: CaughtBugEvent) {
     try {
-      if (!db) return;
+      const u = auth.currentUser;
+      if (!db || !u || !u.emailVerified || u.email?.toLowerCase() !== "asim.nsw@gmail.com") return;
       const docRef = doc(db, "system_health_flourishing", bug.id);
       await setDoc(docRef, {
         ...bug,

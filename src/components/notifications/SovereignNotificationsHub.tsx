@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { renderAutoTable } from '../../utils/safePdfAutoTable';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { sendWorkspaceEmail, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
 import toast from 'react-hot-toast';
 
@@ -86,8 +86,10 @@ export const SovereignNotificationsHub: React.FC<SovereignNotificationsHubProps>
 
   // Listen to Firestore real-time notification decrees
   useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
     try {
-      const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));
+      const q = query(collection(db, "notifications"), where("userId", "==", uid), orderBy("createdAt", "desc"));
       const unsub = onSnapshot(q, (snapshot) => {
         const liveNotifs = snapshot.docs.map(docSnap => ({
           id: docSnap.id,
@@ -95,7 +97,7 @@ export const SovereignNotificationsHub: React.FC<SovereignNotificationsHubProps>
         }));
         setDbBriefs(liveNotifs);
       }, (err) => {
-        console.warn("Notifications subscription warning:", err);
+        handleFirestoreError(err, OperationType.LIST, "notifications");
       });
       return () => unsub();
     } catch {}

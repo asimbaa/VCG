@@ -50,7 +50,7 @@ import {
 } from "../../services/paymentSettlementService";
 import { generatePdfReceipt, generateBpayPdfReceipt } from "../../utils/pdfGenerator";
 import { collection, query, where, onSnapshot, limit } from "firebase/firestore";
-import { db } from "../../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../../firebase";
 import { unifiedBankCardSync, UnifiedBankCard, TARGET_LINK_HOLDER } from "../../services/unifiedBankCardSync";
 
 interface CommBankPayIDFlowProps {
@@ -273,10 +273,10 @@ export function CommBankPayIDFlow({
 
   // Live listener for incoming transactions to receiver bank accounts
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !auth.currentUser) return;
     const q = query(
       collection(db, "transactions"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
       limit(60)
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -297,7 +297,7 @@ export function CommBankPayIDFlow({
       txs.sort((a, b) => new Date(b.date || b.clearedAt || 0).getTime() - new Date(a.date || a.clearedAt || 0).getTime());
       setIncomingTransactions(txs);
     }, (err) => {
-      console.warn("Incoming transactions snapshot note:", err);
+      handleFirestoreError(err, OperationType.LIST, "transactions");
     });
     return () => unsub();
   }, [user?.uid]);
@@ -2832,9 +2832,11 @@ export function CommBankPayIDFlow({
                           onClick={async () => {
                             setIsReconciling(true);
                             try {
-                              const res = await reconcileAndSettleAllPayments(user?.uid);
+                              const res = await reconcileAndSettleAllPayments(auth.currentUser?.uid || user?.uid);
                               toast.success(
-                                `Synced ${res.reconciledCount} payments! Settle amount: $${res.totalSettledAmount.toFixed(2)} AUD credited.`
+                                auth.currentUser
+                                  ? `Synced ${res.reconciledCount} payments! Settled amount: $${res.totalSettledAmount.toFixed(2)} AUD credited.`
+                                  : "Local ledger up to date! Sign in with Google anytime for multi-device cloud sync."
                               );
                             } catch (e: any) {
                               toast.error(e.message || "Reconciliation complete.");

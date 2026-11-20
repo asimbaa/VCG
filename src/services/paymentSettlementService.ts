@@ -13,9 +13,48 @@ import {
   onSnapshot,
   serverTimestamp 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import toast from "react-hot-toast";
 import { unifiedBankCardSync } from "./unifiedBankCardSync";
+
+const CBA_BALANCES_LOCAL_KEY = "valourian_cba_balances_cache";
+
+function getActiveCloudUid(): string | null {
+  return auth.currentUser?.uid || null;
+}
+
+function isAsimCloudSession(): boolean {
+  return Boolean(
+    auth.currentUser &&
+      auth.currentUser.emailVerified &&
+      auth.currentUser.email?.toLowerCase() === "asim.nsw@gmail.com"
+  );
+}
+
+function loadLocalCbaBalances(defaults: Record<string, number>): Record<string, number> {
+  if (typeof window === "undefined") return { ...defaults };
+  try {
+    const raw = window.localStorage.getItem(CBA_BALANCES_LOCAL_KEY);
+    if (!raw) return { ...defaults };
+    const parsed = JSON.parse(raw);
+    const merged = { ...defaults };
+    for (const key of Object.keys(defaults)) {
+      if (typeof parsed?.[key] === "number" && !Number.isNaN(parsed[key])) {
+        merged[key] = parsed[key];
+      }
+    }
+    return merged;
+  } catch {
+    return { ...defaults };
+  }
+}
+
+function saveLocalCbaBalances(balances: Record<string, number>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CBA_BALANCES_LOCAL_KEY, JSON.stringify(balances));
+  } catch {}
+}
 
 export interface CountryCodeOption {
   code: string;
@@ -345,15 +384,17 @@ export function parsePayIdPhoneNumber(
  * Real-time balance reader for CBA & Linked Accounts
  */
 export async function getLiveCbaAccountBalances(userId: string): Promise<Record<string, number>> {
-  const balances: Record<string, number> = {};
+  const defaults: Record<string, number> = {};
   for (const acc of COMMBANK_LINKED_ACCOUNTS) {
-    balances[acc.id] = acc.defaultBalance;
+    defaults[acc.id] = acc.defaultBalance;
   }
 
-  if (!userId) return balances;
+  const balances = loadLocalCbaBalances(defaults);
+  const activeUid = getActiveCloudUid();
+  if (!userId || !activeUid) return balances;
 
   try {
-    const docRef = doc(db, "cba_account_balances", userId);
+    const docRef = doc(db, "cba_account_balances", activeUid);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
@@ -362,12 +403,13 @@ export async function getLiveCbaAccountBalances(userId: string): Promise<Record<
           balances[acc.id] = data[acc.id];
         }
       }
-    } else {
-      // Initialize in Firestore
+      saveLocalCbaBalances(balances);
+    } else if (auth.currentUser?.emailVerified) {
+      // Initialize in Firestore for verified user
       await setDoc(docRef, balances, { merge: true });
     }
   } catch (err) {
-    console.warn("CBA live balances fetch note:", err);
+    handleFirestoreError(err, OperationType.GET, `cba_account_balances/${activeUid}`);
   }
 
   return balances;
@@ -380,17 +422,19 @@ export function subscribeToCbaBalances(
   userId: string,
   callback: (balances: Record<string, number>) => void
 ): () => void {
-  const initialBalances: Record<string, number> = {};
+  const defaults: Record<string, number> = {};
   for (const acc of COMMBANK_LINKED_ACCOUNTS) {
-    initialBalances[acc.id] = acc.defaultBalance;
+    defaults[acc.id] = acc.defaultBalance;
   }
+  const initialBalances = loadLocalCbaBalances(defaults);
 
-  if (!userId) {
+  const activeUid = getActiveCloudUid();
+  if (!userId || !activeUid) {
     callback(initialBalances);
     return () => {};
   }
 
-  const docRef = doc(db, "cba_account_balances", userId);
+  const docRef = doc(db, "cba_account_balances", activeUid);
   return onSnapshot(docRef, (snap) => {
     if (snap.exists()) {
       const data = snap.data();
@@ -400,18 +444,19 @@ export function subscribeToCbaBalances(
           updated[acc.id] = data[acc.id];
         }
       }
+      saveLocalCbaBalances(updated);
       callback(updated);
     } else {
       callback(initialBalances);
     }
   }, (err) => {
-    console.warn("CBA balances snapshot listener note:", err);
+    handleFirestoreError(err, OperationType.GET, `cba_account_balances/${activeUid}`);
     callback(initialBalances);
   });
 }
 
 /**
- * Helper to credit or debit a specific CBA account in Firestore
+ * Helper to credit or debit a specific CBA account in Firestore and local cache
  */
 export async function updateCbaAccountBalance(
   userId: string,
@@ -422,14 +467,18 @@ export async function updateCbaAccountBalance(
   const current = currentBalances[accountId] !== undefined ? currentBalances[accountId] : 100000;
   const newBalance = Math.max(0, current + deltaAmount);
   currentBalances[accountId] = newBalance;
+  saveLocalCbaBalances(currentBalances);
 
-  try {
-    await setDoc(doc(db, "cba_account_balances", userId), {
-      [accountId]: newBalance,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
-  } catch (err) {
-    console.warn("CBA account balance update note:", err);
+  const activeUid = getActiveCloudUid();
+  if (activeUid) {
+    try {
+      await setDoc(doc(db, "cba_account_balances", activeUid), {
+        [accountId]: newBalance,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `cba_account_balances/${activeUid}`);
+    }
   }
 
   return newBalance;
@@ -497,6 +546,7 @@ export async function executeBilateralPayment(
 
   try {
     // 1. Deduct funds from source account
+    const activeCloudUid = getActiveCloudUid();
     if (params.senderUserId) {
       try {
         // If source account matches one of the master bank cards in unifiedBankCardSync
@@ -521,7 +571,7 @@ export async function executeBilateralPayment(
             }
           }
         } catch (cardErr) {
-          console.warn("Card balance debit note:", cardErr);
+          console.debug("Card balance local update:", cardErr);
         }
 
         // If source account matches one of the linked CBA accounts, deduct from it
@@ -532,22 +582,26 @@ export async function executeBilateralPayment(
           await updateCbaAccountBalance(params.senderUserId, matchedSourceCbaAcc.id, -params.amount);
         }
 
-        const senderUserRef = doc(db, "users", params.senderUserId);
-        const senderSnap = await getDoc(senderUserRef);
-        if (senderSnap.exists()) {
-          const senderData = senderSnap.data();
-          const balances = senderData.balances || {};
-          const curKey = params.currency || "AUD";
-          const currentBal = balances[curKey] !== undefined ? balances[curKey] : 590608086470.98;
-          const updatedBal = Math.max(0, currentBal - params.amount);
+        if (activeCloudUid) {
+          const senderUserRef = doc(db, "users", activeCloudUid);
+          const senderSnap = await getDoc(senderUserRef);
+          if (senderSnap.exists()) {
+            const senderData = senderSnap.data();
+            const balances = senderData.balances || {};
+            const curKey = params.currency || "AUD";
+            const currentBal = balances[curKey] !== undefined ? balances[curKey] : 590608086470.98;
+            const updatedBal = Math.max(0, currentBal - params.amount);
 
-          await updateDoc(senderUserRef, {
-            [`balances.${curKey}`]: updatedBal,
-            lastActive: nowIso,
-          });
+            await updateDoc(senderUserRef, {
+              [`balances.${curKey}`]: updatedBal,
+              lastActive: nowIso,
+            });
+          }
         }
       } catch (err) {
-        console.warn("Sender balance deduction note:", err);
+        if (activeCloudUid) {
+          handleFirestoreError(err, OperationType.WRITE, `users/${activeCloudUid}`);
+        }
       }
     }
 
@@ -622,48 +676,54 @@ export async function executeBilateralPayment(
       await updateCbaAccountBalance(params.senderUserId, matchedRecipientCbaAcc.id, params.amount);
       recipientCredited = true;
 
-      // Add positive incoming transaction for sender's view so they see it in their receiver bank account immediately!
-      await addDoc(collection(db, "transactions"), {
-        userId: params.senderUserId,
-        accountId: matchedRecipientCbaAcc.id,
-        accountName: matchedRecipientCbaAcc.name,
-        recipient: `${matchedRecipientCbaAcc.name} (Credited & Received)`,
-        recipientName: matchedRecipientCbaAcc.name,
-        recipientLegalName: matchedRecipientCbaAcc.accountHolder,
-        senderName: params.senderName,
-        sourceBank: params.sourceAccount.name,
-        destinationBank: matchedRecipientCbaAcc.bankName,
-        amount: params.amount, // positive incoming credit
-        currency: params.currency || "AUD",
-        type: "cba_received",
-        status: "completed",
-        deliveryStatus: "accepted_and_received",
-        settlementRail: railLabel,
-        receiptNumber: receiptNum,
-        description: params.description || "Fast payment (Osko® • NPP 24/7)",
-        reference: params.reference || "NPP Settlement",
-        date: nowIso,
-        clearedAt: nowIso,
-        acceptedAt: nowIso,
-        bankAccepted: true,
-        acceptedByRecipient: true,
-        speedNote: `Received immediately into ${matchedRecipientCbaAcc.name}. Cleared & available to spend.`,
-      });
+      if (activeCloudUid) {
+        try {
+          // Add positive incoming transaction for sender's view so they see it in their receiver bank account immediately!
+          await addDoc(collection(db, "transactions"), {
+            userId: activeCloudUid,
+            accountId: matchedRecipientCbaAcc.id,
+            accountName: matchedRecipientCbaAcc.name,
+            recipient: `${matchedRecipientCbaAcc.name} (Credited & Received)`,
+            recipientName: matchedRecipientCbaAcc.name,
+            recipientLegalName: matchedRecipientCbaAcc.accountHolder,
+            senderName: params.senderName,
+            sourceBank: params.sourceAccount.name,
+            destinationBank: matchedRecipientCbaAcc.bankName,
+            amount: params.amount, // positive incoming credit
+            currency: params.currency || "AUD",
+            type: "cba_received",
+            status: "completed",
+            deliveryStatus: "accepted_and_received",
+            settlementRail: railLabel,
+            receiptNumber: receiptNum,
+            description: params.description || "Fast payment (Osko® • NPP 24/7)",
+            reference: params.reference || "NPP Settlement",
+            date: nowIso,
+            clearedAt: nowIso,
+            acceptedAt: nowIso,
+            bankAccepted: true,
+            acceptedByRecipient: true,
+            speedNote: `Received immediately into ${matchedRecipientCbaAcc.name}. Cleared & available to spend.`,
+          });
 
-      await addDoc(collection(db, "notifications"), {
-        userId: params.senderUserId,
-        title: `Payment Received into ${matchedRecipientCbaAcc.name}: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} AUD`,
-        message: `Fast payment (Osko®) from ${params.senderName} has been accepted and credited immediately into ${matchedRecipientCbaAcc.name}. Available balance updated in real-time.`,
-        type: "payment_received",
-        amount: params.amount,
-        currency: params.currency || "AUD",
-        receiptNumber: receiptNum,
-        createdAt: nowIso,
-        read: false,
-      });
+          await addDoc(collection(db, "notifications"), {
+            userId: activeCloudUid,
+            title: `Payment Received into ${matchedRecipientCbaAcc.name}: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} AUD`,
+            message: `Fast payment (Osko®) from ${params.senderName} has been accepted and credited immediately into ${matchedRecipientCbaAcc.name}. Available balance updated in real-time.`,
+            type: "payment_received",
+            amount: params.amount,
+            currency: params.currency || "AUD",
+            receiptNumber: receiptNum,
+            createdAt: nowIso,
+            read: false,
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, "transactions");
+        }
+      }
     }
 
-    // 3. Identify Recipient User in Firestore (by email or phone) and credit their user record
+    // 3. Identify Recipient User in Firestore (only when running under privileged Founder/Asim verified cloud session)
     const possibleLookupEmails = [
       params.recipient.payIdValue,
       params.recipient.email,
@@ -672,45 +732,15 @@ export async function executeBilateralPayment(
     const rawPhone = params.recipient.payIdValue || params.recipient.phone || "";
     const cleanPhoneDigits = rawPhone.replace(/[^0-9]/g, "");
 
-    // Try lookup by email
-    for (const emailVal of possibleLookupEmails) {
-      try {
-        const uQuery = query(collection(db, "users"), where("email", "==", emailVal.trim().toLowerCase()), limit(1));
-        const uSnap = await getDocs(uQuery);
-        if (!uSnap.empty) {
-          targetUserUid = uSnap.docs[0].id;
-          const targetData = uSnap.docs[0].data();
-          const curKey = params.currency || "AUD";
-          const recBal = (targetData.balances && targetData.balances[curKey]) || 0;
-          await updateDoc(doc(db, "users", targetUserUid), {
-            [`balances.${curKey}`]: recBal + params.amount,
-            lastPaymentReceivedAt: nowIso,
-          });
-          recipientCredited = true;
-          break;
-        }
-      } catch (e) {
-        console.warn("User lookup by email note:", e);
-      }
-    }
-
-    // Try lookup by phone variations (e.g. 0400286693, 61400286693, +61400286693, 0400 286 693)
-    if (!recipientCredited && cleanPhoneDigits.length >= 8) {
-      const phoneQueries = [
-        cleanPhoneDigits,
-        `0${cleanPhoneDigits.replace(/^61/, '')}`,
-        `+61${cleanPhoneDigits.replace(/^0/, '')}`,
-        `+${cleanPhoneDigits}`,
-        rawPhone.trim(),
-      ];
-
-      for (const pVal of phoneQueries) {
+    if (isAsimCloudSession()) {
+      // Try lookup by email
+      for (const emailVal of possibleLookupEmails) {
         try {
-          const pQuery = query(collection(db, "users"), where("phone", "==", pVal), limit(1));
-          const pSnap = await getDocs(pQuery);
-          if (!pSnap.empty) {
-            targetUserUid = pSnap.docs[0].id;
-            const targetData = pSnap.docs[0].data();
+          const uQuery = query(collection(db, "users"), where("email", "==", emailVal.trim().toLowerCase()), limit(1));
+          const uSnap = await getDocs(uQuery);
+          if (!uSnap.empty) {
+            targetUserUid = uSnap.docs[0].id;
+            const targetData = uSnap.docs[0].data();
             const curKey = params.currency || "AUD";
             const recBal = (targetData.balances && targetData.balances[curKey]) || 0;
             await updateDoc(doc(db, "users", targetUserUid), {
@@ -721,152 +751,200 @@ export async function executeBilateralPayment(
             break;
           }
         } catch (e) {
-          console.warn("User lookup by phone note:", e);
+          handleFirestoreError(e, OperationType.LIST, "users");
+        }
+      }
+
+      // Try lookup by phone variations (e.g. 0400286693, 61400286693, +61400286693, 0400 286 693)
+      if (!recipientCredited && cleanPhoneDigits.length >= 8) {
+        const phoneQueries = [
+          cleanPhoneDigits,
+          `0${cleanPhoneDigits.replace(/^61/, '')}`,
+          `+61${cleanPhoneDigits.replace(/^0/, '')}`,
+          `+${cleanPhoneDigits}`,
+          rawPhone.trim(),
+        ];
+
+        for (const pVal of phoneQueries) {
+          try {
+            const pQuery = query(collection(db, "users"), where("phone", "==", pVal), limit(1));
+            const pSnap = await getDocs(pQuery);
+            if (!pSnap.empty) {
+              targetUserUid = pSnap.docs[0].id;
+              const targetData = pSnap.docs[0].data();
+              const curKey = params.currency || "AUD";
+              const recBal = (targetData.balances && targetData.balances[curKey]) || 0;
+              await updateDoc(doc(db, "users", targetUserUid), {
+                [`balances.${curKey}`]: recBal + params.amount,
+                lastPaymentReceivedAt: nowIso,
+              });
+              recipientCredited = true;
+              break;
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.LIST, "users");
+          }
+        }
+      }
+
+      // If external recipient user found or provisioned
+      if (!recipientCredited && cleanPhoneDigits.length >= 8) {
+        try {
+          const autoRecipientUid = `user_payid_${cleanPhoneDigits.slice(-9)}`;
+          targetUserUid = autoRecipientUid;
+          const curKey = params.currency || "AUD";
+          await setDoc(doc(db, "users", autoRecipientUid), {
+            uid: autoRecipientUid,
+            name: finalLegalName,
+            displayName: finalLegalName,
+            legalName: finalLegalName,
+            phone: rawPhone,
+            payId: rawPhone,
+            countryCode: cCode,
+            bankName: destinationBank,
+            balances: {
+              [curKey]: params.amount,
+            },
+            createdAt: nowIso,
+            lastPaymentReceivedAt: nowIso,
+          }, { merge: true });
+          recipientCredited = true;
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, "users");
         }
       }
     }
 
-    // If external recipient user found or provisioned
-    if (!recipientCredited && cleanPhoneDigits.length >= 8) {
-      try {
-        const autoRecipientUid = `user_payid_${cleanPhoneDigits.slice(-9)}`;
-        targetUserUid = autoRecipientUid;
-        const curKey = params.currency || "AUD";
-        await setDoc(doc(db, "users", autoRecipientUid), {
-          uid: autoRecipientUid,
-          name: finalLegalName,
-          displayName: finalLegalName,
-          legalName: finalLegalName,
-          phone: rawPhone,
-          payId: rawPhone,
-          countryCode: cCode,
-          bankName: destinationBank,
-          balances: {
-            [curKey]: params.amount,
-          },
-          createdAt: nowIso,
-          lastPaymentReceivedAt: nowIso,
-        }, { merge: true });
-        recipientCredited = true;
-      } catch (e) {
-        console.warn("Auto recipient account provisioning note:", e);
-      }
-    }
-
     // 4. Record Outgoing Transaction for Sender (Accepted & Settled by recipient bank)
-    await addDoc(collection(db, "transactions"), {
-      userId: params.senderUserId,
-      recipient: `${finalLegalName} (${recipientDisplayTarget})`,
-      recipientName: finalLegalName,
-      recipientLegalName: finalLegalName,
-      countryCode: cCode,
-      destinationBank: destinationBank,
-      amount: -params.amount,
-      currency: params.currency || "AUD",
-      type: "payid",
-      status: "completed",
-      deliveryStatus: "accepted_and_received",
-      settlementRail: railLabel,
-      receiptNumber: receiptNum,
-      description: params.description || "Fast payment (Osko)",
-      reference: params.reference || "NPP Settlement",
-      sourceAccount: params.sourceAccount.name,
-      date: nowIso,
-      clearedAt: nowIso,
-      acceptedAt: nowIso,
-      bankAccepted: true,
-      acceptedByRecipient: true,
-      recipientBankStatus: `Accepted & Credited by ${destinationBank}`,
-    });
-
-    // 5. Record Incoming Transaction & Notification for external Recipient if distinct
-    if (targetUserUid && targetUserUid !== params.senderUserId) {
-      await addDoc(collection(db, "transactions"), {
-        userId: targetUserUid,
-        recipient: `From: ${params.senderName} (${params.sourceAccount.name})`,
-        senderName: params.senderName,
-        recipientLegalName: finalLegalName,
-        amount: params.amount,
-        currency: params.currency || "AUD",
-        type: "payid_received",
-        status: "completed",
-        deliveryStatus: "accepted_and_received",
-        settlementRail: railLabel,
-        receiptNumber: receiptNum,
-        description: params.description || "Fast payment (Osko)",
-        reference: params.reference || "NPP Settlement",
-        date: nowIso,
-        clearedAt: nowIso,
-        acceptedAt: nowIso,
-        sourceBank: params.sourceAccount.name,
-        destinationBank: destinationBank,
-        bankAccepted: true,
-        acceptedByRecipient: true,
-      });
-
-      await addDoc(collection(db, "notifications"), {
-        userId: targetUserUid,
-        title: `Payment Received: $${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${params.currency || "AUD"}`,
-        message: `Fast payment (Osko) received from ${params.senderName}. Funds cleared and credited by ${destinationBank}.`,
-        type: "payment_received",
-        amount: params.amount,
-        currency: params.currency || "AUD",
-        receiptNumber: receiptNum,
-        createdAt: nowIso,
-        read: false,
-      });
-    }
-
-    // 6. Universal settlements registry for full auditable proof of recipient & bank acceptance
-    await addDoc(collection(db, "settlements"), {
-      receiptNumber: receiptNum,
-      senderUserId: params.senderUserId,
-      senderName: params.senderName,
-      recipientName: finalLegalName,
-      recipientLegalName: finalLegalName,
-      recipientTarget: recipientDisplayTarget,
-      countryCode: cCode,
-      destinationBank: destinationBank,
-      amount: params.amount,
-      currency: params.currency || "AUD",
-      description: params.description || "",
-      reference: params.reference || "",
-      status: "delivered_and_accepted",
-      recipientAccepted: true,
-      bankAccepted: true,
-      settledAt: nowIso,
-      settlementRail: railLabel,
-      clearingNetwork: "NPP / Osko Australia",
-    });
-
-    // 7. Save payee to saved_recipients if not already existing
-    try {
-      const recQuery = query(
-        collection(db, "saved_recipients"),
-        where("userId", "==", params.senderUserId),
-        where("recipient", "==", params.recipient.payIdValue || params.recipient.accountNumber || finalLegalName),
-        limit(1)
-      );
-      const recSnap = await getDocs(recQuery);
-      if (recSnap.empty) {
-        await addDoc(collection(db, "saved_recipients"), {
-          userId: params.senderUserId,
-          name: finalLegalName,
-          legalName: finalLegalName,
-          recipient: params.recipient.payIdValue || params.recipient.accountNumber || finalLegalName,
-          payIdType: params.recipient.payIdType || "mobile",
-          payIdValue: params.recipient.payIdValue || "",
+    if (activeCloudUid) {
+      try {
+        await addDoc(collection(db, "transactions"), {
+          userId: activeCloudUid,
+          recipient: `${finalLegalName} (${recipientDisplayTarget})`,
+          recipientName: finalLegalName,
+          recipientLegalName: finalLegalName,
           countryCode: cCode,
-          bankName: destinationBank,
-          bsb: params.recipient.bsb || "",
-          accountNumber: params.recipient.accountNumber || "",
-          type: params.recipient.payIdValue ? "payid" : "au_bsb",
-          region: "Australia",
-          lastPaidAt: nowIso,
+          destinationBank: destinationBank,
+          amount: -params.amount,
+          currency: params.currency || "AUD",
+          type: "payid",
+          status: "completed",
+          deliveryStatus: "accepted_and_received",
+          settlementRail: railLabel,
+          receiptNumber: receiptNum,
+          description: params.description || "Fast payment (Osko)",
+          reference: params.reference || "NPP Settlement",
+          sourceAccount: params.sourceAccount.name,
+          date: nowIso,
+          clearedAt: nowIso,
+          acceptedAt: nowIso,
+          bankAccepted: true,
+          acceptedByRecipient: true,
+          recipientBankStatus: `Accepted & Credited by ${destinationBank}`,
         });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, "transactions");
       }
-    } catch (e) {
-      console.warn("Saved payee check note:", e);
+
+      // 5. Record Incoming Transaction & Notification for external Recipient if distinct (Founder session only)
+      if (isAsimCloudSession() && targetUserUid && targetUserUid !== activeCloudUid) {
+        try {
+          await addDoc(collection(db, "transactions"), {
+            userId: targetUserUid,
+            recipient: `From: ${params.senderName} (${params.sourceAccount.name})`,
+            senderName: params.senderName,
+            recipientLegalName: finalLegalName,
+            amount: params.amount,
+            currency: params.currency || "AUD",
+            type: "payid_received",
+            status: "completed",
+            deliveryStatus: "accepted_and_received",
+            settlementRail: railLabel,
+            receiptNumber: receiptNum,
+            description: params.description || "Fast payment (Osko)",
+            reference: params.reference || "NPP Settlement",
+            date: nowIso,
+            clearedAt: nowIso,
+            acceptedAt: nowIso,
+            sourceBank: params.sourceAccount.name,
+            destinationBank: destinationBank,
+            bankAccepted: true,
+            acceptedByRecipient: true,
+          });
+
+          await addDoc(collection(db, "notifications"), {
+            userId: targetUserUid,
+            title: `Payment Received: $${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${params.currency || "AUD"}`,
+            message: `Fast payment (Osko) received from ${params.senderName}. Funds cleared and credited by ${destinationBank}.`,
+            type: "payment_received",
+            amount: params.amount,
+            currency: params.currency || "AUD",
+            receiptNumber: receiptNum,
+            createdAt: nowIso,
+            read: false,
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, "transactions");
+        }
+      }
+
+      // 6. Universal settlements registry for full auditable proof of recipient & bank acceptance
+      if (isAsimCloudSession()) {
+        try {
+          await addDoc(collection(db, "settlements"), {
+            receiptNumber: receiptNum,
+            senderUserId: activeCloudUid,
+            senderName: params.senderName,
+            recipientName: finalLegalName,
+            recipientLegalName: finalLegalName,
+            recipientTarget: recipientDisplayTarget,
+            countryCode: cCode,
+            destinationBank: destinationBank,
+            amount: params.amount,
+            currency: params.currency || "AUD",
+            description: params.description || "",
+            reference: params.reference || "",
+            status: "delivered_and_accepted",
+            recipientAccepted: true,
+            bankAccepted: true,
+            settledAt: nowIso,
+            settlementRail: railLabel,
+            clearingNetwork: "NPP / Osko Australia",
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, "settlements");
+        }
+      }
+
+      // 7. Save payee to saved_recipients if not already existing
+      try {
+        const recQuery = query(
+          collection(db, "saved_recipients"),
+          where("userId", "==", activeCloudUid),
+          where("recipient", "==", params.recipient.payIdValue || params.recipient.accountNumber || finalLegalName),
+          limit(1)
+        );
+        const recSnap = await getDocs(recQuery);
+        if (recSnap.empty) {
+          await addDoc(collection(db, "saved_recipients"), {
+            userId: activeCloudUid,
+            name: finalLegalName,
+            legalName: finalLegalName,
+            recipient: params.recipient.payIdValue || params.recipient.accountNumber || finalLegalName,
+            payIdType: params.recipient.payIdType || "mobile",
+            payIdValue: params.recipient.payIdValue || "",
+            countryCode: cCode,
+            bankName: destinationBank,
+            bsb: params.recipient.bsb || "",
+            accountNumber: params.recipient.accountNumber || "",
+            type: params.recipient.payIdValue ? "payid" : "au_bsb",
+            region: "Australia",
+            lastPaidAt: nowIso,
+          });
+        }
+      } catch (e) {
+        handleFirestoreError(e, OperationType.LIST, "saved_recipients");
+      }
     }
 
     return {
@@ -907,143 +985,129 @@ export async function reconcileAndSettleAllPayments(currentUserId?: string): Pro
   let reconciledCount = 0;
   let totalSettledAmount = 0;
 
+  const activeUid = getActiveCloudUid();
+  if (!activeUid) {
+    // Signed-out / preview sessions reconcile on local device storage without firing unauthenticated cloud queries
+    return { reconciledCount: 0, totalSettledAmount: 0 };
+  }
+
+  // Only allow querying another UID when running as verified Founder/Admin session
+  const scopedUid = isAsimCloudSession() && currentUserId ? currentUserId : activeUid;
+
   try {
-    const qPending = query(
+    const userTxQuery = query(
       collection(db, "transactions"),
-      where("status", "in", ["pending", "processing", "initiated", "draft_ready", "queued"]),
-      limit(50)
+      where("userId", "==", scopedUid),
+      limit(200)
     );
-    const snap = await getDocs(qPending);
-    
-    for (const d of snap.docs) {
-      const data = d.data();
-      const docRef = doc(db, "transactions", d.id);
-      try {
-        await setDoc(docRef, {
-          status: "completed",
-          deliveryStatus: "accepted_and_received",
-          acceptedByRecipient: true,
-          bankAccepted: true,
-          clearedAt: new Date().toISOString(),
-          settlementNote: "Reconciled & accepted by recipient bank via NPP/Osko real-time protocol.",
-        }, { merge: true });
-        reconciledCount++;
-        totalSettledAmount += Math.abs(data.amount || 0);
-      } catch (err) {
-        console.warn("Notice updating transaction doc:", d.id, err);
+    const userTxSnap = await getDocs(userTxQuery);
+    const allUserTxs = userTxSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+
+    const pendingStatuses = new Set(["pending", "processing", "initiated", "draft_ready", "queued"]);
+    const existingIncomingReceipts = new Set(
+      allUserTxs
+        .filter((t) => t.amount > 0 && t.receiptNumber)
+        .map((t) => t.receiptNumber)
+    );
+
+    // Check pending or unacknowledged payments scoped strictly to the signed-in user
+    for (const t of allUserTxs) {
+      if (pendingStatuses.has(String(t.status || "").toLowerCase()) || !t.deliveryStatus || !t.bankAccepted) {
+        try {
+          await setDoc(doc(db, "transactions", t.id), {
+            status: "completed",
+            deliveryStatus: "accepted_and_received",
+            acceptedByRecipient: true,
+            bankAccepted: true,
+            clearedAt: t.clearedAt || new Date().toISOString(),
+            settlementNote: "Reconciled & accepted by recipient bank via NPP/Osko real-time protocol.",
+            speedNote: t.speedNote || "Settled via Osko® (NPP). Funds accepted & credited into receiver's bank account.",
+          }, { merge: true });
+          reconciledCount++;
+          totalSettledAmount += Math.abs(Number(t.amount) || 0);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `transactions/${t.id}`);
+        }
       }
-    }
 
-    if (currentUserId) {
-      const userTxQuery = query(
-        collection(db, "transactions"),
-        where("userId", "==", currentUserId),
-        limit(200)
-      );
-      const userTxSnap = await getDocs(userTxQuery);
-      const allUserTxs = userTxSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
-      
-      const existingIncomingReceipts = new Set(
-        allUserTxs
-          .filter((t) => t.amount > 0 && t.receiptNumber)
-          .map((t) => t.receiptNumber)
-      );
+      // Check if this was an outgoing transfer to a CBA / linked receiver account
+      if (t.amount < 0 && t.recipient) {
+        const recStr = String(t.recipient).toLowerCase();
+        const recDigits = recStr.replace(/[^0-9]/g, "");
 
-      // Check for outgoing payments to CBA and linked accounts that need incoming credit recorded
-      for (const t of allUserTxs) {
-        if (!t.deliveryStatus || t.status === "pending" || !t.bankAccepted) {
-          try {
-            await setDoc(doc(db, "transactions", t.id), {
-              status: "completed",
-              deliveryStatus: "accepted_and_received",
-              acceptedByRecipient: true,
-              bankAccepted: true,
-              speedNote: t.speedNote || "Settled via Osko® (NPP). Funds accepted & credited into receiver's bank account.",
-            }, { merge: true });
-          } catch (err) {
-            console.warn("Notice updating user transaction doc:", t.id, err);
+        let matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => {
+          const accDigits = a.accountNumber.replace(/[^0-9]/g, "");
+          return (
+            (recDigits.length >= 6 && recDigits.includes(accDigits)) ||
+            recStr.includes(a.name.toLowerCase()) ||
+            (recStr.includes("smart access") && a.id === "acc_smart_access") ||
+            (recStr.includes("goalsaver") && a.id === "acc_goalsaver") ||
+            (recStr.includes("cdia") && a.id === "acc_cdia") ||
+            (recStr.includes("netbank") && a.id === "acc_netbank_saver") ||
+            (recStr.includes("business trans") && a.id === "acc_business_trans") ||
+            (recStr.includes("business fca") && a.id === "acc_business_fca") ||
+            (recStr.includes("sovereign vault") && a.id === "acc_sovereign_vault") ||
+            (recStr.includes("nab") && a.id === "acc_nab_personal") ||
+            (recStr.includes("christopher") && a.id === "acc_cba_christopher_scott")
+          );
+        });
+
+        if (!matchedAcc) {
+          if (
+            recStr.includes("asim") ||
+            recStr.includes("aryal") ||
+            recDigits === "0400123456" ||
+            recDigits === "61400123456"
+          ) {
+            matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_smart_access");
+          } else if (
+            recStr.includes("scott") ||
+            recDigits === "0400286693" ||
+            recDigits === "61400286693" ||
+            recDigits.endsWith("400286693")
+          ) {
+            matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_cba_christopher_scott") || COMMBANK_LINKED_ACCOUNTS[0];
+          } else if (recStr.includes("cba") || recStr.includes("commonwealth") || recStr.includes("osko")) {
+            matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_smart_access");
           }
         }
 
-        // Check if this was an outgoing transfer to a CBA / linked receiver account
-        if (t.amount < 0 && t.recipient) {
-          const recStr = String(t.recipient).toLowerCase();
-          const recDigits = recStr.replace(/[^0-9]/g, "");
+        if (matchedAcc) {
+          const absAmt = Math.abs(t.amount);
+          const receiptNum = t.receiptNumber || `OSKO-REC-${t.id.slice(0, 6).toUpperCase()}`;
 
-          let matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => {
-            const accDigits = a.accountNumber.replace(/[^0-9]/g, "");
-            return (
-              (recDigits.length >= 6 && recDigits.includes(accDigits)) ||
-              recStr.includes(a.name.toLowerCase()) ||
-              (recStr.includes("smart access") && a.id === "acc_smart_access") ||
-              (recStr.includes("goalsaver") && a.id === "acc_goalsaver") ||
-              (recStr.includes("cdia") && a.id === "acc_cdia") ||
-              (recStr.includes("netbank") && a.id === "acc_netbank_saver") ||
-              (recStr.includes("business trans") && a.id === "acc_business_trans") ||
-              (recStr.includes("business fca") && a.id === "acc_business_fca") ||
-              (recStr.includes("sovereign vault") && a.id === "acc_sovereign_vault") ||
-              (recStr.includes("nab") && a.id === "acc_nab_personal") ||
-              (recStr.includes("christopher") && a.id === "acc_cba_christopher_scott")
-            );
-          });
+          // If an incoming transaction doesn't exist for this payment receipt, create it!
+          if (!existingIncomingReceipts.has(receiptNum)) {
+            await addDoc(collection(db, "transactions"), {
+              userId: scopedUid,
+              accountId: matchedAcc.id,
+              accountName: matchedAcc.name,
+              recipient: `${matchedAcc.name} (Credited & Received)`,
+              recipientName: matchedAcc.name,
+              recipientLegalName: matchedAcc.accountHolder,
+              sourceBank: t.sourceAccount || "Valourian Sovereign Treasury",
+              destinationBank: matchedAcc.bankName,
+              amount: absAmt, // positive incoming credit
+              currency: t.currency || "AUD",
+              type: "cba_received",
+              status: "completed",
+              deliveryStatus: "accepted_and_received",
+              settlementRail: "Fast payment (Osko® • NPP 24/7)",
+              receiptNumber: receiptNum,
+              description: t.description || "Fast payment (Osko® • NPP 24/7)",
+              reference: t.reference || "NPP Settlement",
+              date: t.date || new Date().toISOString(),
+              clearedAt: t.date || new Date().toISOString(),
+              acceptedAt: t.date || new Date().toISOString(),
+              bankAccepted: true,
+              acceptedByRecipient: true,
+              speedNote: `Received immediately into ${matchedAcc.name}. Cleared & available to spend.`,
+            });
 
-          if (!matchedAcc) {
-            if (
-              recStr.includes("asim") ||
-              recStr.includes("aryal") ||
-              recDigits === "0400123456" ||
-              recDigits === "61400123456"
-            ) {
-              matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_smart_access");
-            } else if (
-              recStr.includes("scott") ||
-              recDigits === "0400286693" ||
-              recDigits === "61400286693" ||
-              recDigits.endsWith("400286693")
-            ) {
-              matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_cba_christopher_scott") || COMMBANK_LINKED_ACCOUNTS[0];
-            } else if (recStr.includes("cba") || recStr.includes("commonwealth") || recStr.includes("osko")) {
-              matchedAcc = COMMBANK_LINKED_ACCOUNTS.find((a) => a.id === "acc_smart_access");
-            }
-          }
-
-          if (matchedAcc) {
-            const absAmt = Math.abs(t.amount);
-            const receiptNum = t.receiptNumber || `OSKO-REC-${t.id.slice(0, 6).toUpperCase()}`;
-
-            // If an incoming transaction doesn't exist for this payment receipt, create it!
-            if (!existingIncomingReceipts.has(receiptNum)) {
-              await addDoc(collection(db, "transactions"), {
-                userId: currentUserId,
-                accountId: matchedAcc.id,
-                accountName: matchedAcc.name,
-                recipient: `${matchedAcc.name} (Credited & Received)`,
-                recipientName: matchedAcc.name,
-                recipientLegalName: matchedAcc.accountHolder,
-                sourceBank: t.sourceAccount || "Valourian Sovereign Treasury",
-                destinationBank: matchedAcc.bankName,
-                amount: absAmt, // positive incoming credit
-                currency: t.currency || "AUD",
-                type: "cba_received",
-                status: "completed",
-                deliveryStatus: "accepted_and_received",
-                settlementRail: "Fast payment (Osko® • NPP 24/7)",
-                receiptNumber: receiptNum,
-                description: t.description || "Fast payment (Osko® • NPP 24/7)",
-                reference: t.reference || "NPP Settlement",
-                date: t.date || new Date().toISOString(),
-                clearedAt: t.date || new Date().toISOString(),
-                acceptedAt: t.date || new Date().toISOString(),
-                bankAccepted: true,
-                acceptedByRecipient: true,
-                speedNote: `Received immediately into ${matchedAcc.name}. Cleared & available to spend.`,
-              });
-
-              existingIncomingReceipts.add(receiptNum);
-              await updateCbaAccountBalance(currentUserId, matchedAcc.id, absAmt);
-              reconciledCount++;
-              totalSettledAmount += absAmt;
-            }
+            existingIncomingReceipts.add(receiptNum);
+            await updateCbaAccountBalance(scopedUid, matchedAcc.id, absAmt);
+            reconciledCount++;
+            totalSettledAmount += absAmt;
           }
         }
       }
@@ -1051,7 +1115,7 @@ export async function reconcileAndSettleAllPayments(currentUserId?: string): Pro
 
     return { reconciledCount, totalSettledAmount };
   } catch (error) {
-    console.warn("Reconciliation cycle complete with note:", error);
+    handleFirestoreError(error, OperationType.LIST, "transactions");
     return { reconciledCount: 0, totalSettledAmount: 0 };
   }
 }
@@ -1335,46 +1399,21 @@ export async function resolvePayIDDirectory(
     }
   }
 
-  // 3. Query live Firestore users database
-  try {
-    if (payIdType === "email" || cleanVal.includes("@")) {
-      const qUser = query(collection(db, "users"), where("email", "==", cleanVal.toLowerCase()), limit(1));
-      const snap = await getDocs(qUser);
-      if (!snap.empty) {
-        const uData = snap.docs[0].data();
-        const foundName = (uData.legalName || uData.displayName || uData.fullName || uData.name || "").toUpperCase();
-        if (foundName) {
-          return {
-            isValid: true,
-            registeredName: foundName,
-            payIdType: "email",
-            payIdValue: cleanVal,
-            countryCode: parsed.countryCode,
-            institution: uData.bankName || "Commonwealth Bank of Australia",
-            fastPaymentEligible: true,
-            matchConfidence: "exact",
-          };
-        }
-      }
-    } else if (digitsOnly.length >= 8) {
-      const phoneQueries = [
-        digitsOnly,
-        parsed.nationalNumber,
-        parsed.fullE164,
-        cleanVal,
-      ];
-      for (const p of phoneQueries) {
-        const qPhone = query(collection(db, "users"), where("phone", "==", p), limit(1));
-        const pSnap = await getDocs(qPhone);
-        if (!pSnap.empty) {
-          const uData = pSnap.docs[0].data();
+  // 3. Query live Firestore users database (restricted to verified Founder/Admin session per rules)
+  if (isAsimCloudSession()) {
+    try {
+      if (payIdType === "email" || cleanVal.includes("@")) {
+        const qUser = query(collection(db, "users"), where("email", "==", cleanVal.toLowerCase()), limit(1));
+        const snap = await getDocs(qUser);
+        if (!snap.empty) {
+          const uData = snap.docs[0].data();
           const foundName = (uData.legalName || uData.displayName || uData.fullName || uData.name || "").toUpperCase();
           if (foundName) {
             return {
               isValid: true,
               registeredName: foundName,
-              payIdType: "phone",
-              payIdValue: parsed.formattedDisplay,
+              payIdType: "email",
+              payIdValue: cleanVal,
               countryCode: parsed.countryCode,
               institution: uData.bankName || "Commonwealth Bank of Australia",
               fastPaymentEligible: true,
@@ -1382,10 +1421,37 @@ export async function resolvePayIDDirectory(
             };
           }
         }
+      } else if (digitsOnly.length >= 8) {
+        const phoneQueries = [
+          digitsOnly,
+          parsed.nationalNumber,
+          parsed.fullE164,
+          cleanVal,
+        ];
+        for (const p of phoneQueries) {
+          const qPhone = query(collection(db, "users"), where("phone", "==", p), limit(1));
+          const pSnap = await getDocs(qPhone);
+          if (!pSnap.empty) {
+            const uData = pSnap.docs[0].data();
+            const foundName = (uData.legalName || uData.displayName || uData.fullName || uData.name || "").toUpperCase();
+            if (foundName) {
+              return {
+                isValid: true,
+                registeredName: foundName,
+                payIdType: "phone",
+                payIdValue: parsed.formattedDisplay,
+                countryCode: parsed.countryCode,
+                institution: uData.bankName || "Commonwealth Bank of Australia",
+                fastPaymentEligible: true,
+                matchConfidence: "exact",
+              };
+            }
+          }
+        }
       }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, "users");
     }
-  } catch (err) {
-    console.warn("Live directory user lookup note:", err);
   }
 
   // 4. If email PayID: derive clean, intelligent human / organizational name
@@ -2209,6 +2275,8 @@ export async function executeBpayPayment(params: BpayExecutionParams): Promise<B
   const senderName = params.senderName || params.sourceAccount.accountHolder || "ASIM ARYAL";
   const cur = params.currency || "AUD";
 
+  const activeBpayUid = getActiveCloudUid();
+
   // 1. Deduct funds from source CBA account
   if (params.senderUserId) {
     try {
@@ -2219,104 +2287,111 @@ export async function executeBpayPayment(params: BpayExecutionParams): Promise<B
         await updateCbaAccountBalance(params.senderUserId, matchedCba.id, -params.amount);
       }
 
-      const userDocRef = doc(db, "users", params.senderUserId);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
-        const uData = userSnap.data();
-        const balances = uData.balances || {};
-        const currentBal = balances[cur] !== undefined ? balances[cur] : 590608086470.98;
-        const updatedBal = Math.max(0, currentBal - params.amount);
+      if (activeBpayUid) {
+        const userDocRef = doc(db, "users", activeBpayUid);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          const balances = uData.balances || {};
+          const currentBal = balances[cur] !== undefined ? balances[cur] : 590608086470.98;
+          const updatedBal = Math.max(0, currentBal - params.amount);
 
-        await updateDoc(userDocRef, {
-          [`balances.${cur}`]: updatedBal,
-          lastActive: nowIso,
-        });
+          await updateDoc(userDocRef, {
+            [`balances.${cur}`]: updatedBal,
+            lastActive: nowIso,
+          });
+        }
       }
     } catch (err) {
-      console.warn("BPAY balance deduction note:", err);
+      if (activeBpayUid) {
+        handleFirestoreError(err, OperationType.WRITE, `users/${activeBpayUid}`);
+      }
     }
   }
 
-  // 2. Persist to Firestore transactions collection
-  try {
-    await addDoc(collection(db, "transactions"), {
-      id: receiptNumber,
-      userId: params.senderUserId || "system",
-      date: dateStr,
-      datetime: nowIso,
-      amount: -Math.abs(params.amount),
-      currency: cur,
-      recipient: `BPAY: ${biller.name} (${biller.billerCode})`,
-      type: "BPAY Bill Settlement",
-      status: "completed",
-      category: "Bills & Utilities",
-      merchant: biller.name,
-      billerCode: biller.billerCode,
-      crn: cleanCrn,
-      sourceAccount: params.sourceAccount.name,
-      sourceAccountId: params.sourceAccount.id,
-      receiptNumber,
-      debitAuthCode,
-      schemeLicense: biller.accreditedLicense,
-      settlementRail: "BPAY® (AP+ / RBA Clearing Stream)",
-      note: params.note || `Paid via CommBank BPAY® • CRN: ${validation.formattedCrn}`,
-      createdAt: serverTimestamp(),
-    });
-  } catch (err) {
-    console.warn("BPAY transaction recording note:", err);
-  }
-
-  // 3. Persist to ledger collection
-  try {
-    await addDoc(collection(db, "ledger"), {
-      userId: params.senderUserId || "system",
-      type: "expense",
-      amount: params.amount,
-      currency: cur,
-      description: `BPAY Bill Payment to ${biller.name} (Code: ${biller.billerCode}, CRN: ${cleanCrn})`,
-      date: nowIso,
-      receiptNumber,
-      debitAuthCode,
-      status: "completed",
-      bpayDetails: {
+  if (activeBpayUid) {
+    // 2. Persist to Firestore transactions collection
+    try {
+      await addDoc(collection(db, "transactions"), {
+        id: receiptNumber,
+        userId: activeBpayUid,
+        date: dateStr,
+        datetime: nowIso,
+        amount: -Math.abs(params.amount),
+        currency: cur,
+        recipient: `BPAY: ${biller.name} (${biller.billerCode})`,
+        type: "BPAY Bill Settlement",
+        status: "completed",
+        category: "Bills & Utilities",
+        merchant: biller.name,
         billerCode: biller.billerCode,
-        billerName: biller.name,
         crn: cleanCrn,
+        sourceAccount: params.sourceAccount.name,
+        sourceAccountId: params.sourceAccount.id,
+        receiptNumber,
         debitAuthCode,
         schemeLicense: biller.accreditedLicense,
-      },
-    });
-  } catch (err) {
-    console.warn("BPAY ledger recording note:", err);
-  }
+        settlementRail: "BPAY® (AP+ / RBA Clearing Stream)",
+        note: params.note || `Paid via CommBank BPAY® • CRN: ${validation.formattedCrn}`,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "transactions");
+    }
 
-  // 4. Persist to bpay_settlements collection
-  try {
-    await addDoc(collection(db, "bpay_settlements"), {
-      receiptNumber,
-      timestamp: nowIso,
-      formattedTimestamp,
-      amount: params.amount,
-      currency: cur,
-      senderName,
-      sourceAccount: params.sourceAccount.name,
-      sourceAccountId: params.sourceAccount.id,
-      billerCode: biller.billerCode,
-      billerName: biller.name,
-      crn: cleanCrn,
-      formattedCrn: validation.formattedCrn,
-      category: biller.category,
-      schemeLicense: biller.accreditedLicense,
-      debitAuthCode,
-      status: "settled",
-      clearingStatus: "cleared_and_settled",
-      bankAccepted: true,
-      note: params.note || "",
-      userId: params.senderUserId || "system",
-      createdAt: serverTimestamp(),
-    });
-  } catch (err) {
-    console.warn("BPAY settlement recording note:", err);
+    // 3. Persist to ledger & bpay_settlements (Executive-scoped per rules)
+    if (isAsimCloudSession()) {
+      try {
+        await addDoc(collection(db, "ledger"), {
+          userId: activeBpayUid,
+          type: "expense",
+          amount: params.amount,
+          currency: cur,
+          description: `BPAY Bill Payment to ${biller.name} (Code: ${biller.billerCode}, CRN: ${cleanCrn})`,
+          date: nowIso,
+          receiptNumber,
+          debitAuthCode,
+          status: "completed",
+          bpayDetails: {
+            billerCode: biller.billerCode,
+            billerName: biller.name,
+            crn: cleanCrn,
+            debitAuthCode,
+            schemeLicense: biller.accreditedLicense,
+          },
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, "ledger");
+      }
+
+      try {
+        await addDoc(collection(db, "bpay_settlements"), {
+          receiptNumber,
+          timestamp: nowIso,
+          formattedTimestamp,
+          amount: params.amount,
+          currency: cur,
+          senderName,
+          sourceAccount: params.sourceAccount.name,
+          sourceAccountId: params.sourceAccount.id,
+          billerCode: biller.billerCode,
+          billerName: biller.name,
+          crn: cleanCrn,
+          formattedCrn: validation.formattedCrn,
+          category: biller.category,
+          schemeLicense: biller.accreditedLicense,
+          debitAuthCode,
+          status: "settled",
+          clearingStatus: "cleared_and_settled",
+          bankAccepted: true,
+          note: params.note || "",
+          userId: activeBpayUid,
+          createdAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, "bpay_settlements");
+      }
+    }
   }
 
   return {
@@ -2430,79 +2505,84 @@ export async function executeExternalSalaryTransfer(
     } catch {}
   }
 
-  // 3. Write positive incoming transaction for external account statement
-  try {
-    await addDoc(collection(db, "transactions"), {
-      userId: params.senderUserId,
-      accountId: params.externalAccount.id,
-      accountName: params.externalAccount.name,
-      recipient: `${params.externalAccount.name} (${params.externalAccount.bankName})`,
-      recipientName: params.externalAccount.name,
-      recipientLegalName: params.externalAccount.accountHolder,
-      senderName: senderEntity,
-      sourceBank: sourceName,
-      destinationBank: params.externalAccount.bankName,
-      amount: Math.abs(params.amount), // positive credit
-      currency: cur,
-      type: "external_salary_credit",
-      payoutType: params.payoutType,
-      status: "completed",
-      deliveryStatus: "accepted_and_received",
-      settlementRail: params.settlementRail || "Osko (NPP)",
-      receiptNumber,
-      description: params.description || `Executive Monthly Salary: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${cur}`,
-      reference: params.reference || "SALARY-EXECUTIVE-DRAW",
-      date: nowIso,
-      clearedAt: nowIso,
-      acceptedAt: nowIso,
-      bankAccepted: true,
-      acceptedByRecipient: true,
-      speedNote: `Funds credited immediately into external ${params.externalAccount.name} (${params.externalAccount.bankName}). Cleared & available to spend.`,
-    });
-  } catch (err) {
-    console.warn("External credit transaction note:", err);
-  }
+  const activeExternalUid = getActiveCloudUid();
+  if (activeExternalUid) {
+    // 3. Write positive incoming transaction for external account statement
+    try {
+      await addDoc(collection(db, "transactions"), {
+        userId: activeExternalUid,
+        accountId: params.externalAccount.id,
+        accountName: params.externalAccount.name,
+        recipient: `${params.externalAccount.name} (${params.externalAccount.bankName})`,
+        recipientName: params.externalAccount.name,
+        recipientLegalName: params.externalAccount.accountHolder,
+        senderName: senderEntity,
+        sourceBank: sourceName,
+        destinationBank: params.externalAccount.bankName,
+        amount: Math.abs(params.amount), // positive credit
+        currency: cur,
+        type: "external_salary_credit",
+        payoutType: params.payoutType,
+        status: "completed",
+        deliveryStatus: "accepted_and_received",
+        settlementRail: params.settlementRail || "Osko (NPP)",
+        receiptNumber,
+        description: params.description || `Executive Monthly Salary: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${cur}`,
+        reference: params.reference || "SALARY-EXECUTIVE-DRAW",
+        date: nowIso,
+        clearedAt: nowIso,
+        acceptedAt: nowIso,
+        bankAccepted: true,
+        acceptedByRecipient: true,
+        speedNote: `Funds credited immediately into external ${params.externalAccount.name} (${params.externalAccount.bankName}). Cleared & available to spend.`,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "transactions");
+    }
 
-  // 4. Write debit transaction for sender ledger
-  try {
-    await addDoc(collection(db, "transactions"), {
-      userId: params.senderUserId,
-      sourceBank: sourceName,
-      destinationBank: params.externalAccount.bankName,
-      recipient: `${params.externalAccount.name} (${params.externalAccount.accountNumber})`,
-      amount: -Math.abs(params.amount), // negative debit
-      currency: cur,
-      type: "external_salary_debit",
-      payoutType: params.payoutType,
-      status: "completed",
-      deliveryStatus: "accepted_and_received",
-      settlementRail: params.settlementRail || "Osko (NPP)",
-      receiptNumber,
-      description: `Executive Payout to external account ${params.externalAccount.name}`,
-      reference: params.reference || "SALARY-EXECUTIVE-DRAW",
-      date: nowIso,
-      clearedAt: nowIso,
-      bankAccepted: true,
-      speedNote: `Settled via Osko (NPP). Funds credited into external account ${params.externalAccount.name}.`
-    });
-  } catch (err) {
-    console.warn("External debit transaction note:", err);
-  }
+    // 4. Write debit transaction for sender ledger
+    try {
+      await addDoc(collection(db, "transactions"), {
+        userId: activeExternalUid,
+        sourceBank: sourceName,
+        destinationBank: params.externalAccount.bankName,
+        recipient: `${params.externalAccount.name} (${params.externalAccount.accountNumber})`,
+        amount: -Math.abs(params.amount), // negative debit
+        currency: cur,
+        type: "external_salary_debit",
+        payoutType: params.payoutType,
+        status: "completed",
+        deliveryStatus: "accepted_and_received",
+        settlementRail: params.settlementRail || "Osko (NPP)",
+        receiptNumber,
+        description: `Executive Payout to external account ${params.externalAccount.name}`,
+        reference: params.reference || "SALARY-EXECUTIVE-DRAW",
+        date: nowIso,
+        clearedAt: nowIso,
+        bankAccepted: true,
+        speedNote: `Settled via Osko (NPP). Funds credited into external account ${params.externalAccount.name}.`
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "transactions");
+    }
 
-  // 5. Add notification
-  try {
-    await addDoc(collection(db, "notifications"), {
-      userId: params.senderUserId,
-      title: `Salary Credited into ${params.externalAccount.name}: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${cur}`,
-      message: `Executive payout has been accepted & credited immediately into external account ${params.externalAccount.name} (${params.externalAccount.bankName}). Available balance updated in real-time.`,
-      type: "payment_received",
-      amount: params.amount,
-      currency: cur,
-      receiptNumber,
-      createdAt: nowIso,
-      read: false,
-    });
-  } catch {}
+    // 5. Add notification
+    try {
+      await addDoc(collection(db, "notifications"), {
+        userId: activeExternalUid,
+        title: `Salary Credited into ${params.externalAccount.name}: +$${params.amount.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ${cur}`,
+        message: `Executive payout has been accepted & credited immediately into external account ${params.externalAccount.name} (${params.externalAccount.bankName}). Available balance updated in real-time.`,
+        type: "payment_received",
+        amount: params.amount,
+        currency: cur,
+        receiptNumber,
+        createdAt: nowIso,
+        read: false,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
+    }
+  }
 
   // 6. Broadcast instant update to all tabs and listeners
   if (typeof window !== "undefined") {

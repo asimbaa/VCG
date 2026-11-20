@@ -188,12 +188,218 @@
         "timestampMs": { "type": "number" }
       },
       "required": ["userId", "latitude", "longitude", "status", "timestamp"]
+    },
+    "SharedCardInvite": {
+      "title": "SharedCardInvite",
+      "description": "Shareable bank debit or credit card invitation with instant or physical card provisioning and automatic VIP benefit inheritance.",
+      "type": "object",
+      "properties": {
+        "inviteId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "cardId": { "type": "string", "maxLength": 64 },
+        "cardName": { "type": "string", "maxLength": 120 },
+        "cardCategory": { "type": "string", "enum": ["debit", "credit"] },
+        "network": { "type": "string", "maxLength": 32 },
+        "maskedLast4": { "type": "string", "maxLength": 8 },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderEmail": { "type": "string", "format": "email", "maxLength": 120 },
+        "recipientEmail": { "type": "string", "maxLength": 120 },
+        "recipientName": { "type": "string", "maxLength": 100 },
+        "grantedLimitAUD": { "type": "number" },
+        "cardMode": { "type": "string", "enum": ["virtual_instant", "virtual_and_physical"] },
+        "allowPhysicalCard": { "type": "boolean" },
+        "physicalDispatchStatus": { "type": "string", "enum": ["not_requested", "queued_production", "courier_dispatched"] },
+        "autoShareVipBenefits": { "type": "boolean" },
+        "vipBenefits": { "type": "array" },
+        "status": { "type": "string", "enum": ["pending", "claimed", "revoked"] },
+        "claimedByName": { "type": "string", "maxLength": 100 },
+        "claimedByEmail": { "type": "string", "maxLength": 120 },
+        "claimedAt": { "type": "string", "maxLength": 64 },
+        "shareUrl": { "type": "string", "maxLength": 260 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["inviteId", "ownerUid", "cardId", "cardName", "cardCategory", "status", "cardMode"]
+    },
+    "EmailDispatchLog": {
+      "title": "EmailDispatchLog",
+      "description": "Audit log record for emails dispatched via Gmail API, SMTP, or Ethereal sandbox relay.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "to": { "type": "string", "maxLength": 250 },
+        "subject": { "type": "string", "maxLength": 250 },
+        "channel": { "type": "string", "enum": ["gmail_api", "smtp", "ethereal_sandbox", "local_relay", "failed"] },
+        "status": { "type": "string", "enum": ["delivered", "sandbox_preview", "queued_retry", "failed"] },
+        "previewUrl": { "type": "string", "maxLength": 500 },
+        "messageId": { "type": "string", "maxLength": 250 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "ownerUid", "to", "subject", "channel", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Operational notification and dispatch record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 2000 },
+        "type": { "type": "string", "maxLength": 64 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message"]
+    },
+    "UserEmail": {
+      "title": "UserEmail",
+      "description": "Inbox and sent message item stored per user.",
+      "type": "object",
+      "properties": {
+        "to": { "type": "string", "maxLength": 250 },
+        "from": { "type": "string", "maxLength": 250 },
+        "subject": { "type": "string", "maxLength": 250 },
+        "body": { "type": "string", "maxLength": 20000 },
+        "read": { "type": "boolean" },
+        "folder": { "type": "string", "maxLength": 32 },
+        "date": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["subject", "body"]
+    },
+    "PaymentEvent": {
+      "title": "PaymentEvent",
+      "description": "Audited payment event record stored under user subcollection.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 12 },
+        "status": { "type": "string", "maxLength": 32 },
+        "recipient": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "status"]
+    },
+    "VirtualCard": {
+      "title": "VirtualCard",
+      "description": "Issued bank debit or credit card record synchronized across wallets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "cardCategory": { "type": "string", "enum": ["debit", "credit"] },
+        "network": { "type": "string", "maxLength": 32 },
+        "balance": { "type": "number" },
+        "limit": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "name", "network"]
+    },
+    "AiSession": {
+      "title": "AiSession",
+      "description": "Persisted executive AI research and workspace conversation session.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "messages": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title"]
+    },
+    "LuxuryConciergeBooking": {
+      "title": "LuxuryConciergeBooking",
+      "description": "Private aviation, superyacht, and luxury concierge booking record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "serviceType": { "type": "string", "maxLength": 120 },
+        "destination": { "type": "string", "maxLength": 200 },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "serviceType", "status"]
+    },
+    "VoucherRecord": {
+      "title": "VoucherRecord",
+      "description": "Issued sovereign payment voucher or gift certificate.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "creatorId": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 12 },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["code", "amount", "currency"]
+    },
+    "ScheduledOrder": {
+      "title": "ScheduledOrder",
+      "description": "Scheduled fulfillment order record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "merchant": { "type": "string", "maxLength": 160 },
+        "total": { "type": "number" },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["userId", "merchant", "status"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profiles and balances."
+    },
+    "/users/{userId}/emails/{emailId}": {
+      "schema": { "$ref": "#/entities/UserEmail" },
+      "description": "User email inbox and sent messages."
+    },
+    "/users/{userId}/payment_events/{eventId}": {
+      "schema": { "$ref": "#/entities/PaymentEvent" },
+      "description": "Per-user audited payment events."
+    },
+    "/payment_events/{eventId}": {
+      "schema": { "$ref": "#/entities/PaymentEvent" },
+      "description": "Top-level audited payment events."
+    },
+    "/shared_card_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/SharedCardInvite" },
+      "description": "Shareable bank debit and credit card invitations and claims."
+    },
+    "/email_dispatch_logs/{logId}": {
+      "schema": { "$ref": "#/entities/EmailDispatchLog" },
+      "description": "Unified email transmission audit log."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Platform notifications and dispatch alerts."
+    },
+    "/virtual_cards/{cardId}": {
+      "schema": { "$ref": "#/entities/VirtualCard" },
+      "description": "Synchronized bank debit and credit cards."
+    },
+    "/ai_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/AiSession" },
+      "description": "Sovereign AI session transcripts per user."
+    },
+    "/luxury_concierge_bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/LuxuryConciergeBooking" },
+      "description": "Luxury concierge and aviation reservations."
+    },
+    "/global_vouchers/{voucherId}": {
+      "schema": { "$ref": "#/entities/VoucherRecord" },
+      "description": "Global creator vouchers."
+    },
+    "/vouchers/{voucherId}": {
+      "schema": { "$ref": "#/entities/VoucherRecord" },
+      "description": "User payment vouchers."
+    },
+    "/scheduled_orders/{orderId}": {
+      "schema": { "$ref": "#/entities/ScheduledOrder" },
+      "description": "Scheduled UberEats and merchant orders."
     },
     "/emergency_contacts/{contactId}": {
       "schema": { "$ref": "#/entities/EmergencyContact" },

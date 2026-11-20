@@ -1108,7 +1108,17 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                   <div key={`${p.id}-${pIdx}`} className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden flex flex-col justify-between group hover:border-amber-500/40 hover:shadow-xl transition-all">
                     
                     <div className="h-44 relative bg-slate-950 overflow-hidden">
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80" />
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.onerror = null;
+                          target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="440" viewBox="0 0 800 440"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#064e3b"/></linearGradient></defs><rect width="800" height="440" fill="url(#g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#34d399" font-family="sans-serif" font-size="24" font-weight="bold">${p.brand}</text></svg>`)}`;
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-85"
+                      />
                       <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider text-amber-400 border border-amber-500/20">
                         {p.brand}
                       </div>

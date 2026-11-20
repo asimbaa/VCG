@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, CheckCircle2, X, Gift, FileText, Download } from 'lucide-react';
-import { db } from '../../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../../firebase';
 import { collection, addDoc } from 'firebase/firestore';
 
 export interface EmailData {
@@ -17,27 +17,72 @@ export interface EmailData {
   voucherCode?: string;
 }
 
+import { sendUnifiedEmail } from '../../utils/email';
+
 export const sendEmailViaService = async (user: any, data: EmailData, onPreviewReady?: (data: EmailData) => void) => {
-  if (user && user.uid) {
-    await addDoc(collection(db, "users", user.uid, "emails"), {
-      id: Date.now(),
-      sender: data.sender,
-      email: data.email,
-      receiverEmail: data.receiverEmail || user.email || "asim.nsw@gmail.com",
-      subject: data.subject,
-      preview: data.preview,
-      body: data.body,
-      date: "Just now",
-      read: false,
-      starred: true,
-      attachments: data.attachments || [],
-      isVoucher: data.isVoucher || false,
-      voucherAmount: data.voucherAmount || null,
-      voucherCode: data.voucherCode || null
-    });
-    if (onPreviewReady) {
-      onPreviewReady(data);
+  const receiverEmail = data.receiverEmail || user?.email || "asim.nsw@gmail.com";
+  const uid = auth.currentUser?.uid;
+
+  try {
+    if (db && uid) {
+      await addDoc(collection(db, "users", uid, "emails"), {
+        id: Date.now(),
+        sender: data.sender,
+        email: data.email,
+        receiverEmail,
+        subject: data.subject,
+        preview: data.preview,
+        body: data.body,
+        date: "Just now",
+        read: false,
+        starred: true,
+        attachments: data.attachments || [],
+        isVoucher: data.isVoucher || false,
+        voucherAmount: data.voucherAmount || null,
+        voucherCode: data.voucherCode || null
+      });
     }
+  } catch (err) {
+    if (uid) {
+      handleFirestoreError(err, OperationType.CREATE, `users/${uid}/emails`);
+    }
+  }
+
+  // Execute real email delivery via unified transport (Gmail API -> SMTP -> Ethereal Sandbox)
+  try {
+    const htmlBody = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:640px;margin:auto;background:#020617;color:#f8fafc;padding:28px;border-radius:16px;border:1px solid #1e293b;">
+        <div style="border-bottom:1px solid #1e293b;padding-bottom:16px;margin-bottom:20px;">
+          <div style="font-size:12px;color:#10b981;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;">${data.sender}</div>
+          <h2 style="margin:6px 0 0 0;font-size:18px;color:#ffffff;">${data.subject}</h2>
+        </div>
+        ${data.isVoucher && data.voucherAmount ? `
+          <div style="background:#064e3b;border:1px solid #10b981;border-radius:12px;padding:18px;margin-bottom:18px;text-align:center;">
+            <div style="font-size:26px;font-weight:800;color:#ffffff;">$${Number(data.voucherAmount).toFixed(2)} AUD</div>
+            <div style="font-size:12px;color:#a7f3d0;margin-top:4px;">Digital Cash Voucher · Code: <strong>${data.voucherCode || 'VALOURIAN-VIP'}</strong></div>
+          </div>
+        ` : ''}
+        <div style="white-space:pre-wrap;font-size:14px;line-height:1.65;color:#cbd5e1;">${data.body}</div>
+        <div style="margin-top:24px;padding-top:14px;border-top:1px solid #1e293b;font-size:11px;color:#64748b;">
+          Dispatched via Valourian Capital Email Service · From: ${data.email}
+        </div>
+      </div>`;
+
+    await sendUnifiedEmail({
+      to: receiverEmail,
+      subject: data.subject,
+      htmlBody,
+      textBody: data.body,
+      senderName: data.sender,
+      attachments: data.attachments,
+      silentToast: true,
+    });
+  } catch (err) {
+    console.warn("Real email dispatch fallback notice:", err);
+  }
+
+  if (onPreviewReady) {
+    onPreviewReady(data);
   }
 };
 

@@ -157,7 +157,7 @@ import { Toaster, toast } from "sonner";
 import { generatePdfReceipt } from "../../utils/pdfGenerator";
 import { Logo3D } from "../ui/Logo3D";
 import { generateDocumentContent } from "../../services/geminiService";
-import { db, handleFirestoreError, OperationType, addDoc, setDoc, updateDoc, deleteDoc } from "../../firebase";
+import { auth, db, handleFirestoreError, OperationType, addDoc, setDoc, updateDoc, deleteDoc } from "../../firebase";
 import {
   doc,
   getDoc,
@@ -900,29 +900,36 @@ export function ValourianDashboard({ user }: { user: any }) {
   const [selectedAmexCardIdForModal, setSelectedAmexCardIdForModal] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    if (!user?.uid) return;
+    const activeUid = auth.currentUser?.uid;
+    if (!activeUid) return;
     // Automatically reconcile and ensure each and every previously made payment is sent and accepted/received
-    reconcileAndSettleAllPayments(user.uid).catch((err) => {
-      console.warn("Payment reconciliation check note:", err);
+    reconcileAndSettleAllPayments(activeUid).catch((err) => {
+      handleFirestoreError(err, OperationType.LIST, "transactions");
     });
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const q = query(collection(db, "active_orders"), where("userId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter((o: any) => o.progress !== undefined && o.progress < 100);
-      setActiveUberOrders(orders);
-    });
+    if (!user?.uid || !auth.currentUser) return;
+    const q = query(collection(db, "active_orders"), where("userId", "==", auth.currentUser.uid));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter((o: any) => o.progress !== undefined && o.progress < 100);
+        setActiveUberOrders(orders);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, "active_orders");
+      }
+    );
     return () => unsubscribe();
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid || !auth.currentUser) return;
     const q = query(
       collection(db, "draft_transactions"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
       orderBy("updatedAt", "desc"),
       limit(1),
     );
@@ -4804,9 +4811,9 @@ This electronic transmission is the authenticated digital twin of the recorded a
   }, [activeTab]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid || !auth.currentUser) return;
 
-    const userDocRef = doc(db, "users", user.uid);
+    const userDocRef = doc(db, "users", auth.currentUser.uid);
     const unsubscribeUser = onSnapshot(
       userDocRef,
       (docSnap) => {
@@ -4862,7 +4869,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const fundingQuery = query(
       collection(db, "funding_sources"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
     );
     const unsubscribeFunding = onSnapshot(
       fundingQuery,
@@ -4881,7 +4888,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const txnsQuery = query(
       collection(db, "transactions"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
     );
     const unsubscribeTxns = onSnapshot(
       txnsQuery,
@@ -4932,7 +4939,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const recipientsQuery = query(
       collection(db, "saved_recipients"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
     );
     const unsubscribeRecipients = onSnapshot(
       recipientsQuery,
@@ -4949,7 +4956,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const recurringQuery = query(
       collection(db, "recurring_transfers"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
     );
     const unsubscribeRecurring = onSnapshot(
       recurringQuery,
@@ -4966,7 +4973,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const assetsQuery = query(
       collection(db, "brand_assets"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
     );
     const unsubscribeAssets = onSnapshot(
       assetsQuery,
@@ -4983,7 +4990,7 @@ This electronic transmission is the authenticated digital twin of the recorded a
 
     const cardsQuery = query(
       collection(db, "cards"),
-      where("userId", "==", user.uid),
+      where("userId", "==", auth.currentUser.uid),
       orderBy("createdAt", "desc")
     );
     const unsubscribeCards = onSnapshot(

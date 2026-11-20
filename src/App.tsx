@@ -28,6 +28,7 @@ import { FloatingSpeedDial } from "./components/FloatingSpeedDial";
 import { MessageCenter } from "./components/messagecenter/MessageCenter";
 import LogisticsDashboard from "./components/logistics/LogisticsDashboard";
 import { PWAInstallBanner } from "./components/pwa/PWAInstallBanner";
+import { MagicClaimPortal } from "./components/pay/MagicClaimPortal";
 
 // Global Google Maps Auth Failure Handler
 if (typeof window !== 'undefined') {
@@ -138,7 +139,52 @@ export default function App() {
   const [acquisitionsInitialTab, setAcquisitionsInitialTab] = useState<"properties" | "flights" | "domains" | "stocks">("properties");
   const [user, setUser] = useState<User | null>(null);
   const [mobileAppsDrawerOpen, setMobileAppsDrawerOpen] = useState(false);
-  
+  const [claimInviteId, setClaimInviteId] = useState<string | null>(() => {
+    try {
+      const search = new URLSearchParams(window.location.search).get("share");
+      if (search) return search;
+      const hash = window.location.hash;
+      if (hash.startsWith("#share=")) return decodeURIComponent(hash.slice(7));
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    const syncShareFromUrl = () => {
+      try {
+        const search = new URLSearchParams(window.location.search).get("share");
+        if (search) {
+          setClaimInviteId(search);
+          return;
+        }
+        const hash = window.location.hash;
+        if (hash.startsWith("#share=")) {
+          setClaimInviteId(decodeURIComponent(hash.slice(7)));
+        }
+      } catch {}
+    };
+    const onOpenClaim = (e: any) => {
+      const id = e?.detail?.inviteId;
+      if (id) setClaimInviteId(id);
+    };
+    window.addEventListener("popstate", syncShareFromUrl);
+    window.addEventListener("valourian_open_claim_portal", onOpenClaim);
+    return () => {
+      window.removeEventListener("popstate", syncShareFromUrl);
+      window.removeEventListener("valourian_open_claim_portal", onOpenClaim);
+    };
+  }, []);
+
+  const handleExitClaimPortal = () => {
+    setClaimInviteId(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("share");
+      if (url.hash.startsWith("#share=")) url.hash = `#${activeTab}`;
+      window.history.replaceState(null, "", url.toString());
+    } catch {}
+  };
+
   const effectiveUser = user || CEO_USER;
   const [loading, setLoading] = useState(true);
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -240,6 +286,14 @@ export default function App() {
     );
   }
 
+  if (claimInviteId) {
+    return (
+      <ErrorBoundary>
+        <MagicClaimPortal inviteId={claimInviteId} onExitToApp={handleExitClaimPortal} />
+      </ErrorBoundary>
+    );
+  }
+
   /* Bypass Auth for CEO Power Access */
 
   return (
@@ -291,7 +345,7 @@ export default function App() {
                   <span className="flex items-center gap-1">
                     {torrensSyncState === 'synced' ? (
                       <>
-                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(16,185,129,1)]"></div>
+                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
                          SYNCED
                       </>
                     ) : (
@@ -330,13 +384,13 @@ export default function App() {
           />
           
           {/* Mobile Header */}
-          <header className="md:hidden bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800 h-16 flex items-center justify-between px-4 flex-shrink-0">
+          <header className="md:hidden bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800 min-h-16 pt-safe flex items-center justify-between px-4 flex-shrink-0">
              <div className="flex items-center gap-3">
                <ValourianLogo className="w-8 h-8" />
                <h1 className="text-lg font-black text-white tracking-tight">Valourian OS</h1>
              </div>
              <div className="flex items-center gap-3">
-                <img src={effectiveUser.photoURL || `https://ui-avatars.com/api/?name=${effectiveUser.email}`} alt="Profile" className="w-8 h-8 rounded-full ring-2 ring-emerald-500/30" referrerPolicy="no-referrer" />
+                <img src={effectiveUser.photoURL || `https://ui-avatars.com/api/?name=${effectiveUser.email}`} alt="Profile" className="w-8 h-8 rounded-full ring-2 ring-emerald-500/30 object-cover" referrerPolicy="no-referrer" />
              </div>
           </header>
 
@@ -366,7 +420,7 @@ export default function App() {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="bg-indigo-600/90 backdrop-blur-md flex-shrink-0"
+                className="hidden sm:block bg-indigo-600/90 backdrop-blur-md flex-shrink-0"
               >
                 <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -382,7 +436,7 @@ export default function App() {
           </AnimatePresence>
 
           {/* Content Area with Keep-Alive Preservation */}
-          <main className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-0 relative">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth pb-24 md:pb-0 relative">
             <React.Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-emerald-500" /></div>}>
               {visitedTabs.has("bank") && (
                 <div className={`h-full w-full ${activeTab === "bank" ? "block" : "hidden"}`}>

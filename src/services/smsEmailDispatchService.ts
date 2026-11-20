@@ -5,8 +5,9 @@
  */
 
 import { collection, addDoc } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import toast from "react-hot-toast";
+import { sendUnifiedEmail } from "../utils/email";
 
 export const USER_PHONE_INTERNATIONAL = "+61 401 044 335";
 export const USER_PHONE_DOMESTIC = "0401044335";
@@ -18,11 +19,37 @@ export interface DispatchResult {
   smsMessage: string;
   emailSubject: string;
   emailBody: string;
+  previewUrl?: string | null;
+  channel?: string;
   recipients: {
     phone: string;
     email: string;
   };
   timestamp: string;
+}
+
+function buildExecutiveHtmlCard(title: string, badge: string, bodyText: string, ctaUrl?: string, ctaLabel?: string): string {
+  const safeBody = bodyText
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:640px;margin:auto;background:#020617;color:#f8fafc;padding:28px;border-radius:18px;border:1px solid #1e293b;">
+      <div style="border-bottom:1px solid #1e293b;padding-bottom:16px;margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#10b981;">${badge}</div>
+        <h1 style="margin:6px 0 0 0;font-size:20px;font-weight:800;color:#ffffff;">${title}</h1>
+      </div>
+      ${ctaUrl ? `
+        <div style="margin:18px 0 22px 0;text-align:center;">
+          <a href="${ctaUrl}" style="display:inline-block;background:#10b981;color:#022c22;font-weight:800;font-size:14px;text-decoration:none;padding:13px 26px;border-radius:12px;">
+            ${ctaLabel || 'Open Instant Access Pass'}
+          </a>
+        </div>
+      ` : ''}
+      <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:18px;white-space:pre-wrap;font-family:'SFMono-Regular',Consolas,monospace;font-size:12.5px;line-height:1.65;color:#e2e8f0;">${safeBody}</div>
+      <p style="margin:20px 0 0 0;font-size:11px;color:#64748b;">Valourian Sovereign Treasury · Direct Authenticated Transmission</p>
+    </div>
+  `;
 }
 
 class SmsEmailDispatchService {
@@ -106,9 +133,10 @@ class SmsEmailDispatchService {
 
     // 3. Persist into Firestore notifications collection with resilient error handling
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "asset_handover_dispatch",
           category: "logistics",
           title: `Handover Pass Sent: ${asset.title}`,
@@ -123,27 +151,31 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore notification persist notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    // 4. Trigger UI Toasts & Simulated Device Notification
-    toast.success(`📱 SMS Sent to ${USER_PHONE_INTERNATIONAL}\nRelease PIN: ${asset.releasePin} | Lead: ${asset.handoverLead.name}`, {
-      duration: 6000,
-      icon: "📱"
+    // 3b. Real Email Delivery via Unified Engine
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(asset.title, "Official Release Pass", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Executive Logistics",
+      silentToast: true,
     });
 
-    setTimeout(() => {
-      toast.success(`✉️ Email Dispatched to ${USER_EMAIL}\nOfficial Handover Pass attached for ${asset.title}`, {
-        duration: 6000,
-        icon: "✉️"
-      });
-    }, 450);
+    // 4. Trigger UI Toasts
+    toast.success(`SMS & Email Dispatched to ${USER_EMAIL} | PIN: ${asset.releasePin}`, {
+      duration: 5000,
+    });
 
     return {
       success: true,
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
@@ -219,9 +251,10 @@ class SmsEmailDispatchService {
 
     // Persist into Firestore notifications
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "card_credentials_dispatch",
           category: "cards",
           title: `Card Credentials Sent: ${cardTitle}`,
@@ -234,26 +267,29 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore card notification persist notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    toast.success(`📱 SMS Card Credentials Sent to ${USER_PHONE_INTERNATIONAL}\nPAN: •••• ${rawNum.slice(-4)} | PIN: ${pin} | Bal: ${balanceStr}`, {
-      duration: 6000,
-      icon: "💳"
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(cardTitle, "Active Card Credentials", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Card Operations",
+      silentToast: true,
     });
 
-    setTimeout(() => {
-      toast.success(`✉️ Email Card Advice Sent to ${USER_EMAIL}\nFull credentials & BSB/Account package ready for use.`, {
-        duration: 6000,
-        icon: "✉️"
-      });
-    }, 450);
+    toast.success(`Card credentials emailed to ${USER_EMAIL} (${cardTitle} · •••• ${rawNum.slice(-4)})`, {
+      duration: 5500,
+    });
 
     return {
       success: true,
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
@@ -335,9 +371,10 @@ class SmsEmailDispatchService {
     ].filter(Boolean).join("\n");
 
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "luxury_concierge_dispatch",
           category: "concierge",
           title: `Concierge: ${booking.title}`,
@@ -350,26 +387,29 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore concierge notification notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    toast.success(`📱 SMS Sent to ${USER_PHONE_INTERNATIONAL}\n${booking.title} confirmed! Ref: ${booking.confirmationCode}`, {
-      duration: 6000,
-      icon: "👑"
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(booking.title, "Concierge Confirmation", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Concierge Desk",
+      silentToast: true,
     });
 
-    setTimeout(() => {
-      toast.success(`✉️ VIP Booking Pass Emailed to ${USER_EMAIL}\nAll itinerary credentials & direct billing receipts attached.`, {
-        duration: 6000,
-        icon: "✉️"
-      });
-    }, 450);
+    toast.success(`VIP pass emailed to ${USER_EMAIL} · Ref: ${booking.confirmationCode}`, {
+      duration: 5500,
+    });
 
     return {
       success: true,
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
@@ -416,9 +456,10 @@ class SmsEmailDispatchService {
     ].join("\n");
 
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "bulk_logistics_dispatch",
           category: "logistics",
           title: `All ${assetsCount} Luxury Assets Dispatched`,
@@ -431,26 +472,29 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore bulk persist notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    toast.success(`📱 SMS Batch Sent to ${USER_PHONE_INTERNATIONAL}\nAll ${assetsCount} luxury assets & key passes dispatched!`, {
-      duration: 6000,
-      icon: "📱"
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(`Consolidated Dispatch (${assetsCount} Assets)`, "Logistics Clearance", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Logistics Directorate",
+      silentToast: true,
     });
 
-    setTimeout(() => {
-      toast.success(`✉️ Consolidated Release Pass Emailed to ${USER_EMAIL}\nFull handover passes & contact directory delivered.`, {
-        duration: 6000,
-        icon: "✉️"
-      });
-    }, 450);
+    toast.success(`Consolidated dispatch emailed to ${USER_EMAIL} (${assetsCount} items)`, {
+      duration: 5500,
+    });
 
     return {
       success: true,
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
@@ -520,9 +564,10 @@ class SmsEmailDispatchService {
     ].join("\n");
 
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "consolidated_cards_dispatch",
           category: "cards",
           title: `All ${count} Cards Dispatched`,
@@ -535,26 +580,29 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore consolidated cards notification notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    toast.success(`📱 SMS Sent to ${USER_PHONE_INTERNATIONAL}\nAll ${count} cards active with ${balanceStr} liquidity!`, {
-      duration: 6000,
-      icon: "💳"
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(`Portfolio Summary (${count} Cards Active)`, "Debit & Credit Portfolio", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Sovereign Banking",
+      silentToast: true,
     });
 
-    setTimeout(() => {
-      toast.success(`✉️ Consolidated Card Portfolio Emailed to ${USER_EMAIL}\nAll credentials & global pre-arrival clearances delivered.`, {
-        duration: 6000,
-        icon: "✉️"
-      });
-    }, 450);
+    toast.success(`All ${count} Debit & Credit card credentials emailed to ${USER_EMAIL}`, {
+      duration: 5500,
+    });
 
     return {
       success: true,
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
@@ -619,9 +667,10 @@ class SmsEmailDispatchService {
     ].join("\n");
 
     try {
-      if (db) {
+      const activeUid = auth.currentUser?.uid;
+      if (db && activeUid) {
         await addDoc(collection(db, "notifications"), {
-          userId: auth.currentUser?.uid || "asim_aryal",
+          userId: activeUid,
           type: "merchant_receipt_dispatch",
           category: "transactions",
           title: `Receipt: ${receipt.merchantName}`,
@@ -634,12 +683,20 @@ class SmsEmailDispatchService {
         });
       }
     } catch (err) {
-      console.warn("Firestore receipt notice:", err);
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
 
-    toast.success(`✉️ Merchant Receipt Dispatched to ${USER_EMAIL}\nApproved at ${receipt.merchantName} (${receipt.region})!`, {
-      duration: 6000,
-      icon: "🧾"
+    const emailRes = await sendUnifiedEmail({
+      to: USER_EMAIL,
+      subject: emailSubject,
+      htmlBody: buildExecutiveHtmlCard(`Receipt · ${receipt.merchantName}`, "Instant Merchant Clearance", emailBody),
+      textBody: emailBody,
+      senderName: "Valourian Merchant Clearance",
+      silentToast: true,
+    });
+
+    toast.success(`Receipt emailed to ${USER_EMAIL} (${receipt.merchantName})`, {
+      duration: 5000,
     });
 
     return {
@@ -647,11 +704,117 @@ class SmsEmailDispatchService {
       smsMessage,
       emailSubject,
       emailBody,
+      previewUrl: emailRes.previewUrl || null,
+      channel: emailRes.channel,
       recipients: {
         phone: USER_PHONE_INTERNATIONAL,
         email: USER_EMAIL
       },
       timestamp
+    };
+  }
+
+  /**
+   * Dispatches a visual Shareable Card + VIP Benefits Access Pass email to any recipient
+   */
+  public async dispatchSharedCardInviteEmail(params: {
+    recipientEmail: string;
+    recipientName?: string;
+    senderName?: string;
+    cardName: string;
+    cardCategory: "debit" | "credit";
+    network: string;
+    maskedLast4: string;
+    grantedLimitAUD: number | "unlimited";
+    allowPhysicalCard: boolean;
+    vipBenefits: string[];
+    shareUrl: string;
+  }): Promise<DispatchResult> {
+    const timestamp = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney" });
+    const limitLabel =
+      params.grantedLimitAUD === "unlimited"
+        ? "Unlimited VIP Facility"
+        : `$${Number(params.grantedLimitAUD).toLocaleString("en-AU", { minimumFractionDigits: 2 })} AUD`;
+    const categoryLabel = params.cardCategory === "debit" ? "Bank Debit Card" : "Bank Credit Card";
+    const cardModeLabel = params.allowPhysicalCard ? "Instant Virtual + Physical Card Dispatch" : "Instant Virtual Card Access";
+    const emailSubject = `[${categoryLabel} Invite] ${params.senderName || "Asim Aryal"} shared ${params.cardName} (${limitLabel}) with you`;
+
+    const textBody = [
+      `Hello ${params.recipientName || "Valued Guest"},`,
+      ``,
+      `${params.senderName || "Asim Aryal (Valourian Capital)"} has shared instant ${categoryLabel} access with you:`,
+      `• Card: ${params.cardName} (${params.network} ·••• ${params.maskedLast4})`,
+      `• Mode: ${cardModeLabel}`,
+      `• Pre-Approved Allowance: ${limitLabel}`,
+      `• Included VIP Benefits: ${params.vipBenefits.join(", ")}`,
+      ``,
+      `Activate in 1 tap (zero lengthy forms):`,
+      params.shareUrl,
+      ``,
+      `Once activated, copy card digits cleanly for any online merchant (Stripe, Amazon, Apple) or request optional express physical metal card delivery.`,
+    ].join("\n");
+
+    const perksHtml = params.vipBenefits
+      .map(
+        (p) =>
+          `<li style="margin:4px 0;color:#cbd5e1;font-size:13px;">&#10003; ${p}</li>`
+      )
+      .join("");
+
+    const htmlBody = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:auto;background:#020617;color:#f8fafc;padding:28px;border-radius:18px;border:1px solid #1e293b;">
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#10b981;">Valourian Express Card Share · ${categoryLabel}</div>
+          <h1 style="margin:6px 0 0 0;font-size:21px;font-weight:800;color:#ffffff;">Your ${categoryLabel} &amp; VIP Pass Is Ready</h1>
+          <p style="margin:8px 0 0 0;font-size:14px;color:#94a3b8;">Shared by <strong style="color:#ffffff;">${params.senderName || "Asim Aryal"}</strong> · Minimal-doc 1-tap activation</p>
+        </div>
+
+        <div style="background:linear-gradient(135deg,#0f172a 0%,#064e3b 100%);border:1px solid #10b981;border-radius:16px;padding:22px;margin-bottom:22px;">
+          <div style="font-size:12px;color:#a7f3d0;font-weight:700;">${params.network.toUpperCase()} · ${cardModeLabel}</div>
+          <div style="font-size:18px;font-weight:800;color:#ffffff;margin-top:4px;">${params.cardName}</div>
+          <div style="font-family:monospace;font-size:16px;letter-spacing:2px;color:#e2e8f0;margin:14px 0;">••••  ••••  ••••  ${params.maskedLast4}</div>
+          <div style="border-top:1px solid rgba(255,255,255,0.14);padding-top:12px;font-size:14px;color:#ecfdf5;">
+            Pre-Approved Allowance: <strong>${limitLabel}</strong>
+          </div>
+        </div>
+
+        ${params.vipBenefits.length > 0 ? `
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px 18px;margin-bottom:22px;">
+            <div style="font-size:12px;font-weight:700;color:#10b981;margin-bottom:8px;">AUTO-SHARED VIP BENEFITS INCLUDED</div>
+            <ul style="margin:0;padding-left:16px;list-style:none;">${perksHtml}</ul>
+          </div>
+        ` : ''}
+
+        <div style="text-align:center;margin:24px 0;">
+          <a href="${params.shareUrl}" style="display:inline-block;background:#10b981;color:#022c22;font-weight:800;font-size:15px;text-decoration:none;padding:14px 32px;border-radius:12px;">
+            Activate Virtual Card Now
+          </a>
+          <p style="margin:12px 0 0 0;font-size:12px;color:#94a3b8;">Or open link: <a href="${params.shareUrl}" style="color:#34d399;">${params.shareUrl}</a></p>
+        </div>
+      </div>
+    `;
+
+    const res = await sendUnifiedEmail({
+      to: params.recipientEmail,
+      subject: emailSubject,
+      htmlBody,
+      textBody,
+      senderName: params.senderName || "Valourian Card Operations",
+      silentToast: true,
+    });
+
+    return {
+      success: res.success,
+      smsMessage: `[VALOURIAN] Card Pass shared with ${params.recipientEmail}: ${params.shareUrl}`,
+      emailSubject,
+      emailBody: textBody,
+      previewUrl: res.previewUrl || null,
+      channel: res.channel,
+      recipients: {
+        phone: USER_PHONE_INTERNATIONAL,
+        email: params.recipientEmail,
+      },
+      timestamp,
     };
   }
 }

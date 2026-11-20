@@ -8,6 +8,17 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, (firebaseConfig as any).firestoreDatabaseId);
 
+export async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+  }
+}
+testConnection();
+
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   // Request Workspace scopes
@@ -126,9 +137,21 @@ export interface FirestoreErrorInfo {
   }
 }
 
+const recentFirestoreDiagnostics: FirestoreErrorInfo[] = [];
+const permissionToastCooldowns = new Map<string, number>();
+
+export function getRecentFirestoreDiagnostics(): FirestoreErrorInfo[] {
+  return [...recentFirestoreDiagnostics];
+}
+
+export function isSignedInCloudUser(): boolean {
+  return Boolean(auth.currentUser);
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -145,9 +168,51 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  
-  console.warn('[Valourian Capital OS] Firestore Error (Fallback to local state):', JSON.stringify(errInfo, null, 2));
-  
+
+  recentFirestoreDiagnostics.unshift(errInfo);
+  if (recentFirestoreDiagnostics.length > 25) {
+    recentFirestoreDiagnostics.length = 25;
+  }
+
+  // Log via debug channel so handled fallbacks never hijack the UI with App Warning overlays
+  console.debug('[Valourian Capital OS] Firestore handled fallback:', errInfo);
+
+  // Only surface helpful recovery guidance when a real signed-in session hits a permission/rule denial
+  const lowerMsg = errorMessage.toLowerCase();
+  const isPermissionOrAuthIssue =
+    lowerMsg.includes('permission-denied') ||
+    lowerMsg.includes('missing or insufficient permissions') ||
+    lowerMsg.includes('unauthenticated');
+
+  if (auth.currentUser && isPermissionOrAuthIssue && typeof window !== 'undefined') {
+    const cooldownKey = `${operationType}:${path || 'root'}`;
+    const now = Date.now();
+    const lastShown = permissionToastCooldowns.get(cooldownKey) || 0;
+    if (now - lastShown > 45000) {
+      permissionToastCooldowns.set(cooldownKey, now);
+      const needsVerification = auth.currentUser.emailVerified === false;
+      const collectionLabel = (path || 'cloud ledger').split('/')[0].replace(/_/g, ' ');
+
+      toast.info(
+        needsVerification
+          ? `Cloud verification needed for ${collectionLabel}`
+          : `Cloud sync paused for ${collectionLabel} — saved safely on this device`,
+        {
+          description: needsVerification
+            ? 'Verify your email or sign in with Google to sync records across devices.'
+            : `Signed in as ${auth.currentUser.email || 'user'}. Reconnect Google auth if your session refreshed or switch to an authorized account.`,
+          duration: 7000,
+          action: {
+            label: 'Reconnect Google',
+            onClick: () => {
+              void signInWithGoogle();
+            },
+          },
+        }
+      );
+    }
+  }
+
   // Return the error instead of throwing to prevent unhandled rejection floods in async listeners
   return new Error(JSON.stringify(errInfo));
 }

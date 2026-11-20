@@ -1042,123 +1042,118 @@ function getAttachmentPDF(filename: string): Promise<Buffer> {
 
 app.post("/api/send-email", async (req, res) => {
   try {
-    const { to, subject, body, sender, attachments, customSmtp } = req.body;
-    
+    const { to, subject, body, htmlBody, sender, attachments, customSmtp } = req.body;
+    const recipientList = Array.isArray(to) ? to.join(", ") : String(to || "").trim();
+
+    if (!recipientList || !subject) {
+      return res.status(400).json({ success: false, error: "Recipient ('to') and 'subject' are required." });
+    }
+
     const smtpHost = customSmtp?.host || process.env.SMTP_HOST || "smtp.ethereal.email";
-    const smtpPort = parseInt(customSmtp?.port || process.env.SMTP_PORT || "587");
+    const smtpPort = parseInt(customSmtp?.port || process.env.SMTP_PORT || "587", 10);
     const smtpUser = customSmtp?.user || process.env.SMTP_USER;
     const smtpPass = customSmtp?.pass || process.env.SMTP_PASS;
-    const fromEmail = customSmtp?.from || process.env.SMTP_FROM || smtpUser || "admin@valourian.com";
+    const fromEmail = customSmtp?.from || process.env.SMTP_FROM || smtpUser || "treasury@valourian.capital";
 
-    console.log(`Email priority route: To: ${to}, Subject: ${subject}, Host: ${smtpHost}, User: ${smtpUser ? "Present" : "None"}`);
-
-    // Generate high-fidelity PDFs for attachments asynchronously
-    const processedAttachments = attachments
+    // Generate PDFs or buffers for attachments if provided
+    const processedAttachments = Array.isArray(attachments) && attachments.length > 0
       ? await Promise.all(
           attachments.map(async (att: any) => {
             let fileContent: Buffer;
             if (att.content) {
               if (typeof att.content === "string") {
-                // If it looks like a base64 encoded data URI or raw base64, clean and convert
-                const cleanBase64 = att.content.includes("base64,")
-                  ? att.content.split("base64,")[1]
-                  : att.content;
-                fileContent = Buffer.from(cleanBase64, "base64");
+                const isBase64Data = att.content.includes("base64,");
+                if (isBase64Data) {
+                  fileContent = Buffer.from(att.content.split("base64,")[1], "base64");
+                } else {
+                  fileContent = Buffer.from(att.content, "utf-8");
+                }
               } else {
                 fileContent = Buffer.from(att.content);
               }
             } else {
               try {
-                fileContent = await getAttachmentPDF(att.name);
-              } catch (pdfErr) {
-                console.error("PDF generator failure for:", att.name, pdfErr);
-                fileContent = Buffer.from("Sovereign encrypted transaction file verification pass.", "utf-8");
+                fileContent = await getAttachmentPDF(att.name || "Valourian_Pass.pdf");
+              } catch {
+                fileContent = Buffer.from("Valourian Capital verified sovereign attachment.", "utf-8");
               }
             }
             return {
-              filename: att.name,
+              filename: att.name || "attachment.txt",
               content: fileContent,
             };
           })
         )
       : [];
 
+    const plainText = body || String(htmlBody || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const compiledHtml =
+      htmlBody ||
+      `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 28px; line-height: 1.6; color: #0f172a; background-color: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; max-width: 640px; margin: auto;">
+        <div style="background-color: #020617; padding: 18px 22px; border-radius: 12px; margin-bottom: 22px;">
+          <h2 style="color: #10b981; margin: 0; font-size: 18px; font-weight: 800; letter-spacing: 0.4px;">VALOURIAN SOVEREIGN BANKING</h2>
+          <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 12px;">Instant Global Card &amp; Treasury Dispatch</p>
+        </div>
+        <h3 style="color: #0f172a; margin-top: 0; font-size: 16px; font-weight: 700;">${subject}</h3>
+        <div style="white-space: pre-wrap; font-size: 14px; color: #334155;">${plainText}</div>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+        <p style="font-size: 11px; color: #64748b; margin: 0;">Dispatched via Valourian Sovereign Treasury Operations.</p>
+      </div>`;
+
     if (smtpUser && smtpPass) {
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
         secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
+        auth: { user: smtpUser, pass: smtpPass },
+        tls: { rejectUnauthorized: false },
       });
 
-      const mailOptions = {
-        from: `"${sender || "Valourian Mail System"}" <${fromEmail}>`,
-        to: to,
-        subject: subject,
-        text: body,
-        html: `<div style="font-family: sans-serif; padding: 25px; line-height: 1.6; color: #1e293b; background-color: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; max-width: 600px; margin: auto;">
-          <div style="background-color: #0f172a; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
-             <h2 style="color: #38bdf8; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 1px;">VALOURIAN CAPITAL DEEP SECURE INTEGRITY</h2>
-          </div>
-          <h3 style="color: #0f172a; margin-top: 0; font-size: 16px; font-weight: 700;">${subject}</h3>
-          <p style="white-space: pre-wrap; font-size: 14px; color: #334155;">${body}</p>
-          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;">
-          <p style="font-size: 10px; color: #94a3b8; font-family: monospace;">This is an encrypted priority transmission. Recipient validated and cleared instantly.</p>
-        </div>`,
-        attachments: processedAttachments
-      };
-
-      await transporter.sendMail(mailOptions);
-      return res.json({ success: true, message: `Email delivered successfully straight to ${to}!` });
-    } else {
-      // Ethereal auto-delivery for testing
-      const testAccount = await nodemailer.createTestAccount();
-      const transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass
-        }
+      const info = await transporter.sendMail({
+        from: `"${sender || "Valourian Capital"}" <${fromEmail}>`,
+        to: recipientList,
+        subject,
+        text: plainText,
+        html: compiledHtml,
+        attachments: processedAttachments,
       });
 
-      const mailOptions = {
-        from: `"${sender || "Valourian Gateway Testing"}" <${testAccount.user}>`,
-        to: to,
-        subject: subject,
-        text: body,
-        html: `<div style="font-family: sans-serif; padding: 25px; line-height: 1.6; color: #1e293b; background-color: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; max-width: 600px; margin: auto;">
-          <div style="background-color: #0284c7; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
-              <h2 style="color: white; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 1px;">VALOURIAN PRIORITY DELIVERY TESTER</h2>
-          </div>
-          <h3 style="color: #0f172a; margin-top: 0; font-size: 16px; font-weight: 700;">${subject}</h3>
-          <p style="white-space: pre-wrap; font-size: 14px; color: #334155;">${body}</p>
-          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;">
-          <p style="font-size: 10px; color: #64748b;">(Environment is utilizing sandbox SMTP. Live preview available below.)</p>
-        </div>`,
-        attachments: processedAttachments
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      const previewUrl = nodemailer.getTestMessageUrl(info);
-
-      return res.json({ 
-        success: true, 
-        simulated: true, 
-        previewUrl: previewUrl, 
-        message: `Sandboxed SMTP dispatch complete! Preview transmission at: ${previewUrl}`
+      return res.json({
+        success: true,
+        channel: "smtp",
+        messageId: info.messageId,
+        simulated: false,
+        message: `Email delivered directly via SMTP to ${recipientList}`,
       });
     }
+
+    // Fallback to cached Ethereal transporter / in-memory resilience
+    const { transporter, senderAddress, isEthereal } = await getEmailTransporter();
+    const info = await transporter.sendMail({
+      from: `"${sender || "Valourian Sovereign Banking"}" <${senderAddress.replace(/.*<|>.*$/g, "") || "alerts@valourian.com"}>`,
+      to: recipientList,
+      subject,
+      text: plainText,
+      html: compiledHtml,
+      attachments: processedAttachments,
+    });
+
+    const previewUrl = isEthereal && nodemailer.getTestMessageUrl ? nodemailer.getTestMessageUrl(info) : null;
+
+    return res.json({
+      success: true,
+      channel: previewUrl ? "ethereal_sandbox" : "local_relay",
+      messageId: info.messageId,
+      simulated: Boolean(previewUrl),
+      previewUrl,
+      testUrl: previewUrl,
+      message: previewUrl
+        ? `Email dispatched to Ethereal Sandbox for ${recipientList}. Open previewUrl to view rendered email.`
+        : `Email processed via sovereign relay for ${recipientList}.`,
+    });
   } catch (err: any) {
     console.error("Express send-email API exception:", err);
-    res.status(500).json({ error: err?.message || "Failed to process email delivery" });
+    res.status(500).json({ success: false, error: err?.message || "Failed to process email delivery" });
   }
 });
 
@@ -2601,36 +2596,49 @@ async function getEmailTransporter() {
   return { transporter: cachedEmailTransporter, senderAddress: cachedSenderAddress, isEthereal: cachedIsEthereal };
 }
 
+app.get("/api/email/status", async (_req, res) => {
+  const hasSmtp = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  res.json({
+    success: true,
+    smtpConfigured: hasSmtp,
+    smtpHost: hasSmtp ? process.env.SMTP_HOST : "smtp.ethereal.email",
+    mode: hasSmtp ? "smtp" : "ethereal_sandbox",
+    fromAddress: process.env.SMTP_FROM || process.env.SMTP_USER || "treasury@valourian.capital",
+  });
+});
+
 app.post("/api/email/send", async (req, res) => {
   try {
-    const { to, subject, htmlBody } = req.body;
-    if (!to || !subject || !htmlBody) {
-      return res.status(400).json({ error: "Missing required fields" });
+    const { to, subject, htmlBody, body, sender } = req.body;
+    const recipientList = Array.isArray(to) ? to.join(", ") : String(to || "").trim();
+    if (!recipientList || !subject || (!htmlBody && !body)) {
+      return res.status(400).json({ success: false, error: "Missing required fields (to, subject, body/htmlBody)" });
     }
-    
+
     const { transporter, senderAddress, isEthereal } = await getEmailTransporter();
+    const fromHeader = sender ? `"${sender}" <${senderAddress.replace(/.*<|>.*$/g, "") || "alerts@valourian.com"}>` : senderAddress;
 
     const info = await transporter.sendMail({
-      from: senderAddress,
-      to: to,
-      subject: subject,
-      html: htmlBody,
+      from: fromHeader,
+      to: recipientList,
+      subject,
+      text: body || String(htmlBody).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+      html: htmlBody || `<pre style="font-family:sans-serif;white-space:pre-wrap;">${body}</pre>`,
     });
-    
-    console.log("Message sent: %s", info.messageId);
-    
-    if (isEthereal && nodemailer.getTestMessageUrl) {
-      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-      res.json({ 
-        success: true, 
-        messageId: info.messageId,
-        testUrl: nodemailer.getTestMessageUrl(info),
-        mock: false,
-        message: "Delivered via high-speed email pipeline."
-      });
-    } else {
-      res.json({ success: true, messageId: info.messageId, mock: false, message: "Delivered successfully." });
-    }
+
+    const previewUrl = isEthereal && nodemailer.getTestMessageUrl ? nodemailer.getTestMessageUrl(info) : null;
+
+    res.json({
+      success: true,
+      channel: previewUrl ? "ethereal_sandbox" : (process.env.SMTP_USER ? "smtp" : "local_relay"),
+      messageId: info.messageId,
+      testUrl: previewUrl,
+      previewUrl,
+      mock: false,
+      message: previewUrl
+        ? `Delivered to Ethereal sandbox for ${recipientList}.`
+        : `Delivered successfully to ${recipientList}.`,
+    });
   } catch (err: any) {
     console.error("Email Sending Error:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -2989,6 +2997,41 @@ app.post("/api/rates/expand-rate", (req, res) => {
   }
 });
 
+// ==========================================
+// SHAREABLE DEBIT & CREDIT CARD INVITES API
+// ==========================================
+const sharedCardInvitesStore = new Map<string, any>();
+
+app.get("/api/card-invites", (req, res) => {
+  const id = typeof req.query.id === "string" ? req.query.id : "";
+  if (id) {
+    const invite = sharedCardInvitesStore.get(id);
+    if (!invite) {
+      return res.status(404).json({ success: false, error: "Invite not found" });
+    }
+    return res.json({ success: true, invite });
+  }
+  const all = Array.from(sharedCardInvitesStore.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  return res.json({ success: true, invites: all });
+});
+
+app.post("/api/card-invites", (req, res) => {
+  try {
+    const invite = req.body;
+    if (!invite || !invite.inviteId) {
+      return res.status(400).json({ success: false, error: "inviteId required" });
+    }
+    sharedCardInvitesStore.set(invite.inviteId, {
+      ...invite,
+      updatedAt: new Date().toISOString(),
+    });
+    return res.json({ success: true, invite: sharedCardInvitesStore.get(invite.inviteId) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {

@@ -1,5 +1,5 @@
 import { collection, doc, setDoc, getDoc, getDocs, query, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 
 export interface LinkComCard {
   id: string;
@@ -1859,42 +1859,46 @@ export async function syncAllCardsToLinkAccount(email: string = TARGET_LINK_EMAI
     console.warn("Server API sync warning (continuing with Firestore & local):", err);
   }
 
-  // 3. Persist to Firestore: doc(db, "link_accounts", "asim.nsw@gmail.com")
-  try {
-    const accountDocRef = doc(db, "link_accounts", email.toLowerCase());
-    await setDoc(accountDocRef, {
-      ...profile,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
-
-    // Also update or ensure funding_sources have link.com enrollment marked
-    for (const card of allCards.slice(0, 10)) {
-      const fsRef = doc(db, "funding_sources", card.id);
-      await setDoc(fsRef, {
-        userId: "ceo-founder-override",
-        type: "credit_card",
-        name: card.name,
-        details: card.last4,
-        fullNumber: card.fullNumber,
-        holder: card.holder,
-        expiry: card.expiry,
-        cvv: card.cvv,
-        limit: card.limit,
-        network: card.network,
-        bsb: card.bsb,
-        accountNumber: card.accountNumber,
-        isGloballyOperational: true,
-        australiaInnately: true,
-        linkComEnrolled: true,
-        linkComAccount: email.toLowerCase(),
-        linkComStatus: "active_available_everywhere",
-        institution: "VBank Virtual Credit Cards & Australian Institutional Network",
+  // 3. Persist to Firestore only when signed in with matching email or verified founder
+  const activeUid = auth.currentUser?.uid;
+  const activeEmail = auth.currentUser?.email?.toLowerCase();
+  if (activeUid && (activeEmail === email.toLowerCase() || activeEmail === "asim.nsw@gmail.com")) {
+    try {
+      const accountDocRef = doc(db, "link_accounts", email.toLowerCase());
+      await setDoc(accountDocRef, {
+        ...profile,
         updatedAt: new Date().toISOString(),
-        createdAt: card.addedAt,
-      }, { merge: true }).catch(() => {});
+      }, { merge: true });
+
+      // Also update or ensure funding_sources have link.com enrollment marked
+      for (const card of allCards.slice(0, 10)) {
+        const fsRef = doc(db, "funding_sources", card.id);
+        await setDoc(fsRef, {
+          userId: activeUid,
+          type: "credit_card",
+          name: card.name,
+          details: card.last4,
+          fullNumber: card.fullNumber,
+          holder: card.holder,
+          expiry: card.expiry,
+          cvv: card.cvv,
+          limit: card.limit,
+          network: card.network,
+          bsb: card.bsb,
+          accountNumber: card.accountNumber,
+          isGloballyOperational: true,
+          australiaInnately: true,
+          linkComEnrolled: true,
+          linkComAccount: email.toLowerCase(),
+          linkComStatus: "active_available_everywhere",
+          institution: "VBank Virtual Credit Cards & Australian Institutional Network",
+          updatedAt: new Date().toISOString(),
+          createdAt: card.addedAt,
+        }, { merge: true }).catch(() => {});
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `link_accounts/${email.toLowerCase()}`);
     }
-  } catch (err) {
-    console.warn("Firestore sync warning:", err);
   }
 
   return profile;
@@ -1918,18 +1922,21 @@ export async function getLinkAccountProfile(email: string = TARGET_LINK_EMAIL): 
     } catch {}
   }
 
-  // Check Firestore
-  try {
-    const accountDocRef = doc(db, "link_accounts", email.toLowerCase());
-    const snap = await getDoc(accountDocRef);
-    if (snap.exists()) {
-      const data = snap.data() as LinkAccountProfile;
-      if (data.cards && data.cards.length >= BASE_BANKING_CREDIT_CARDS.length) {
-        return data;
+  // Check Firestore only when signed in
+  const activeEmail = auth.currentUser?.email?.toLowerCase();
+  if (auth.currentUser && (activeEmail === email.toLowerCase() || activeEmail === "asim.nsw@gmail.com")) {
+    try {
+      const accountDocRef = doc(db, "link_accounts", email.toLowerCase());
+      const snap = await getDoc(accountDocRef);
+      if (snap.exists()) {
+        const data = snap.data() as LinkAccountProfile;
+        if (data.cards && data.cards.length >= BASE_BANKING_CREDIT_CARDS.length) {
+          return data;
+        }
       }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `link_accounts/${email.toLowerCase()}`);
     }
-  } catch (err) {
-    console.warn("Firestore fetch error:", err);
   }
 
   // Default to immediate active profile sync
