@@ -1,9 +1,10 @@
 import { doc, setDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { getVerifiedCloudUid } from './cloudSessionGuard';
 
 export const backupApplicationData = async () => {
-  if (!auth.currentUser) return;
-  const userId = auth.currentUser.uid;
+  const userId = getVerifiedCloudUid();
+  if (!userId) return;
   const backupData: Record<string, any> = {};
   
   try {

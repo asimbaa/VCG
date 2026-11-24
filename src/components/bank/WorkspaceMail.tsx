@@ -8,6 +8,14 @@ import { auth, db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, getDocs, getDoc, doc, setDoc, where, deleteDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { sendWorkspaceEmail, sendUnifiedEmail, getEmailDispatchLogs, getBackendEmailStatus, EMAIL_DISPATCH_EVENT, EmailDispatchLogEntry, getEmailQueueStatus, retryFailedEmails } from '../../utils/email';
+import {
+  getVerifiedCloudUid,
+  loadSyncedBalances,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalWorkspaceEmails,
+  recordLocalWorkspaceEmail,
+} from '../../services/cloudSessionGuard';
 
 const mockEmails = [
   {
@@ -593,7 +601,7 @@ export function WorkspaceMail({ user }: { user: any }) {
 
   // Load configuration based on email key
   useEffect(() => {
-    if (!user) return;
+    const cloudUid = getVerifiedCloudUid();
     const loadSettings = async () => {
       try {
         const stored = localStorage.getItem(`val_smtp_${selectedAccount.email}`);
@@ -604,9 +612,8 @@ export function WorkspaceMail({ user }: { user: any }) {
           setSmtpUser(config.user || selectedAccount.email);
           setSmtpPass(config.pass || "");
           setSmtpFrom(config.from || selectedAccount.name);
-        } else {
-          // Check firestore
-          const docRef = doc(db, "users", user.uid, "smtp_configs", selectedAccount.email);
+        } else if (cloudUid) {
+          const docRef = doc(db, "users", cloudUid, "smtp_configs", selectedAccount.email);
           const snap = await getDoc(docRef);
           if (snap.exists()) {
             const config = snap.data();
@@ -616,16 +623,23 @@ export function WorkspaceMail({ user }: { user: any }) {
             setSmtpPass(config.pass || "");
             setSmtpFrom(config.from || selectedAccount.name);
             localStorage.setItem(`val_smtp_${selectedAccount.email}`, JSON.stringify(config));
-          } else {
-            const isGmail = selectedAccount.email.includes("gmail.com");
-            setSmtpHost(isGmail ? "smtp.gmail.com" : "smtp.ethereal.email");
-            setSmtpPort(isGmail ? "465" : "587");
-            setSmtpUser(selectedAccount.email);
-            setSmtpPass("");
-            setSmtpFrom(selectedAccount.name);
+            return;
           }
+          const isGmail = selectedAccount.email.includes("gmail.com");
+          setSmtpHost(isGmail ? "smtp.gmail.com" : "smtp.ethereal.email");
+          setSmtpPort(isGmail ? "465" : "587");
+          setSmtpUser(selectedAccount.email);
+          setSmtpPass("");
+          setSmtpFrom(selectedAccount.name);
+        } else {
+          const isGmail = selectedAccount.email.includes("gmail.com");
+          setSmtpHost(isGmail ? "smtp.gmail.com" : "smtp.ethereal.email");
+          setSmtpPort(isGmail ? "465" : "587");
+          setSmtpUser(selectedAccount.email);
+          setSmtpPass("");
+          setSmtpFrom(selectedAccount.name);
         }
-      } catch (e) { }
+      } catch {}
     };
     loadSettings();
   }, [selectedAccount, user]);
@@ -639,8 +653,9 @@ export function WorkspaceMail({ user }: { user: any }) {
       setSmtpUser(userVal);
       setSmtpPass(passVal);
       setSmtpFrom(fromVal);
-      if (user) {
-        await setDoc(doc(db, "users", user.uid, "smtp_configs", selectedAccount.email), config);
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        await setDoc(doc(db, "users", cloudUid, "smtp_configs", selectedAccount.email), config);
       }
       toast.success(`SMTP credentials locked in securely for ${selectedAccount.email}!`);
     } catch (e) {
@@ -656,20 +671,38 @@ export function WorkspaceMail({ user }: { user: any }) {
   const [activeBoardTab, setActiveBoardTab] = useState<"mail" | "credentials">("mail");
 
   useEffect(() => {
-    if (!user?.uid || !auth.currentUser) {
-      setEmails(mockEmails);
-      return;
+    const mergeWithLocalAndMocks = (cloudList: any[] = []) => {
+      const localList = getLocalWorkspaceEmails();
+      const map = new Map<string, any>();
+      [...cloudList, ...localList, ...mockEmails].forEach((m) => {
+        if (m && m.id !== undefined) {
+          const key = String(m.id);
+          if (!map.has(key)) map.set(key, m);
+        }
+      });
+      return Array.from(map.values());
+    };
+
+    const handleLocalEmailEvent = () => {
+      setEmails((prev) => mergeWithLocalAndMocks(prev));
+    };
+    window.addEventListener("valourian_emails_updated", handleLocalEmailEvent);
+
+    const cloudUid = getVerifiedCloudUid();
+    if (!cloudUid) {
+      setEmails(mergeWithLocalAndMocks([]));
+      return () => {
+        window.removeEventListener("valourian_emails_updated", handleLocalEmailEvent);
+      };
     }
 
-    const emailsColRef = collection(db, "users", auth.currentUser.uid, "emails");
-    
+    const emailsColRef = collection(db, "users", cloudUid, "emails");
     let unsubscribe: (() => void) | undefined;
 
     const checkAndSeed = async () => {
       try {
         const snapshot = await getDocs(emailsColRef);
         if (snapshot.empty) {
-          console.log("Seeding initial mock emails to Firestore...");
           for (const item of mockEmails) {
             await setDoc(doc(emailsColRef, String(item.id)), {
               ...item,
@@ -678,15 +711,15 @@ export function WorkspaceMail({ user }: { user: any }) {
           }
         }
       } catch (err) {
-        console.error("Error seeding initial emails:", err);
+        console.debug("Email seed skipped:", err);
       }
     };
-    
+
     checkAndSeed();
 
     const q = query(emailsColRef, orderBy("id", "desc"));
     unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = [];
+      const list: any[] = [];
       snapshot.forEach((docSnap) => {
         const emailData = docSnap.data();
         list.push({
@@ -694,15 +727,15 @@ export function WorkspaceMail({ user }: { user: any }) {
           id: emailData.id || docSnap.id
         });
       });
-      setEmails(list);
+      setEmails(mergeWithLocalAndMocks(list));
     }, (error) => {
-      console.error("Firestore email listener error:", error);
+      console.debug("Firestore email listener fallback:", error);
+      setEmails(mergeWithLocalAndMocks([]));
     });
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      window.removeEventListener("valourian_emails_updated", handleLocalEmailEvent);
+      if (unsubscribe) unsubscribe();
     };
   }, [user]);
 
@@ -738,35 +771,16 @@ export function WorkspaceMail({ user }: { user: any }) {
     // If the file explicitly has content from the EmailService API, display it directly.
     if (file.content) {
         return (
-            <div className="space-y-6">
+            <div className="space-y-6 text-slate-900">
                 <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
                     <div>
-                        <h1 className="text-2xl font-black uppercase tracking-tighter">Valourian Document Viewer</h1>
-                        <p className="text-[10px] text-slate-500 font-bold">SOVEREIGN ENCRYPTED DOCUMENT • FULL CONTENT RENDERED</p>
+                        <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Valourian Document Viewer</h1>
+                        <p className="text-[10px] text-slate-600 font-bold">SOVEREIGN ENCRYPTED DOCUMENT · FULL CONTENT RENDERED</p>
                     </div>
                 </div>
                 <div className="mt-8">
-                    <h2 className="text-lg font-bold underline mb-4">{file.name.toUpperCase().replace('.PDF', '')}</h2>
-                    <div className="text-sm leading-relaxed mb-6 font-mono bg-white p-6 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-inner max-h-[600px] overflow-y-auto">
-                        {file.content}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-    // If the file explicitly has content from the EmailService API, display it directly.
-    if (file.content) {
-        return (
-            <div className="space-y-6">
-                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
-                    <div>
-                        <h1 className="text-2xl font-black uppercase tracking-tighter">Valourian Document Viewer</h1>
-                        <p className="text-[10px] text-slate-500 font-bold">SOVEREIGN ENCRYPTED DOCUMENT • FULL CONTENT RENDERED</p>
-                    </div>
-                </div>
-                <div className="mt-8">
-                    <h2 className="text-lg font-bold underline mb-4">{file.name.toUpperCase().replace('.PDF', '')}</h2>
-                    <div className="text-sm leading-relaxed mb-6 font-mono bg-white p-6 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-inner max-h-[600px] overflow-y-auto">
+                    <h2 className="text-lg font-bold underline mb-4 text-slate-900">{file.name.toUpperCase().replace('.PDF', '')}</h2>
+                    <div className="text-sm leading-relaxed mb-6 font-mono bg-white text-slate-900 p-6 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-inner max-h-[600px] overflow-y-auto">
                         {file.content}
                     </div>
                 </div>
@@ -777,16 +791,16 @@ export function WorkspaceMail({ user }: { user: any }) {
     
     if (name.includes("guide") || name.includes("clearance") || name.includes("manifest")) {
         return (
-            <div className="space-y-6">
+            <div className="space-y-6 text-slate-900">
                 <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
                     <div>
-                        <h1 className="text-2xl font-black uppercase tracking-tighter">Valourian Document Viewer</h1>
-                        <p className="text-[10px] text-slate-500 font-bold">SOVEREIGN ENCRYPTED DOCUMENT • READ ONLY</p>
+                        <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Valourian Document Viewer</h1>
+                        <p className="text-[10px] text-slate-600 font-bold">SOVEREIGN ENCRYPTED DOCUMENT · READ ONLY</p>
                     </div>
                 </div>
                 <div className="mt-8">
-                    <h2 className="text-lg font-bold underline mb-4">{name.toUpperCase().replace('.PDF', '')}</h2>
-                    <p className="text-sm leading-relaxed mb-6 font-mono bg-slate-50 p-6 rounded-xl border border-slate-200">
+                    <h2 className="text-lg font-bold underline mb-4 text-slate-900">{name.toUpperCase().replace('.PDF', '')}</h2>
+                    <p className="text-sm leading-relaxed mb-6 font-mono bg-slate-50 text-slate-900 p-6 rounded-xl border border-slate-200">
                         This document has been decrypted successfully by AURA-9. 
                         It is part of the sovereign data vault of Asim Aryal.
                         Please download the PDF to view the high-fidelity render.
@@ -799,57 +813,57 @@ export function WorkspaceMail({ user }: { user: any }) {
     }
     if (name.includes("tesla") || name.includes("fleet") || name.includes("vin")) {
         return (
-            <div className="space-y-6">
+            <div className="space-y-6 text-slate-900">
                 <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
                     <div>
-                        <h1 className="text-2xl font-black uppercase tracking-tighter">Valourian Asset Registry</h1>
-                        <p className="text-[10px] text-slate-500 font-bold">SOVEREIGN OWNERSHIP VERIFICATION • SECTOR ARTARMON</p>
+                        <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Valourian Asset Registry</h1>
+                        <p className="text-[10px] text-slate-600 font-bold">SOVEREIGN OWNERSHIP VERIFICATION · SECTOR ARTARMON</p>
                     </div>
                     <div className="text-right">
-                        <div className="text-[10px] font-black text-slate-400">DOCUMENT ID</div>
-                        <div className="text-xs font-mono font-bold">TSLA-VC-{email.id}-9942</div>
+                        <div className="text-[10px] font-black text-slate-500">DOCUMENT ID</div>
+                        <div className="text-xs font-mono font-bold text-slate-900">TSLA-VC-{email.id}-9942</div>
                     </div>
                 </div>
                 
                 <div className="mt-8">
-                    <h2 className="text-lg font-bold underline mb-4">CERTIFICATE OF HANDOVER & OWNERSHIP</h2>
-                    <p className="text-sm leading-relaxed mb-6">
+                    <h2 className="text-lg font-bold underline mb-4 text-slate-900">CERTIFICATE OF HANDOVER &amp; OWNERSHIP</h2>
+                    <p className="text-sm leading-relaxed mb-6 text-slate-800">
                         This document verifies that <strong>Asim Aryal</strong> (Sovereign Access) has satisfied all financial and identity requirements for the deployment of the following infrastructure:
                     </p>
                     
-                    <table className="w-full text-xs border-collapse border border-slate-200">
+                    <table className="w-full text-xs border-collapse border border-slate-200 text-slate-900">
                         <thead>
                             <tr className="bg-slate-50">
-                                <th className="border border-slate-200 p-2 text-left">ASSET</th>
-                                <th className="border border-slate-200 p-2 text-left">VIN / CORE ID</th>
-                                <th className="border border-slate-200 p-2 text-left">STATUS</th>
+                                <th className="border border-slate-200 p-2 text-left text-slate-900">ASSET</th>
+                                <th className="border border-slate-200 p-2 text-left text-slate-900">VIN / CORE ID</th>
+                                <th className="border border-slate-200 p-2 text-left text-slate-900">STATUS</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
                                 <td className="border border-slate-200 p-2">Tesla Model S Plaid (ASIM-01)</td>
                                 <td className="border border-slate-200 p-2 font-mono">5YJSA1E20PFXXXXXX</td>
-                                <td className="border border-slate-200 p-2 text-emerald-600 font-bold">DELIVERED</td>
+                                <td className="border border-slate-200 p-2 text-emerald-700 font-bold">DELIVERED</td>
                             </tr>
                             <tr>
                                 <td className="border border-slate-200 p-2">Cybertruck Foundation (ASIM-02)</td>
                                 <td className="border border-slate-200 p-2 font-mono">7G2BEAST9948XXXXX</td>
-                                <td className="border border-slate-200 p-2 text-blue-600 font-bold">STAGED</td>
+                                <td className="border border-slate-200 p-2 text-blue-700 font-bold">STAGED</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <div className="mt-12 p-6 bg-slate-50 border border-dashed border-slate-300 rounded-lg">
-                    <h3 className="text-xs font-bold mb-2">AUTONOMOUS DRIVE PIN (SOVEREIGN OVERRIDE)</h3>
-                    <div className="text-4xl font-black tracking-[0.5em] text-center p-4">9 0 0 2</div>
-                    <p className="text-[9px] text-slate-400 text-center mt-2 italic font-medium">Valid for 25 Years. Cryptographically linked to the Valourian Neural Pass.</p>
+                <div className="mt-12 p-6 bg-slate-50 text-slate-900 border border-dashed border-slate-300 rounded-lg">
+                    <h3 className="text-xs font-bold mb-2 text-slate-900">AUTONOMOUS DRIVE PIN (SOVEREIGN OVERRIDE)</h3>
+                    <div className="text-4xl font-black tracking-[0.5em] text-center p-4 text-slate-900">9 0 0 2</div>
+                    <p className="text-[9px] text-slate-500 text-center mt-2 italic font-medium">Valid for 25 Years. Cryptographically linked to the Valourian Neural Pass.</p>
                 </div>
 
                 <div className="mt-20 pt-10 border-t flex justify-between">
                     <div>
-                        <div className="text-[10px] font-bold text-slate-400 mb-8 uppercase">Verified by Tesla Finance</div>
-                        <div className="font-serif italic text-xl opacity-80">Sundar Pichai (Proxy Auth)</div>
+                        <div className="text-[10px] font-bold text-slate-500 mb-8 uppercase">Verified by Tesla Finance</div>
+                        <div className="font-serif italic text-xl text-slate-800">Sundar Pichai (Proxy Auth)</div>
                         <div className="w-32 h-0.5 bg-slate-900 mt-1" />
                     </div>
                 </div>
@@ -859,7 +873,7 @@ export function WorkspaceMail({ user }: { user: any }) {
 
     if (name.includes("cba") || name.includes("limit") || name.includes("vault")) {
         return (
-            <div className="space-y-8">
+            <div className="space-y-8 text-slate-900">
                 <div className="flex justify-between border-b pb-6">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-yellow-400" />
@@ -913,30 +927,30 @@ export function WorkspaceMail({ user }: { user: any }) {
 
     if (name.includes("invoice") || name.includes("receipt")) {
         return (
-            <div className="space-y-8 font-serif">
+            <div className="space-y-8 font-serif text-slate-900">
                 <div className="flex justify-between border-b-2 border-slate-900 pb-4">
-                    <h1 className="text-3xl font-black italic">COMMBANK VIP CAPITAL</h1>
-                    <div className="text-right text-[10px] font-sans font-bold">INVOICE #99482<br />ISSUE DATE: MAY 15, 2026</div>
+                    <h1 className="text-3xl font-black italic text-slate-900">COMMBANK VIP CAPITAL</h1>
+                    <div className="text-right text-[10px] font-sans font-bold text-slate-700">INVOICE #99482<br />ISSUE DATE: MAY 15, 2026</div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-8 text-xs font-sans">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs font-sans text-slate-900">
                     <div>
-                        <h4 className="text-slate-400 font-bold uppercase mb-2">Billed To</h4>
-                        <p className="font-bold">Valourian Properties Ltd</p>
+                        <h4 className="text-slate-500 font-bold uppercase mb-2">Billed To</h4>
+                        <p className="font-bold text-slate-900">Valourian Properties Ltd</p>
                         <p>Clontarf Estate Management</p>
                         <p>13 Beatrice St, Clontarf NSW</p>
                     </div>
                     <div>
-                        <h4 className="text-slate-400 font-bold uppercase mb-2">From</h4>
-                        <p className="font-bold">Valourian Executive Office</p>
+                        <h4 className="text-slate-500 font-bold uppercase mb-2">From</h4>
+                        <p className="font-bold text-slate-900">Valourian Executive Office</p>
                         <p>Artarmon Heritage Hub</p>
                         <p>Barton Rd, Artarmon NSW</p>
                     </div>
                 </div>
 
-                <table className="w-full text-xs font-sans border-t border-b border-slate-200 py-4">
+                <table className="w-full text-xs font-sans border-t border-b border-slate-200 py-4 text-slate-900">
                     <thead>
-                        <tr className="text-slate-400 uppercase font-bold text-[9px] border-b border-slate-100">
+                        <tr className="text-slate-500 uppercase font-bold text-[9px] border-b border-slate-100">
                             <th className="py-2 text-left">Description</th>
                             <th className="py-2 text-right">Amount</th>
                         </tr>
@@ -944,24 +958,24 @@ export function WorkspaceMail({ user }: { user: any }) {
                     <tbody>
                         <tr>
                             <td className="py-3 font-medium">Neural-FSD Fleet Maintenance (Artarmon-Sector)</td>
-                            <td className="py-3 text-right font-bold">$12,500.00</td>
+                            <td className="py-3 text-right font-bold tabular-nums">$12,500.00</td>
                         </tr>
                         <tr>
                             <td className="py-3 font-medium">Sovereign Link 25-Year License Fee</td>
-                            <td className="py-3 text-right font-bold">$450,000.00</td>
+                            <td className="py-3 text-right font-bold tabular-nums">$450,000.00</td>
                         </tr>
                     </tbody>
                 </table>
 
                 <div className="flex justify-end gap-10">
                     <div className="text-right">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">Total Due</p>
-                        <p className="text-2xl font-black text-slate-900">$462,500.00 AUD</p>
-                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase">Settled</span>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Total Due</p>
+                        <p className="text-2xl font-black text-slate-900 tabular-nums">$462,500.00 AUD</p>
+                        <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold uppercase">Settled</span>
                     </div>
                 </div>
 
-                <div className="mt-12 text-[10px] text-slate-400 italic">
+                <div className="mt-12 text-[10px] text-slate-500 italic">
                     All transactions are settled via the Sovereign Institutional Bridge at CommBank Australia. No further action is required from the recipient.
                 </div>
             </div>
@@ -970,36 +984,36 @@ export function WorkspaceMail({ user }: { user: any }) {
 
     if (name.includes("resume") || name.includes("cv")) {
         return (
-            <div className="space-y-8 max-w-2xl mx-auto font-sans leading-relaxed">
+            <div className="space-y-8 max-w-2xl mx-auto font-sans leading-relaxed text-slate-900">
                 <div className="text-center border-b pb-8">
-                    <h1 className="text-4xl font-black tracking-tighter uppercase mb-2">Asim Aryal</h1>
-                    <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Venture Architect • Sovereign Fleet Principal • Artarmon Heritage Custodian</p>
+                    <h1 className="text-4xl font-black tracking-tighter uppercase mb-2 text-slate-900">Asim Aryal</h1>
+                    <p className="text-slate-600 font-bold uppercase tracking-widest text-xs">Venture Architect · Sovereign Fleet Principal · Artarmon Heritage Custodian</p>
                 </div>
 
                 <section>
-                    <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">Executive Summary</h3>
+                    <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-4">Executive Summary</h3>
                     <p className="text-sm font-medium text-slate-800">
                         Architect of the Valourian Intelligence Ecosystem, specialized in high-liquidity asset bridges and autonomous mission coordination. Developed the Aura-Link FSD protocol and currently managing the 25-year Sovereign infrastructure plan for Northern Sydney.
                     </p>
                 </section>
 
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                     <section>
-                        <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">Core Assets</h3>
-                        <ul className="text-xs space-y-2 font-bold text-slate-700">
-                            <li>• Valourian Capital (Founder)</li>
-                            <li>• Aura Drive Network (Architect)</li>
-                            <li>• Clontarf Sovereign Estate</li>
-                            <li>• Artarmon Heritage Logistics</li>
+                        <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-4">Core Assets</h3>
+                        <ul className="text-xs space-y-2 font-bold text-slate-800">
+                            <li>· Valourian Capital (Founder)</li>
+                            <li>· Aura Drive Network (Architect)</li>
+                            <li>· Clontarf Sovereign Estate</li>
+                            <li>· Artarmon Heritage Logistics</li>
                         </ul>
                     </section>
                     <section>
-                        <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">Sovereign Skills</h3>
-                        <ul className="text-xs space-y-2 font-bold text-slate-700">
-                            <li>• Neural-Link Integration</li>
-                            <li>• Institutional Bridge Scaling</li>
-                            <li>• Autonomous Fleet Dispatch</li>
-                            <li>• High-Value Acquisition</li>
+                        <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-4">Sovereign Skills</h3>
+                        <ul className="text-xs space-y-2 font-bold text-slate-800">
+                            <li>· Neural-Link Integration</li>
+                            <li>· Institutional Bridge Scaling</li>
+                            <li>· Autonomous Fleet Dispatch</li>
+                            <li>· High-Value Acquisition</li>
                         </ul>
                     </section>
                 </div>
@@ -1009,15 +1023,15 @@ export function WorkspaceMail({ user }: { user: any }) {
     
     if (name.includes("digital_cards_details")) {
         return (
-            <div className="space-y-8 font-sans">
+            <div className="space-y-8 font-sans text-slate-900">
                 <div className="flex justify-between border-b-2 border-slate-900 pb-4">
-                    <h1 className="text-3xl font-black italic">COMMBANK VIP DEBIT SECURE</h1>
-                    <div className="text-right text-[10px] font-bold">SOVEREIGN VIP ISSUANCE<br />$100 MILLION LIMIT</div>
+                    <h1 className="text-3xl font-black italic text-slate-900">COMMBANK VIP DEBIT SECURE</h1>
+                    <div className="text-right text-[10px] font-bold text-slate-700">SOVEREIGN VIP ISSUANCE<br />$100 MILLION LIMIT</div>
                 </div>
                 <div className="bg-slate-900 text-white rounded-2xl p-8 mb-6 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 -translate-y-10 translate-x-10 rounded-full" />
                     <h3 className="text-xs uppercase tracking-widest text-[#ffcc00] mb-2 font-black">Valourian Debit</h3>
-                    <div className="text-3xl font-mono tracking-[0.2em] mb-4">4004 0104 4335 0001</div>
+                    <div className="text-2xl sm:text-3xl font-mono tracking-[0.2em] mb-4 tabular-nums">4004 0104 4335 0001</div>
                     <div className="flex justify-between items-end">
                        <div>
                           <div className="text-[10px] uppercase text-slate-400 mb-1">Cardholder</div>
@@ -1025,10 +1039,10 @@ export function WorkspaceMail({ user }: { user: any }) {
                        </div>
                        <div className="text-right">
                           <div className="text-[10px] uppercase text-slate-400 mb-1">Expires</div>
-                          <div className="font-bold text-lg">12/99</div>
+                          <div className="font-bold text-lg tabular-nums">12/99</div>
                        </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800 tabular-nums">
                        <div>
                           <div className="text-[10px] uppercase text-slate-400 mb-1">CVV</div>
                           <div className="font-mono font-bold">335</div>
@@ -1048,7 +1062,7 @@ export function WorkspaceMail({ user }: { user: any }) {
                     </div>
                 </div>
                 
-                <div className="text-sm font-medium mt-8 p-4 bg-emerald-50 text-emerald-800 rounded">
+                <div className="text-sm font-medium mt-8 p-4 bg-emerald-50 text-emerald-900 rounded">
                   $100,000,000.00 AUD Reserve linked successfully. EFTPOS enabled. Apple Pay and Google Wallet ready.
                 </div>
             </div>
@@ -1057,34 +1071,34 @@ export function WorkspaceMail({ user }: { user: any }) {
     
     if (name.includes("trust_account")) {
         return (
-            <div className="space-y-8 font-sans">
+            <div className="space-y-8 font-sans text-slate-900">
                 <div className="flex justify-between border-b pb-4">
-                    <h1 className="font-black text-2xl uppercase">Valourian Real Estate Trust</h1>
-                    <span className="bg-slate-100 text-slate-600 px-2 py-1 text-[10px] rounded font-bold">VERIFIED</span>
+                    <h1 className="font-black text-2xl uppercase text-slate-900">Valourian Real Estate Trust</h1>
+                    <span className="bg-slate-100 text-slate-700 px-2 py-1 text-[10px] rounded font-bold">VERIFIED</span>
                 </div>
-                <div className="p-6 bg-slate-50 border border-slate-200">
-                   <h3 className="text-sm font-bold text-slate-800 mb-4">Acquisition Trust Account Details</h3>
+                <div className="p-6 bg-slate-50 border border-slate-200 text-slate-900">
+                   <h3 className="text-sm font-bold text-slate-900 mb-4">Acquisition Trust Account Details</h3>
                    <div className="grid gap-4">
                       <div>
-                         <div className="text-xs text-slate-500 font-medium">Bank</div>
-                         <div className="font-bold text-lg">CBA Institutional (VIP)</div>
+                         <div className="text-xs text-slate-600 font-medium">Bank</div>
+                         <div className="font-bold text-lg text-slate-900">CBA Institutional (VIP)</div>
                       </div>
                       <div>
-                         <div className="text-xs text-slate-500 font-medium">BSB Number</div>
-                         <div className="font-bold text-xl font-mono">062-000</div>
+                         <div className="text-xs text-slate-600 font-medium">BSB Number</div>
+                         <div className="font-bold text-xl font-mono text-slate-900">062-000</div>
                       </div>
                       <div>
-                         <div className="text-xs text-slate-500 font-medium">Account Number</div>
-                         <div className="font-bold text-xl font-mono">1994 8219</div>
+                         <div className="text-xs text-slate-600 font-medium">Account Number</div>
+                         <div className="font-bold text-xl font-mono text-slate-900">1994 8219</div>
                       </div>
                       <div>
-                         <div className="text-xs text-slate-500 font-medium">Account Name</div>
-                         <div className="font-bold text-lg">Valourian Prime Real Estate Trust</div>
+                         <div className="text-xs text-slate-600 font-medium">Account Name</div>
+                         <div className="font-bold text-lg text-slate-900">Valourian Prime Real Estate Trust</div>
                       </div>
                    </div>
                 </div>
                 
-                <div className="italic text-slate-500 text-xs">
+                <div className="italic text-slate-600 text-xs">
                   Awaiting capital injection for final settlement. Property deeds will be legally transferred upon clearance.
                 </div>
             </div>
@@ -1092,24 +1106,24 @@ export function WorkspaceMail({ user }: { user: any }) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 text-slate-900">
             <div className="flex justify-between items-center border-b pb-4">
-                <h1 className="font-black text-xl uppercase tracking-tighter">{selectedEmail.sender}</h1>
-                <span className="text-[10px] font-mono p-1 bg-slate-100 rounded">DOC-VERIFIED</span>
+                <h1 className="font-black text-xl uppercase tracking-tighter text-slate-900">{selectedEmail.sender}</h1>
+                <span className="text-[10px] font-mono p-1 bg-slate-100 text-slate-700 rounded">DOC-VERIFIED</span>
             </div>
             <div className="py-4">
-                <h2 className="text-lg font-bold mb-4">{file.name}</h2>
+                <h2 className="text-lg font-bold mb-4 text-slate-900">{file.name}</h2>
                 <div className="space-y-3">
-                   <div className="h-2 bg-slate-50 w-full rounded" />
-                   <div className="h-2 bg-slate-50 w-3/4 rounded" />
-                   <div className="h-2 bg-slate-50 w-full rounded" />
-                   <div className="h-2 bg-slate-50 w-5/6 rounded" />
+                   <div className="h-2 bg-slate-100 w-full rounded" />
+                   <div className="h-2 bg-slate-100 w-3/4 rounded" />
+                   <div className="h-2 bg-slate-100 w-full rounded" />
+                   <div className="h-2 bg-slate-100 w-5/6 rounded" />
                 </div>
             </div>
-            <div className="mt-8 p-6 bg-slate-50 rounded italic text-sm text-slate-600 text-center">
+            <div className="mt-8 p-6 bg-slate-50 rounded italic text-sm text-slate-700 text-center">
                 This document contains sensitive Valourian data. Protected by Neural Encryption.
             </div>
-            <div className="mt-20 border-t pt-4 flex justify-between text-[10px] text-slate-400 font-bold uppercase">
+            <div className="mt-20 border-t pt-4 flex justify-between text-[10px] text-slate-500 font-bold uppercase">
                 <span>Ref: {selectedEmail.id}</span>
                 <span>Asim Aryal / Founder</span>
             </div>
@@ -1118,18 +1132,18 @@ export function WorkspaceMail({ user }: { user: any }) {
   };
   const toggleStar = async (emailId: any, e: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const updated = emails.map(m => m.id === emailId ? { ...m, starred: !m.starred } : m);
+    const found = emails.find(m => m.id === emailId);
+    const nextStarred = !found?.starred;
+    const updated = emails.map(m => m.id === emailId ? { ...m, starred: nextStarred } : m);
     setEmails(updated);
-    
-    if (user && user.uid) {
+
+    const cloudUid = getVerifiedCloudUid();
+    if (cloudUid && found) {
       try {
-        const found = emails.find(m => m.id === emailId);
-        if (found) {
-          const emailRef = doc(db, "users", user.uid, "emails", String(emailId));
-          await setDoc(emailRef, { starred: !found.starred }, { merge: true });
-        }
+        const emailRef = doc(db, "users", cloudUid, "emails", String(emailId));
+        await setDoc(emailRef, { starred: nextStarred }, { merge: true });
       } catch (err) {
-        console.error("Failed to update starred in database:", err);
+        console.debug("Star toggle synced locally:", err);
       }
     }
     toast.success("Starred state toggled!");
@@ -1214,43 +1228,37 @@ export function WorkspaceMail({ user }: { user: any }) {
 
   const handleDeleteEmail = async () => {
     if (!selectedEmail) return;
-    if (!user || !user.uid) {
-      toast.error("Please sign in to delete emails.");
-      return;
+    const deletedId = selectedEmail.id;
+    setEmails(prev => prev.filter(m => m.id !== deletedId));
+    setSelectedEmail(null);
+    const cloudUid = getVerifiedCloudUid();
+    if (cloudUid) {
+      try {
+        const emailRef = doc(db, "users", cloudUid, "emails", String(deletedId));
+        await deleteDoc(emailRef);
+      } catch (err) {
+        console.debug("Deleted email locally:", err);
+      }
     }
-    const toastId = toast.loading("Deleting email from cloud registry...");
-    try {
-      const emailRef = doc(db, "users", user.uid, "emails", String(selectedEmail.id));
-      await deleteDoc(emailRef);
-      setSelectedEmail(null);
-      toast.dismiss(toastId);
-      toast.success("Email purged successfully.");
-    } catch (err) {
-      console.error(err);
-      toast.dismiss(toastId);
-      toast.error("Failed to purge email.");
-    }
+    toast.success("Email purged successfully.");
   };
 
   const handleSnoozeEmail = async () => {
     if (!selectedEmail) return;
-    if (!user || !user.uid) {
-      toast.error("Please sign in to snooze emails.");
-      return;
+    const targetSnoozed = !selectedEmail.snoozed;
+    const targetId = selectedEmail.id;
+    setEmails(prev => prev.map(m => m.id === targetId ? { ...m, snoozed: targetSnoozed } : m));
+    setSelectedEmail(null);
+    const cloudUid = getVerifiedCloudUid();
+    if (cloudUid) {
+      try {
+        const emailRef = doc(db, "users", cloudUid, "emails", String(targetId));
+        await setDoc(emailRef, { snoozed: targetSnoozed }, { merge: true });
+      } catch (err) {
+        console.debug("Snoozed email locally:", err);
+      }
     }
-    const toastId = toast.loading("Snoozing email...");
-    try {
-      const emailRef = doc(db, "users", user.uid, "emails", String(selectedEmail.id));
-      const targetSnoozed = !selectedEmail.snoozed;
-      await setDoc(emailRef, { snoozed: targetSnoozed }, { merge: true });
-      setSelectedEmail(null);
-      toast.dismiss(toastId);
-      toast.success(targetSnoozed ? "Snoozed successfully." : "Removed from Snooze.");
-    } catch (err) {
-      console.error(err);
-      toast.dismiss(toastId);
-      toast.error("Failed to update snooze state.");
-    }
+    toast.success(targetSnoozed ? "Snoozed successfully." : "Removed from Snooze.");
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -1335,7 +1343,7 @@ export function WorkspaceMail({ user }: { user: any }) {
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="•••••••••••••••••••••"
                     required
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl focus:border-indigo-500 focus:outline-none text-xs text-white_lettering"
+                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl focus:border-indigo-500 focus:outline-none text-xs text-white"
                   />
                 </div>
 
@@ -1389,7 +1397,7 @@ export function WorkspaceMail({ user }: { user: any }) {
               ).map((acc, aIdx) => (
                 <div 
                   key={`${acc.email}-${aIdx}`} 
-                  className="bg-slate-950/60 hover:bg-slate-950 border border-slate-850 p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all"
+                  className="bg-slate-950/60 hover:bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center font-bold text-xs text-slate-200">
@@ -1439,30 +1447,30 @@ export function WorkspaceMail({ user }: { user: any }) {
   }
 
   return (
-    <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[700px] md:h-[800px] font-sans relative">
+    <div className="bg-white text-slate-900 rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-[600px] h-[calc(100dvh-10rem)] max-h-[820px] font-sans relative">
       {/* Header */}
       <div className="h-16 border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 bg-white shrink-0">
         <div className="flex items-center gap-4">
            {/* Gmail-style Logo */}
            <div className="flex items-center gap-2">
               <Mail className="w-6 h-6 text-red-500" />
-              <span className="text-xl font-medium text-slate-800 tracking-tight hidden sm:block">Workspace</span>
+              <span className="text-xl font-medium text-slate-900 tracking-tight hidden sm:block">Workspace</span>
            </div>
         </div>
 
         {/* Search Bar */}
-        <div className="flex-1 max-w-2xl px-4 sm:px-8">
-           <div className="bg-[#f2f6fc] rounded-full h-12 flex items-center px-4 focus-within:bg-white focus-within:shadow-md focus-within:ring-1 focus-within:ring-slate-200 transition-all">
-              <Search className="w-5 h-5 text-slate-500" />
+        <div className="flex-1 max-w-2xl px-2 sm:px-8">
+           <div className="bg-[#f2f6fc] rounded-full h-11 sm:h-12 flex items-center px-3 sm:px-4 focus-within:bg-white focus-within:shadow-md focus-within:ring-1 focus-within:ring-slate-300 transition-all">
+              <Search className="w-5 h-5 text-slate-500 shrink-0" />
               <input 
                 type="text" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search mail in Google Workspace Enterprise" 
-                className="bg-transparent border-none focus:outline-none w-full ml-3 text-sm md:text-base text-slate-700"
+                className="bg-transparent border-none focus:outline-none w-full ml-2.5 text-sm md:text-base text-slate-900 placeholder:text-slate-500"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => setSearchQuery("")} className="min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-slate-900 transition-colors cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               )}
@@ -1598,48 +1606,50 @@ export function WorkspaceMail({ user }: { user: any }) {
               <button 
                 onClick={async () => {
                   toast.success("Synchronizing external protocols (Bank, Maps, Products, Deliveries)...");
-                  if (user && user.uid) {
-                    const emailsColRef = collection(db, "users", user.uid, "emails");
-                    const newConnEmail = {
-                      id: Date.now() + Math.random(),
-                      sender: "Valourian Logistics",
-                      email: "logistics@valourian.com",
-                      subject: "Physical App / Card / Delivery Connections Synced",
-                      body: "Your digital bank apps, physical cards, product stores, and forms are now actively connected to Maps APIs and best delivery protocols.\n\nAll physical creations generated in the app will seamlessly route through our logistics manifest.\n\nThis is a real-time verification from Valourian OS.",
-                      date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                      read: false,
-                      starred: true,
-                      timestamp: new Date().toISOString()
-                    };
-                    // Save to local inbox
-                    await setDoc(doc(emailsColRef, String(newConnEmail.id)), newConnEmail);
-                    
-                    // Actually send via real Gmail API if available
-                    if (user.email) {
-                      const htmlBody = `
-                        <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-                          <div style="background-color: #0f172a; padding: 24px; text-align: center;">
-                            <h2 style="color: #10b981; margin: 0; font-size: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Protocol Synchronization</h2>
-                          </div>
-                          <div style="padding: 32px; background-color: #ffffff;">
-                            <p style="font-size: 16px; color: #334155; line-height: 1.6;">Your digital bank apps, physical cards, product stores, and forms are now actively connected to Maps APIs and best delivery protocols.</p>
-                            <div style="margin: 30px 0; padding: 20px; background-color: #f1f5f9; border-left: 4px solid #3b82f6; border-radius: 4px;">
-                              <p style="margin: 0; color: #475569; font-family: monospace; font-size: 14px;">STATUS: ACTIVE & VERIFIED</p>
-                              <p style="margin: 8px 0 0 0; color: #475569; font-family: monospace; font-size: 14px;">ROUTING: VALOURIAN SECURE LOGISTICS</p>
-                            </div>
-                            <p style="font-size: 14px; color: #64748b;">All physical creations generated in the app will seamlessly route through our logistics manifest. This automated communication confirms external pipeline readiness.</p>
-                          </div>
-                          <div style="background-color: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0;">
-                            <p style="margin: 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Valourian Capital OS</p>
-                          </div>
+                  const newConnEmail = {
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    sender: "Valourian Logistics",
+                    email: "logistics@valourian.com",
+                    subject: "Physical App / Card / Delivery Connections Synced",
+                    preview: "Your digital bank apps, physical cards, product stores, and delivery pipelines are live...",
+                    body: "Your digital bank apps, physical cards, product stores, and forms are now actively connected to Maps APIs and best delivery protocols.\n\nAll physical creations generated in the app will seamlessly route through our logistics manifest.\n\nThis is a real-time verification from Valourian OS.",
+                    date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    read: false,
+                    starred: true,
+                    timestamp: new Date().toISOString()
+                  };
+                  recordLocalWorkspaceEmail(newConnEmail);
+                  setEmails(prev => [newConnEmail, ...prev]);
+
+                  const cloudUid = getVerifiedCloudUid();
+                  if (cloudUid) {
+                    const emailsColRef = collection(db, "users", cloudUid, "emails");
+                    await setDoc(doc(emailsColRef, String(newConnEmail.id)), newConnEmail).catch(() => {});
+                  }
+
+                  const targetEmail = user?.email || selectedAccount.email;
+                  if (targetEmail) {
+                    const htmlBody = `
+                      <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                        <div style="background-color: #0f172a; padding: 24px; text-align: center;">
+                          <h2 style="color: #10b981; margin: 0; font-size: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Protocol Synchronization</h2>
                         </div>
-                      `;
-                      const success = await sendWorkspaceEmail(user.email, newConnEmail.subject, htmlBody);
-                      if (success) {
-                        toast.success("Real Workspace Email Delivered successfully!");
-                      }
-                    } else {
-                       toast.success("Connection protocols established and local email received!");
+                        <div style="padding: 32px; background-color: #ffffff;">
+                          <p style="font-size: 16px; color: #334155; line-height: 1.6;">Your digital bank apps, physical cards, product stores, and forms are now actively connected to Maps APIs and best delivery protocols.</p>
+                          <div style="margin: 30px 0; padding: 20px; background-color: #f1f5f9; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                            <p style="margin: 0; color: #475569; font-family: monospace; font-size: 14px;">STATUS: ACTIVE & VERIFIED</p>
+                            <p style="margin: 8px 0 0 0; color: #475569; font-family: monospace; font-size: 14px;">ROUTING: VALOURIAN SECURE LOGISTICS</p>
+                          </div>
+                          <p style="font-size: 14px; color: #64748b;">All physical creations generated in the app will seamlessly route through our logistics manifest. This automated communication confirms external pipeline readiness.</p>
+                        </div>
+                        <div style="background-color: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0;">
+                          <p style="margin: 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Valourian Capital OS</p>
+                        </div>
+                      </div>
+                    `;
+                    const success = await sendWorkspaceEmail(targetEmail, newConnEmail.subject, htmlBody).catch(() => false);
+                    if (success) {
+                      toast.success("Real Workspace Email Delivered successfully!");
                     }
                   }
                 }}
@@ -1710,50 +1720,50 @@ export function WorkspaceMail({ user }: { user: any }) {
             <div className="pt-2 mt-2 border-t border-slate-100 mb-2 px-1">
               <button 
                 onClick={() => { setActiveBoardTab(activeBoardTab === "credentials" ? "mail" : "credentials"); setSelectedEmail(null); }}
-                className={`flex items-center justify-between px-4 py-2.5 rounded-full font-medium w-full transition-all ${activeBoardTab === "credentials" ? "bg-amber-100 text-amber-900 font-bold border border-amber-200" : "text-slate-700 hover:bg-slate-150"}`}
+                className={`flex items-center justify-between px-4 py-2.5 rounded-full font-medium w-full transition-all cursor-pointer ${activeBoardTab === "credentials" ? "bg-amber-100 text-amber-900 font-bold border border-amber-200" : "text-slate-700 hover:bg-slate-100"}`}
               >
                  <div className="flex items-center gap-2.5">
                     <Fingerprint className="w-4.5 h-4.5 text-amber-600" />
                     <span className="text-xs">Board Staff Directory</span>
                  </div>
-                 <span className="text-[9px] bg-amber-500 text-white font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider">OPEN</span>
+                 <span className="text-[9px] bg-amber-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">OPEN</span>
               </button>
             </div>
 
             <div className="mt-auto">
-               <div className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Workspace Intelligence</div>
+               <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Workspace Intelligence</div>
                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 text-purple-900 mx-2">
                   <div className="text-xs font-bold mb-1 flex items-center gap-2"><SparklesIcon className="w-4 h-4" />AI Ultra Enabled</div>
-                  <div className="text-[10px] leading-relaxed opacity-80">Emails are auto-summarized & prioritized by Google Cloud AI.</div>
+                  <div className="text-[10px] leading-relaxed text-purple-800">Emails are auto-summarized &amp; prioritized by Google Cloud AI.</div>
                </div>
             </div>
          </div>
 
          {/* Email List or Email View Registry Conditional */}
-         <div className="flex-1 overflow-y-auto bg-white flex flex-col relative">
+         <div className="flex-1 overflow-y-auto bg-white text-slate-900 flex flex-col relative">
             {activeBoardTab === "credentials" ? (
                <div className="p-6 md:p-8 flex flex-col gap-6">
                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-amber-200/60 pb-4 gap-4">
                    <div>
                      <h2 className="text-xl font-black text-amber-800 uppercase tracking-wider flex items-center gap-2 font-sans">
-                       <Fingerprint className="w-5 h-5 text-amber-600 animate-pulse" /> valourian.com credentials directory
+                       <Fingerprint className="w-5 h-5 text-amber-600" /> valourian.com credentials directory
                      </h2>
-                     <p className="text-xs text-slate-500 mt-1">
+                     <p className="text-xs text-slate-600 mt-1">
                        Secure physical identity overrides and clear-text passwords authorized for Aleks, Justin, and Asim.
                      </p>
                    </div>
-                   <div className="bg-amber-50 text-amber-800 text-[10px] uppercase font-mono tracking-wider px-3.5 py-1.5 rounded-full border border-amber-200 font-bold">
+                   <div className="text-amber-800 text-[11px] uppercase font-mono tracking-wider font-bold">
                      Uncensored Registry
                    </div>
                  </div>
 
-                 <div className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                   <p className="text-xs text-slate-705 leading-relaxed max-w-xl font-sans">
+                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                   <p className="text-xs text-slate-700 leading-relaxed max-w-xl font-sans">
                      <strong>Security Mandate</strong>: Founder CEO Mr. Asim Aryal has authorized open credentials visibility logs for board verification and rapid diagnostic access.
                    </p>
                    <button 
                      onClick={() => { setIsLoggedOut(true); toast.info("Lockbox active."); }}
-                     className="text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl shrink-0"
+                     className="min-h-[44px] text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl shrink-0 cursor-pointer"
                    >
                      Lock Box Portal
                    </button>
@@ -1761,13 +1771,13 @@ export function WorkspaceMail({ user }: { user: any }) {
 
                  {/* Search inside dashboard view */}
                  <div className="bg-slate-100 rounded-xl p-2.5 flex items-center border border-slate-200 max-w-md shrink-0">
-                   <Search className="w-4 h-4 text-slate-450 ml-1.5" />
+                   <Search className="w-4 h-4 text-slate-500 ml-1.5" />
                    <input 
                      type="text" 
                      placeholder="Query staff name, email, or designation..." 
                      value={searchQuery}
                      onChange={(e) => setSearchQuery(e.target.value)}
-                     className="bg-transparent border-none focus:outline-none flex-1 text-xs text-slate-800 px-2 placeholder-slate-450"
+                     className="bg-transparent border-none focus:outline-none flex-1 text-xs text-slate-900 px-2 placeholder:text-slate-500"
                    />
                  </div>
 
@@ -1778,25 +1788,25 @@ export function WorkspaceMail({ user }: { user: any }) {
                      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
                      acc.designation.toLowerCase().includes(searchQuery.toLowerCase())
                    ).map((acc, aIdx) => (
-                     <div key={`${acc.email}-${aIdx}`} className="bg-white border border-slate-200 p-5 rounded-[2rem] flex flex-col justify-between gap-4 hover:shadow-md hover:border-amber-300 transition-all">
+                     <div key={`${acc.email}-${aIdx}`} className="bg-white text-slate-900 border border-slate-200 p-5 rounded-[2rem] flex flex-col justify-between gap-4 hover:shadow-md hover:border-amber-300 transition-all">
                        <div>
                          <div className="flex items-center justify-between mb-2">
-                           <span className="text-[10px] bg-amber-50 text-amber-700 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                           <span className="text-[10px] text-amber-800 font-extrabold uppercase tracking-wider">
                              {acc.designation}
                            </span>
-                           <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                           <span className="text-[10px] font-bold text-emerald-700">{acc.status}</span>
                          </div>
                          
                          <h4 className="text-base font-bold text-slate-900">{acc.name}</h4>
-                         <p className="text-xs text-slate-505 font-mono mt-0.5">{acc.email}</p>
+                         <p className="text-xs text-slate-600 font-mono mt-0.5">{acc.email}</p>
                          
-                         <div className="mt-4 bg-slate-55 rounded-xl p-3 border border-slate-100 text-xs font-mono space-y-1">
+                         <div className="mt-4 bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs font-mono space-y-1">
                            <div className="flex justify-between">
-                             <span className="text-slate-400">Pass key:</span>
-                             <span className="font-extrabold text-slate-900 bg-amber-100/60 px-1.5 py-0.5 rounded text-[11px] select-all font-mono font-normal">{acc.password}</span>
+                             <span className="text-slate-500">Pass key:</span>
+                             <span className="font-extrabold text-slate-900 bg-amber-100/80 px-1.5 py-0.5 rounded text-[11px] select-all font-mono">{acc.password}</span>
                            </div>
                            <div className="flex justify-between">
-                             <span className="text-slate-400">Status:</span>
+                             <span className="text-slate-500">Status:</span>
                              <span className="text-emerald-700 font-bold">{acc.status}</span>
                            </div>
                          </div>
@@ -1808,7 +1818,7 @@ export function WorkspaceMail({ user }: { user: any }) {
                              navigator.clipboard.writeText(`Email: ${acc.email} | PIN: ${acc.password}`);
                              toast.success(`Copied login info for ${acc.name}!`);
                            }}
-                           className="bg-slate-100 hover:bg-slate-250 text-slate-700 text-[10px] uppercase font-bold py-2 px-3 rounded-lg flex-1 text-center"
+                           className="min-h-[44px] bg-slate-100 hover:bg-slate-200 text-slate-800 text-[10px] uppercase font-bold py-2 px-3 rounded-lg flex-1 text-center cursor-pointer"
                          >
                            Copy Info
                          </button>
@@ -1816,9 +1826,9 @@ export function WorkspaceMail({ user }: { user: any }) {
                            onClick={() => {
                              setSelectedAccount(acc);
                              setActiveBoardTab("mail");
-                             toast.success(`Securely switched to ${acc.name}'s mailbox!`, { icon: "👑" });
+                             toast.success(`Securely switched to ${acc.name}'s mailbox!`);
                            }}
-                           className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] uppercase font-bold py-2 py-3 rounded-lg flex-1 text-center shadow-sm"
+                           className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] uppercase font-bold py-2.5 px-3 rounded-lg flex-1 text-center shadow-sm cursor-pointer"
                          >
                            Quick Switch
                          </button>
@@ -1904,61 +1914,52 @@ export function WorkspaceMail({ user }: { user: any }) {
                          ) : (
                            <button
                              onClick={async () => {
-                               if (!user || !user.uid) {
-                                 toast.error("Please login to log your credentials!");
-                                 return;
-                               }
                                const toastId = toast.loading("Authenticating ledger & clearing funds...");
                                try {
-                                 const userDocRef = doc(db, "users", user.uid);
-                                 const userSnap = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-                                 let currentBalances: any = {};
-                                 if (!userSnap.empty) {
-                                   currentBalances = userSnap.docs[0].data().balances || {};
-                                 }
-                                 
-                                 const voucherVal = Number(selectedEmail.voucherAmount);
+                                 const verifiedUid = getVerifiedCloudUid();
+                                 const currentBalances = await loadSyncedBalances();
+                                 const voucherVal = Number(selectedEmail.voucherAmount) || 0;
                                  const newBalances = {
                                    ...currentBalances,
                                    AUD: (currentBalances.AUD || 0) + voucherVal
                                  };
-                                 
-                                 // 1. Update balances on user document
-                                 await setDoc(userDocRef, { balances: newBalances }, { merge: true });
-                                 
-                                 // 2. Mark specific email as claimed on user's emails subcollection
-                                 const emailRef = doc(db, "users", user.uid, "emails", String(selectedEmail.id));
-                                 await setDoc(emailRef, { claimed: true }, { merge: true });
-                                 
-                                 // 3. Mark in global vouchers collection as claimed (if it exists)
                                  const voucherCode = selectedEmail.voucherCode || "UBEREATS-VCS-9942";
-                                 const qVoucher = query(collection(db, "vouchers"), where("code", "==", voucherCode));
-                                 const voucherSnap = await getDocs(qVoucher);
-                                 if (!voucherSnap.empty) {
-                                   const vDocId = voucherSnap.docs[0].id;
-                                   await setDoc(doc(db, "vouchers", vDocId), {
-                                     claimed: true,
-                                     claimedBy: user.uid,
-                                     claimedAt: new Date().toISOString()
-                                   }, { merge: true });
+
+                                 await safeUpdateUserBalances(newBalances);
+                                 recordLocalWorkspaceEmail({ ...selectedEmail, claimed: true });
+
+                                 if (verifiedUid) {
+                                   try {
+                                     const emailRef = doc(db, "users", verifiedUid, "emails", String(selectedEmail.id));
+                                     await setDoc(emailRef, { claimed: true }, { merge: true });
+
+                                     const qVoucher = query(collection(db, "vouchers"), where("code", "==", voucherCode));
+                                     const voucherSnap = await getDocs(qVoucher);
+                                     if (!voucherSnap.empty) {
+                                       const vDocId = voucherSnap.docs[0].id;
+                                       await setDoc(doc(db, "vouchers", vDocId), {
+                                         claimed: true,
+                                         claimedBy: verifiedUid,
+                                         claimedAt: new Date().toISOString()
+                                       }, { merge: true });
+                                     }
+                                   } catch (cloudErr) {
+                                     console.warn("[WorkspaceMail] Voucher cloud sync deferred:", cloudErr);
+                                   }
                                  }
-                                 
-                                 // 4. Log transaction
-                                 await addDoc(collection(db, "transactions"), {
-                                   userId: user.uid,
+
+                                 await recordUnifiedTransaction({
                                    amount: voucherVal,
                                    currency: "AUD",
-                                   date: new Date().toISOString(),
                                    recipient: `Sovereign E-Voucher Redeem`,
                                    type: "voucher",
                                    status: "completed",
                                    description: `Redeemed AUD ${voucherVal.toFixed(2)} voucher ${voucherCode} into asset wallet. Fully backed by 1:1 RBA Bonds.`
                                  });
-                                 
+
                                  setSelectedEmail({ ...selectedEmail, claimed: true });
                                  toast.dismiss(toastId);
                                  toast.success(`Ledger cleared! Successfully added $${voucherVal.toFixed(2)} AUD to your wallet.`);
-                                 
                                } catch (err) {
                                  console.error(err);
                                  toast.dismiss(toastId);
@@ -2137,72 +2138,48 @@ export function WorkspaceMail({ user }: { user: any }) {
                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden"
+                className="bg-white text-slate-900 rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden"
               >
-                 <div className="h-16 border-b flex items-center justify-between px-8 bg-white shrink-0">
-                    <div className="flex items-center gap-4">
-                       <div className="p-2 bg-red-50 rounded-xl">
+                 <div className="h-16 border-b flex items-center justify-between px-4 sm:px-8 bg-white shrink-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                       <div className="p-2 bg-red-50 rounded-xl shrink-0">
                           <File className="w-5 h-5 text-red-600" />
                        </div>
-                       <div>
-                          <span className="font-bold text-slate-900 block leading-none">{selectedAttachment.name}</span>
-                          <span className="text-[10px] text-slate-500 font-medium">{selectedAttachment.size} • Verified Sovereign Document</span>
+                       <div className="min-w-0">
+                          <span className="font-bold text-slate-900 block leading-none truncate">{selectedAttachment.name}</span>
+                          <span className="text-[10px] text-slate-600 font-medium">{selectedAttachment.size} · Verified Sovereign Document</span>
                        </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 shrink-0">
                        <button 
                          onClick={downloadPDF}
                          disabled={isDownloading}
-                         className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                         className="min-h-[40px] flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
                        >
                           {isDownloading ? (
                              <RefreshCw className="w-4 h-4 animate-spin" />
                           ) : (
                              <Download className="w-4 h-4" />
                           )}
-                          {isDownloading ? "Generating..." : "Download PDF"}
+                          <span className="hidden sm:inline">{isDownloading ? "Generating..." : "Download PDF"}</span>
                        </button>
                        <button 
                          onClick={() => setSelectedAttachment(null)} 
-                         className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-900"
+                         className="min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-slate-100 rounded-full transition-colors text-slate-600 hover:text-slate-900 cursor-pointer"
                        >
-                          <X className="w-6 h-6" />
+                          <X className="w-5 h-5" />
                        </button>
                     </div>
                  </div>
 
-                 <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-slate-100/50 flex flex-col items-center">
+                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 bg-slate-100 flex flex-col items-center">
                     {/* The actual viewable document */}
                     <div 
                         ref={docRef}
-                        className="w-full max-w-[210mm] bg-white shadow-2xl rounded-sm border border-slate-200 p-16 md:p-20 relative overflow-hidden text-slate-900 font-sans"
-                        style={{ minHeight: '297mm' }}
+                        className="w-full max-w-[210mm] bg-white shadow-2xl rounded-sm border border-slate-200 p-6 sm:p-12 md:p-16 relative overflow-hidden text-slate-900 font-sans"
                     >
-                        {/* High Fidelity Detail Background Elements */}
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 translate-x-32 -translate-y-32 flex items-center justify-center rounded-full border border-slate-100 opacity-50" />
-                        <div className="absolute bottom-10 left-10 opacity-[0.03] pointer-events-none select-none">
-                            <h1 className="text-[120px] font-black uppercase tracking-tighter leading-none -rotate-12">COMMBANK VIP</h1>
-                        </div>
-                        
                         {/* Dynamic Content */}
                         {getDocContent(selectedAttachment, selectedEmail)}
-                        
-                        {/* Security Footer */}
-                        <div className="absolute bottom-8 left-0 right-0 px-20">
-                            <div className="flex justify-between items-end">
-                                <div className="text-[8px] font-bold text-slate-300 uppercase vertical-text">
-                                    TIMESTAMP: {new Date().toISOString()}
-                                </div>
-                                <div className="p-2 bg-white border border-slate-100 rounded">
-                                   {/* Simulated QR or Barcode area */}
-                                   <div className="w-12 h-12 bg-slate-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-rows-4 gap-0.5">
-                                      {[...Array(16)].map((_, i) => (
-                                         <div key={i} className={`w-full h-full ${Math.random() > 0.5 ? 'bg-slate-300' : 'bg-transparent'}`} />
-                                      ))}
-                                   </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                  </div>
               </motion.div>
@@ -2214,18 +2191,18 @@ export function WorkspaceMail({ user }: { user: any }) {
              initial={{ opacity: 0, y: 100, scale: 0.95 }}
              animate={{ opacity: 1, y: 0, scale: 1 }}
              exit={{ opacity: 0, scale: 0.95, y: 50 }}
-             className="fixed md:absolute inset-0 md:inset-auto md:bottom-0 md:right-[4%] lg:right-[10%] md:w-[500px] md:h-[600px] bg-white md:rounded-t-xl z-50 flex flex-col md:shadow-[0_0_40px_rgba(0,0,0,0.2)] md:border md:border-slate-200"
+             className="fixed md:absolute inset-0 md:inset-auto md:bottom-0 md:right-[4%] lg:right-[10%] md:w-[500px] md:h-[600px] bg-white text-slate-900 md:rounded-t-xl z-50 flex flex-col md:shadow-[0_0_40px_rgba(0,0,0,0.2)] md:border md:border-slate-200"
            >
-             <div className="bg-slate-800 md:bg-slate-900 text-white px-4 py-3 flex justify-between items-center md:rounded-t-xl shrink-0">
+             <div className="bg-slate-900 text-white px-4 py-3 flex justify-between items-center md:rounded-t-xl shrink-0">
                 <span className="font-medium text-sm">
                    {composeType === "new" ? "New Message" : composeType === "reply" ? "Reply" : "Forward"}
                 </span>
                 <div className="flex gap-2">
-                   <button onClick={() => setComposeOpen(false)} className="hover:bg-white/20 p-1.5 rounded transition-colors"><XIcon className="w-4 h-4" /></button>
+                   <button onClick={() => setComposeOpen(false)} className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-white/20 p-1.5 rounded transition-colors cursor-pointer"><XIcon className="w-4 h-4" /></button>
                 </div>
              </div>
              
-             <div className="bg-slate-50 border-b border-slate-100 flex gap-2 px-4 py-2 shrink-0 overflow-x-auto text-xs">
+             <div className="bg-slate-50 border-b border-slate-200 flex gap-2 px-4 py-2 shrink-0 overflow-x-auto text-xs">
                 <button
                   onClick={() => {
                     const toEl = document.getElementById('compose-to') as HTMLInputElement;
@@ -2237,9 +2214,9 @@ export function WorkspaceMail({ user }: { user: any }) {
                      toast.success("ScotPac Business Pitch Template Loaded!");
                   }}
                   type="button"
-                  className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-full border border-blue-200 transition-colors cursor-pointer font-semibold shrink-0"
+                  className="bg-blue-50 text-blue-800 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer font-semibold shrink-0 whitespace-nowrap"
                 >
-                  🚀 Load ScotPac Pitch Template
+                  ScotPac Pitch
                 </button>
                 <button
                   onClick={() => {
@@ -2252,10 +2229,10 @@ export function WorkspaceMail({ user }: { user: any }) {
                      toast.success("$14M Executive Salary Notice Template Loaded!");
                   }}
                   type="button"
-                  className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors cursor-pointer font-black shrink-0 flex items-center gap-1 shadow-sm"
+                  className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg border border-emerald-300 transition-colors cursor-pointer font-bold shrink-0 flex items-center gap-1 whitespace-nowrap"
                 >
-                  <Zap className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
-                  <span>💼 $14M Salary Notice (CommBank)</span>
+                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>$14M Salary Notice</span>
                 </button>
                 <button
                   onClick={() => {
@@ -2268,9 +2245,9 @@ export function WorkspaceMail({ user }: { user: any }) {
                      toast.success("RBA/CBA Interbank Remittance Advice Loaded!");
                   }}
                   type="button"
-                  className="bg-amber-50 text-amber-800 hover:bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 transition-colors cursor-pointer font-bold shrink-0"
+                  className="bg-amber-50 text-amber-800 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg border border-amber-300 transition-colors cursor-pointer font-bold shrink-0 whitespace-nowrap"
                 >
-                  🏛️ RBA/CBA Remittance Advice
+                  RBA/CBA Advice
                 </button>
                 <button
                   onClick={() => {
@@ -2283,22 +2260,22 @@ export function WorkspaceMail({ user }: { user: any }) {
                      toast.success("SpaceX Telemetry Template Loaded!");
                   }}
                   type="button"
-                  className="bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full border border-slate-200 transition-colors cursor-pointer text-slate-700 shrink-0"
+                  className="bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer text-slate-800 shrink-0 whitespace-nowrap"
                 >
-                  🛰️ SpaceX Telemetry
+                  SpaceX Telemetry
                 </button>
              </div>
 
-             <div className="flex flex-col flex-1 overflow-hidden">
-                <div className="border-b border-slate-100 flex px-4 shrink-0">
-                   <span className="text-slate-500 py-3 text-sm min-w-[30px] sm:min-w-[50px]">To</span>
-                   <input id="compose-to" type="text" className="flex-1 outline-none text-sm bg-transparent py-3" defaultValue={composeType === "reply" && selectedEmail ? selectedEmail.email : ""} />
+             <div className="flex flex-col flex-1 overflow-hidden bg-white text-slate-900">
+                <div className="border-b border-slate-200 flex items-center px-4 shrink-0 bg-white">
+                   <span className="text-slate-600 font-medium py-3 text-sm min-w-[36px] sm:min-w-[50px]">To</span>
+                   <input id="compose-to" type="text" placeholder="recipient@domain.com" className="flex-1 outline-none text-sm bg-white text-slate-900 placeholder:text-slate-500 py-3" defaultValue={composeType === "reply" && selectedEmail ? selectedEmail.email : ""} />
                 </div>
-                <div className="border-b border-slate-100 flex px-4 shrink-0">
-                   <input id="compose-subject" type="text" placeholder="Subject" className="flex-1 outline-none text-sm font-medium bg-transparent py-3" defaultValue={composeType === "reply" && selectedEmail ? `Re: ${selectedEmail.subject}` : composeType === "forward" && selectedEmail ? `Fwd: ${selectedEmail.subject}` : ""} />
+                <div className="border-b border-slate-200 flex items-center px-4 shrink-0 bg-white">
+                   <input id="compose-subject" type="text" placeholder="Subject" className="flex-1 outline-none text-sm font-medium bg-white text-slate-900 placeholder:text-slate-500 py-3" defaultValue={composeType === "reply" && selectedEmail ? `Re: ${selectedEmail.subject}` : composeType === "forward" && selectedEmail ? `Fwd: ${selectedEmail.subject}` : ""} />
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto">
-                   <textarea id="compose-body" className="w-full h-full min-h-[200px] outline-none resize-none text-sm text-slate-800" defaultValue={composeType !== "new" && selectedEmail ? `\n\n\n--- On ${selectedEmail.date}, ${selectedEmail.sender} wrote:\n> ${selectedEmail.body.split('\n').join('\n> ')}` : ""} />
+                <div className="flex-1 p-4 overflow-y-auto bg-white">
+                   <textarea id="compose-body" placeholder="Write your message..." className="w-full h-full min-h-[200px] outline-none resize-none text-sm bg-white text-slate-900 placeholder:text-slate-500" defaultValue={composeType !== "new" && selectedEmail ? `\n\n\n--- On ${selectedEmail.date}, ${selectedEmail.sender} wrote:\n> ${selectedEmail.body.split('\n').join('\n> ')}` : ""} />
                 </div>
                 
                 <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 mb-safe md:mb-0">
@@ -2322,71 +2299,80 @@ export function WorkspaceMail({ user }: { user: any }) {
                        };
                        
                        setComposeOpen(false);
-                       
-                       if (user && user.uid) {
-                         const emailDocRef = doc(collection(db, "users", user.uid, "emails"), String(newEmail.id));
-                         await setDoc(emailDocRef, newEmail);
-                         const htmlFormatted = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:auto;background:#0f172a;color:#f8fafc;padding:24px;border-radius:14px;"><h2 style="margin:0 0 12px 0;color:#10b981;font-size:18px;">${subj}</h2><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#e2e8f0;">${body.replace(/</g, "&lt;")}</div></div>`;
-                         const dispatchRes = await sendUnifiedEmail({
-                           to,
-                           subject: subj,
-                           htmlBody: htmlFormatted,
-                           textBody: body,
-                           senderName: selectedAccount.name,
-                           customSmtp: smtpPass ? { host: smtpHost, port: parseInt(smtpPort), user: smtpUser, pass: smtpPass, from: selectedAccount.email } : null,
-                           silentToast: true,
-                         });
-                         setDispatchLogs(getEmailDispatchLogs());
-                         if (dispatchRes.previewUrl) {
-                           toast.success("Email transmitted! Click 'Delivery Log' in the header to inspect the rendered email.");
-                         } else {
-                           toast.success(`Email transmitted via ${dispatchRes.channel} to ${to}!`);
-                         }
+                       recordLocalWorkspaceEmail(newEmail);
+                       setEmails(prev => [newEmail, ...prev]);
 
-                         if (to.toLowerCase().includes("scotpac") || to.toLowerCase().includes("david")) {
-                           toast.info("Priority handshake established. David is receiving the transmission...");
-                           setTimeout(async () => {
-                             const replyId = Date.now() + 500;
-                             const replyMail = {
-                               id: replyId,
-                               sender: "David (ScotPac Business Lending)",
-                               email: "david@scotpac.com.au",
-                               subject: `RE: ${subj}`,
-                               preview: "Thank you for the detailed briefing, Asim. I have reviewed the $1T asset structure and...",
-                               body: `Dear Mr. Asim Aryal,\n\nThank you for reaching out with this high-caliber briefing package.\n\nNeedless to say, Valourian Capital's $1T Sovereign Treasury backing and strategic stakes in Tesla (6.9%), SpaceX, BP, and Palantir, alongside your state-of-the-art AURA-9 computational infrastructure, put you in an league of your own. Securing a major operational facility of this scale is absolutely something ScotPac is prepared to facilitate.\n\nI have fast-tracked a direct callback ticket for us. Could you support a callback this afternoon at 3:00 PM Sydney time?\n\nMy executive board has already cleared the paperwork for your signature. Looking forward to speaking directly.\n\nBest regards,\n\nDavid\nSenior Lending Architect, ScotPac Business Finance\nSydney CBD Office, NSW\nMob: +61 491 570 156`,
-                               date: "Just now",
-                               read: false,
-                               starred: true,
-                               attachments: [
-                                 { name: "ScotPac_Operational_Facility_LOI.pdf", size: "2.4 MB" }
-                               ]
-                             };
-                             await setDoc(doc(collection(db, "users", user.uid, "emails"), String(replyId)), replyMail);
-                             toast.success("New email received: David (ScotPac Business Lending)!");
-                           }, 6000);
-                         } else if (to.toLowerCase().includes("elon") || to.toLowerCase().includes("spacex") || to.toLowerCase().includes("tesla")) {
-                           toast.info("Satellite telemetry response initiated...");
-                           setTimeout(async () => {
-                             const replyId = Date.now() + 500;
-                             const replyMail = {
-                               id: replyId,
-                               sender: "Elon Musk",
-                               email: "elon@spacex.com",
-                               subject: `RE: ${subj}`,
-                               preview: "Payload priority is locked, Asim. Starlink VIP routing is live...",
-                               body: `Asim,\n\nApproved. The dedicated orbital routing for your AURA-9 compute layers is live across all satellites over Australia and the APAC region. Unbreakable quantum-encrypted laser backhaul is active.\n\nRegarding the 10-year Starship heavy-lift priority slot, SpaceX flight planners have integrated your logistics schedules. We're launching the next generation of nodes next month.\n\nSovereign treasury settlement has cleared on our end.\n\nLet's build the future.\n\nBest,\nElon\nTesla / SpaceX`,
-                               date: "Just now",
-                               read: false,
-                               starred: true,
-                               attachments: []
-                             };
-                             await setDoc(doc(collection(db, "users", user.uid, "emails"), String(replyId)), replyMail);
-                             toast.success("New email received from Elon Musk!");
-                           }, 6000);
-                         }
+                       const cloudUid = getVerifiedCloudUid();
+                       if (cloudUid) {
+                         const emailDocRef = doc(collection(db, "users", cloudUid, "emails"), String(newEmail.id));
+                         await setDoc(emailDocRef, newEmail).catch(() => {});
+                       }
+
+                       const htmlFormatted = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:auto;background:#0f172a;color:#f8fafc;padding:24px;border-radius:14px;"><h2 style="margin:0 0 12px 0;color:#10b981;font-size:18px;">${subj}</h2><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#e2e8f0;">${body.replace(/</g, "&lt;")}</div></div>`;
+                       const dispatchRes = await sendUnifiedEmail({
+                         to,
+                         subject: subj,
+                         htmlBody: htmlFormatted,
+                         textBody: body,
+                         senderName: selectedAccount.name,
+                         customSmtp: smtpPass ? { host: smtpHost, port: parseInt(smtpPort), user: smtpUser, pass: smtpPass, from: selectedAccount.email } : null,
+                         silentToast: true,
+                       });
+                       setDispatchLogs(getEmailDispatchLogs());
+                       if (dispatchRes.previewUrl) {
+                         toast.success("Email transmitted! Click 'Delivery Log' in the header to inspect the rendered email.");
                        } else {
-                         setEmails([newEmail, ...emails]);
-                         toast.success("Email sent! (Local Session)");
+                         toast.success(`Email transmitted via ${dispatchRes.channel} to ${to}!`);
+                       }
+
+                       if (to.toLowerCase().includes("scotpac") || to.toLowerCase().includes("david")) {
+                         toast.info("Priority handshake established. David is receiving the transmission...");
+                         setTimeout(async () => {
+                           const replyId = Date.now() + 500;
+                           const replyMail = {
+                             id: replyId,
+                             sender: "David (ScotPac Business Lending)",
+                             email: "david@scotpac.com.au",
+                             subject: `RE: ${subj}`,
+                             preview: "Thank you for the detailed briefing, Asim. I have reviewed the $1T asset structure and...",
+                             body: `Dear Mr. Asim Aryal,\n\nThank you for reaching out with this high-caliber briefing package.\n\nNeedless to say, Valourian Capital's $1T Sovereign Treasury backing and strategic stakes in Tesla (6.9%), SpaceX, BP, and Palantir, alongside your state-of-the-art AURA-9 computational infrastructure, put you in an league of your own. Securing a major operational facility of this scale is absolutely something ScotPac is prepared to facilitate.\n\nI have fast-tracked a direct callback ticket for us. Could you support a callback this afternoon at 3:00 PM Sydney time?\n\nMy executive board has already cleared the paperwork for your signature. Looking forward to speaking directly.\n\nBest regards,\n\nDavid\nSenior Lending Architect, ScotPac Business Finance\nSydney CBD Office, NSW\nMob: +61 491 570 156`,
+                             date: "Just now",
+                             read: false,
+                             starred: true,
+                             attachments: [
+                               { name: "ScotPac_Operational_Facility_LOI.pdf", size: "2.4 MB" }
+                             ]
+                           };
+                           recordLocalWorkspaceEmail(replyMail);
+                           setEmails(prev => [replyMail, ...prev]);
+                           if (cloudUid) {
+                             await setDoc(doc(collection(db, "users", cloudUid, "emails"), String(replyId)), replyMail).catch(() => {});
+                           }
+                           toast.success("New email received: David (ScotPac Business Lending)!");
+                         }, 6000);
+                       } else if (to.toLowerCase().includes("elon") || to.toLowerCase().includes("spacex") || to.toLowerCase().includes("tesla")) {
+                         toast.info("Satellite telemetry response initiated...");
+                         setTimeout(async () => {
+                           const replyId = Date.now() + 500;
+                           const replyMail = {
+                             id: replyId,
+                             sender: "Elon Musk",
+                             email: "elon@spacex.com",
+                             subject: `RE: ${subj}`,
+                             preview: "Payload priority is locked, Asim. Starlink VIP routing is live...",
+                             body: `Asim,\n\nApproved. The dedicated orbital routing for your AURA-9 compute layers is live across all satellites over Australia and the APAC region. Unbreakable quantum-encrypted laser backhaul is active.\n\nRegarding the 10-year Starship heavy-lift priority slot, SpaceX flight planners have integrated your logistics schedules. We're launching the next generation of nodes next month.\n\nSovereign treasury settlement has cleared on our end.\n\nLet's build the future.\n\nBest,\nElon\nTesla / SpaceX`,
+                             date: "Just now",
+                             read: false,
+                             starred: true,
+                             attachments: []
+                           };
+                           recordLocalWorkspaceEmail(replyMail);
+                           setEmails(prev => [replyMail, ...prev]);
+                           if (cloudUid) {
+                             await setDoc(doc(collection(db, "users", cloudUid, "emails"), String(replyId)), replyMail).catch(() => {});
+                           }
+                           toast.success("New email received from Elon Musk!");
+                         }, 6000);
                        }
                      }}
                      className="bg-[#0b57d0] hover:bg-[#0b57d0]/90 text-white px-6 py-2.5 rounded-full font-medium text-sm transition-colors cursor-pointer"

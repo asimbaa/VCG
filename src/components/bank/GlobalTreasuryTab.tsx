@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, PieChart, Pie, Cell, Legend } from 'recharts';
+import { SafeResponsiveContainer } from '../shared/SafeResponsiveContainer';
 import { motion } from 'framer-motion';
 import { Globe, TrendingUp, ShieldCheck, DollarSign, Activity, Lock, BarChart3, Database, Zap, Sparkles, CreditCard, ChevronRight } from 'lucide-react';
 import { MassiveRateExpansionModal } from './MassiveRateExpansionModal';
@@ -200,7 +201,7 @@ export function GlobalTreasuryTab() {
             <div className="h-[350px] w-full min-w-0 relative">
               {activeMetric === 'yield' ? (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                  <SafeResponsiveContainer minHeight={240}>
                     <AreaChart data={yieldData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorYield" x1="0" y1="0" x2="0" y2="1">
@@ -219,11 +220,11 @@ export function GlobalTreasuryTab() {
                       <Area type="monotone" dataKey="yield" name="Valourian Alpha" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorYield)" />
                       <Area type="monotone" dataKey="benchmark" name="Global Benchmark" stroke="#94a3b8" strokeWidth={2} fillOpacity={1} fill="url(#colorBench)" strokeDasharray="5 5" />
                     </AreaChart>
-                  </ResponsiveContainer>
+                  </SafeResponsiveContainer>
                 </motion.div>
               ) : (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full min-w-0 flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                  <SafeResponsiveContainer minHeight={240}>
                     <PieChart>
                       <Pie
                         data={allocationData}
@@ -248,7 +249,7 @@ export function GlobalTreasuryTab() {
                         wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', fontFamily: 'monospace' }}
                       />
                     </PieChart>
-                  </ResponsiveContainer>
+                  </SafeResponsiveContainer>
                 </motion.div>
               )}
             </div>

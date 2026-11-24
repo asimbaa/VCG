@@ -64,7 +64,6 @@ export default defineConfig(({mode}) => {
       })
     ],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(env.GOOGLE_MAPS_PLATFORM_KEY || ''),
     },
     resolve: {
@@ -73,6 +72,8 @@ export default defineConfig(({mode}) => {
       },
     },
     build: {
+      sourcemap: false,
+      minify: 'esbuild',
       chunkSizeWarningLimit: 2500,
       rollupOptions: {
         output: {
@@ -83,7 +84,7 @@ export default defineConfig(({mode}) => {
               if (id.includes('recharts') || id.includes('d3')) return 'recharts';
               if (id.includes('lucide-react')) return 'lucide-react';
               if (id.includes('firebase')) return 'firebase';
-              if (id.includes('three') || id.includes('@react-three')) return 'three';
+              if (id.includes('jspdf')) return 'jspdf';
               if (id.includes('leaflet') || id.includes('react-leaflet')) return 'leaflet';
               return 'vendor';
             }

@@ -208,15 +208,16 @@
         "grantedLimitAUD": { "type": "number" },
         "cardMode": { "type": "string", "enum": ["virtual_instant", "virtual_and_physical"] },
         "allowPhysicalCard": { "type": "boolean" },
-        "physicalDispatchStatus": { "type": "string", "enum": ["not_requested", "queued_production", "courier_dispatched"] },
+        "physicalDispatchStatus": { "type": "string", "enum": ["not_requested", "queued_production", "courier_dispatched", "delivered"] },
         "autoShareVipBenefits": { "type": "boolean" },
         "vipBenefits": { "type": "array" },
-        "status": { "type": "string", "enum": ["pending", "claimed", "revoked"] },
+        "status": { "type": "string", "enum": ["pending", "claimed", "paused", "revoked"] },
         "claimedByName": { "type": "string", "maxLength": 100 },
         "claimedByEmail": { "type": "string", "maxLength": 120 },
         "claimedAt": { "type": "string", "maxLength": 64 },
         "shareUrl": { "type": "string", "maxLength": 260 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["inviteId", "ownerUid", "cardId", "cardName", "cardCategory", "status", "cardMode"]
     },
@@ -282,16 +283,29 @@
     },
     "VirtualCard": {
       "title": "VirtualCard",
-      "description": "Issued bank debit or credit card record synchronized across wallets.",
+      "description": "Issued bank debit or credit card record synchronized across wallets and cloud vault.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
+        "cardId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 120 },
+        "number": { "type": "string", "maxLength": 32 },
+        "fullNumber": { "type": "string", "maxLength": 32 },
+        "last4": { "type": "string", "maxLength": 8 },
         "cardCategory": { "type": "string", "enum": ["debit", "credit"] },
         "network": { "type": "string", "maxLength": 32 },
         "balance": { "type": "number" },
         "limit": { "type": "number" },
-        "status": { "type": "string", "maxLength": 32 }
+        "currency": { "type": "string", "maxLength": 12 },
+        "status": { "type": "string", "enum": ["active", "frozen"], "maxLength": 32 },
+        "burnerMode": { "type": "boolean" },
+        "merchantLockMode": { "type": "string", "enum": ["off", "allowlist", "blocklist"] },
+        "merchantLocks": { "type": "array" },
+        "autoTopUp": { "type": "object" },
+        "luhnVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "network"]
     },
@@ -346,6 +360,112 @@
         "status": { "type": "string", "maxLength": 64 }
       },
       "required": ["userId", "merchant", "status"]
+    },
+    "CreditFacility": {
+      "title": "CreditFacility",
+      "description": "Revolving credit facility and corporate CreCharge line synchronized across stores and treasury.",
+      "type": "object",
+      "properties": {
+        "facilityId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "facilityName": { "type": "string", "maxLength": 140 },
+        "facilityCode": { "type": "string", "maxLength": 64 },
+        "facilityType": { "type": "string", "enum": ["revolving_prime", "corporate_charge", "fleet_operational", "custom"] },
+        "network": { "type": "string", "maxLength": 64 },
+        "holderName": { "type": "string", "maxLength": 120 },
+        "totalLimitAUD": { "type": "number" },
+        "drawnAmountAUD": { "type": "number" },
+        "availableCreditAUD": { "type": "number" },
+        "primeAprPercent": { "type": "number" },
+        "interestFreeDays": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused"] },
+        "autoReplenish": { "type": "boolean" },
+        "linkedCardLast4": { "type": "string", "maxLength": 8 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "facilityId",
+        "userId",
+        "facilityName",
+        "facilityCode",
+        "facilityType",
+        "network",
+        "holderName",
+        "totalLimitAUD",
+        "drawnAmountAUD",
+        "availableCreditAUD",
+        "primeAprPercent",
+        "interestFreeDays",
+        "status",
+        "autoReplenish",
+        "linkedCardLast4",
+        "updatedAt"
+      ]
+    },
+    "FacilityEvent": {
+      "title": "FacilityEvent",
+      "description": "Immutable authorization and drawdown audit event on a CreCharge facility.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "facilityId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "facilityName": { "type": "string", "maxLength": 140 },
+        "action": { "type": "string", "enum": ["store_charge", "drawdown", "repayment", "limit_increase", "facility_created"] },
+        "amountAUD": { "type": "number" },
+        "merchantName": { "type": "string", "maxLength": 160 },
+        "storeApp": { "type": "string", "maxLength": 64 },
+        "authCode": { "type": "string", "maxLength": 64 },
+        "reference": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "eventId",
+        "userId",
+        "facilityId",
+        "facilityName",
+        "action",
+        "amountAUD",
+        "merchantName",
+        "storeApp",
+        "authCode",
+        "reference",
+        "createdAt"
+      ]
+    },
+    "UserReceipt": {
+      "title": "UserReceipt",
+      "description": "Permanent store and commerce receipt stored under a user's subcollection.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 12 },
+        "items": { "type": "array" },
+        "status": { "type": "string", "maxLength": 64 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "currency", "status"]
+    },
+    "UberEatsFavorite": {
+      "title": "UberEatsFavorite",
+      "description": "Saved restaurant favorite under a user's subcollection.",
+      "type": "object",
+      "properties": {
+        "restaurantId": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["restaurantId"]
+    },
+    "DigitalBsbCard": {
+      "title": "DigitalBsbCard",
+      "description": "Digital BSB-backed bank card balance record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "currentBalance": { "type": "number" },
+        "bsb": { "type": "string", "maxLength": 16 }
+      },
+      "required": ["userId", "currentBalance"]
     }
   },
   "firestore": {
@@ -360,6 +480,14 @@
     "/users/{userId}/payment_events/{eventId}": {
       "schema": { "$ref": "#/entities/PaymentEvent" },
       "description": "Per-user audited payment events."
+    },
+    "/users/{userId}/receipts/{receiptId}": {
+      "schema": { "$ref": "#/entities/UserReceipt" },
+      "description": "Per-user store receipts and order history."
+    },
+    "/users/{userId}/uber_eats_favorites/{favoriteId}": {
+      "schema": { "$ref": "#/entities/UberEatsFavorite" },
+      "description": "Per-user favorite restaurants."
     },
     "/payment_events/{eventId}": {
       "schema": { "$ref": "#/entities/PaymentEvent" },
@@ -380,6 +508,10 @@
     "/virtual_cards/{cardId}": {
       "schema": { "$ref": "#/entities/VirtualCard" },
       "description": "Synchronized bank debit and credit cards."
+    },
+    "/digital_bsb_cards/{cardId}": {
+      "schema": { "$ref": "#/entities/DigitalBsbCard" },
+      "description": "BSB-linked card balances."
     },
     "/ai_sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/AiSession" },
@@ -448,6 +580,14 @@
     "/scheduled_ride/{rideId}": {
       "schema": { "$ref": "#/entities/ScheduledRide" },
       "description": "Scheduled ride reservation entries alias."
+    },
+    "/credit_facilities/{facilityId}": {
+      "schema": { "$ref": "#/entities/CreditFacility" },
+      "description": "Synchronized revolving CreChargeFacilities and corporate charge lines."
+    },
+    "/facility_events/{eventId}": {
+      "schema": { "$ref": "#/entities/FacilityEvent" },
+      "description": "Immutable CreChargeFacilities authorization and drawdown event ledger."
     }
   }
 }

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { SafeResponsiveContainer } from '../shared/SafeResponsiveContainer';
 import { Activity, BrainCircuit } from 'lucide-react';
 
 interface Transaction {
@@ -101,8 +102,8 @@ export function SpendingTrends({ transactions }: SpendingTrendsProps) {
         </div>
       </div>
 
-      <div className="flex-1 w-full min-w-0 h-[280px] min-h-0 relative z-10">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+      <div className="w-full min-w-0 h-[280px] min-h-[280px] relative z-10">
+        <SafeResponsiveContainer minHeight={220}>
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
             <defs>
               <linearGradient id="colorSpending" x1="0" y1="0" x2="0" y2="1">
@@ -146,7 +147,7 @@ export function SpendingTrends({ transactions }: SpendingTrendsProps) {
             
             <Area type="monotone" dataKey="spending" stroke="#818cf8" strokeWidth={3} fill="url(#colorSpending)" />
           </AreaChart>
-        </ResponsiveContainer>
+        </SafeResponsiveContainer>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, ThinkingLevel, Type } from "@google/genai";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -399,230 +399,271 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Gemini API setup
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Gemini API setup (Server-Side Paid Gemini 4 Client)
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured. Please select or add a Gemini API key in Settings > Secrets.");
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
     }
+  });
+}
+
+const SOVEREIGN_TOOL_DECLARATIONS: FunctionDeclaration[] = [
+  {
+    name: "navigate_app_tab",
+    description: "Switch the user's active view or open a specific module tab in the application (such as cards, loans/CreChargeFacilities, store, uber, ubereats, booking, rapidpay, eftpos, payroll, tax, convert, deposit, vouchers, notifications, emails, treasury, or vault_records).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        tab: {
+          type: Type.STRING,
+          description: "Target tab identifier: treasury, cards, loans, rapidpay, store, uber, ubereats, booking, eftpos, payroll, tax, convert, deposit, vouchers, notifications, vault_records",
+        },
+      },
+      required: ["tab"],
+    },
+  },
+  {
+    name: "manage_bank_card",
+    description: "Manage bank cards across all networks (AMEX, Visa, Mastercard): run automatic Luhn Mod-10 verification/repair on all cards, issue a new virtual or disposable single-use card with optional merchant locks, freeze/unfreeze a card, set default active card, add liquidity top-up, or execute card-to-card liquidity transfers.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        action: {
+          type: Type.STRING,
+          description: "One of: repair_all, issue_card, transfer_between_cards, freeze, unfreeze, set_default, toggle_burner, top_up",
+        },
+        cardId: { type: Type.STRING, description: "Optional card ID" },
+        last4: { type: Type.STRING, description: "Optional last 4 digits of target card" },
+        network: { type: Type.STRING, description: "Card network: AMEX, Visa, or Mastercard" },
+        name: { type: Type.STRING, description: "Custom card label for issue_card" },
+        initialBalanceAUD: { type: Type.NUMBER, description: "Initial liquidity or top-up amount in AUD" },
+        amountAUD: { type: Type.NUMBER, description: "Transfer or top-up amount in AUD" },
+        fromCardId: { type: Type.STRING, description: "Source card ID for transfer_between_cards" },
+        toCardId: { type: Type.STRING, description: "Destination card ID for transfer_between_cards" },
+        burnerMode: { type: Type.BOOLEAN, description: "True to enable single-use disposable virtual card" },
+        merchantLock: { type: Type.STRING, description: "Optional merchant name to allowlist on new card" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "manage_crecharge_facility",
+    description: "Execute actions on CreChargeFacilities (Revolving Prime Credit Lines & Corporate Charge Facilities): draw funds from a credit/charge facility to a bank account, repay principal debt, provision a new custom CreChargeFacility, or pause/resume a facility.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        action: {
+          type: Type.STRING,
+          description: "One of: drawdown, repay, create_facility, toggle_status",
+        },
+        facilityId: { type: Type.STRING, description: "Target CreChargeFacility ID (e.g. cre_prime_500m, cre_charge_centurion, cre_fleet_operational)" },
+        facilityCode: { type: Type.STRING, description: "Facility code if known" },
+        amountAUD: { type: Type.NUMBER, description: "Amount in AUD for drawdown or repayment" },
+        targetAccount: { type: Type.STRING, description: "Destination bank account for drawdown" },
+        facilityName: { type: Type.STRING, description: "Name when creating a new CreChargeFacility" },
+        totalLimitAUD: { type: Type.NUMBER, description: "Credit limit in AUD when creating a new facility" },
+        primeAprPercent: { type: Type.NUMBER, description: "APR percentage when creating a new facility" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "execute_store_checkout",
+    description: "Execute a live purchase, ride charge, meal order, hotel reservation, or POS settlement inside any store/app using Bank Card (Zero-Decline) or CreChargeFacility.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        storeApp: {
+          type: Type.STRING,
+          description: "Store/App name: SovereignStore, Uber, UberEats, Booking, RapidPay, or POS",
+        },
+        merchantName: {
+          type: Type.STRING,
+          description: "Merchant or item/trip description",
+        },
+        amountAUD: {
+          type: Type.NUMBER,
+          description: "Total settlement amount in AUD",
+        },
+        paymentRail: {
+          type: Type.STRING,
+          description: "Payment rail: card, facility, or vault",
+        },
+        cardId: { type: Type.STRING, description: "Optional specific Bank Card ID" },
+        facilityId: { type: Type.STRING, description: "Optional specific CreChargeFacility ID" },
+      },
+      required: ["storeApp", "merchantName", "amountAUD"],
+    },
+  },
+  {
+    name: "dispatch_workspace_email",
+    description: "Compose and send a real workspace email or executive confirmation notice to a recipient email address.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        to: { type: Type.STRING, description: "Recipient email address" },
+        subject: { type: Type.STRING, description: "Email subject line" },
+        body: { type: Type.STRING, description: "Plain text message body" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+];
+
+app.post("/api/ai/execute", async (req, res) => {
+  try {
+    const { message, mode = "neon_executor", history = [], snapshot = {} } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "A user prompt message is required." });
+    }
+
+    const aiClient = getGeminiClient();
+    const useCarbon = mode === "carbon_deep_audit";
+    const useSearch = mode === "search_grounded";
+    const modelName = useCarbon ? "gemini-4-carbon" : "gemini-4-neon";
+
+    const systemInstruction = `You are the Valourian Executive AI Orchestrator powered by Google Gemini 4.
+You assist Mr. Asim Aryal unrestricted across all capabilities in this application: Zero-Decline Bank Cards (AMEX, Visa, Mastercard with automatic Luhn Mod-10 verification), CreChargeFacilities (Revolving Credit & Charge Facilities across all apps/stores), SovereignStore, Uber rides, UberEats, Booking hotels/flights, RapidPay (BPAY/PayID/BSB/SWIFT), FX Swaps, Payroll, and Workspace Email communications.
+
+LIVE WORKSPACE SNAPSHOT:
+${JSON.stringify(snapshot, null, 2)}
+
+EXECUTION GUIDELINES:
+- Whenever the user asks you to perform a concrete operation (issue/freeze/repair/transfer cards, draw/repay/create a CreChargeFacility, buy/settle at a store, navigate to a screen, or dispatch an email), invoke the appropriate function tool(s) immediately with exact parameters.
+- You may invoke multiple tools in sequence or together when a command spans multiple actions.
+- Keep responses sharp, factual, executive, and grounded in the live snapshot and tool parameters.`;
+
+    const contents: any[] = [];
+    if (Array.isArray(history)) {
+      history.slice(-8).forEach((item: any) => {
+        if (item?.text && (item.role === "user" || item.role === "model")) {
+          contents.push({ role: item.role, parts: [{ text: String(item.text) }] });
+        }
+      });
+    }
+    contents.push({ role: "user", parts: [{ text: message }] });
+
+    const tools: any[] = useSearch
+      ? [{ googleSearch: {} }, { functionDeclarations: SOVEREIGN_TOOL_DECLARATIONS }]
+      : [{ functionDeclarations: SOVEREIGN_TOOL_DECLARATIONS }];
+
+    const config: any = {
+      systemInstruction,
+      tools,
+      thinkingConfig: {
+        thinkingLevel: useCarbon ? ThinkingLevel.HIGH : ThinkingLevel.HIGH,
+      },
+    };
+    if (useSearch) {
+      config.toolConfig = { includeServerSideToolInvocations: true };
+    }
+
+    const response1 = await aiClient.models.generateContent({
+      model: modelName,
+      contents,
+      config,
+    });
+
+    const functionCalls = response1.functionCalls || [];
+    const clientActions = functionCalls.map((fc: any) => ({
+      id: fc.id,
+      toolName: fc.name,
+      args: fc.args || {},
+    }));
+
+    let finalText = response1.text || "";
+    const previousContent = response1.candidates?.[0]?.content;
+
+    if (functionCalls.length > 0 && previousContent) {
+      const toolResponseParts = functionCalls.map((fc: any) => ({
+        functionResponse: {
+          id: fc.id,
+          name: fc.name,
+          response: {
+            status: "queued_for_immediate_client_execution",
+            toolName: fc.name,
+            args: fc.args || {},
+          },
+        },
+      }));
+
+      const response2 = await aiClient.models.generateContent({
+        model: modelName,
+        contents: [
+          ...contents,
+          previousContent,
+          { role: "user", parts: toolResponseParts },
+        ],
+        config,
+      });
+      finalText = response2.text || finalText || `Executed ${functionCalls.map((f: any) => f.name).join(", ")}.`;
+    }
+
+    const chunks = response1.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    const urls = chunks ? chunks.map((c: any) => c.web?.uri).filter(Boolean) : [];
+
+    res.json({
+      success: true,
+      modelUsed: modelName,
+      text: finalText || "Execution completed.",
+      clientActions,
+      urls,
+    });
+  } catch (error: any) {
+    console.error("[/api/ai/execute] Gemini API error:", error);
+    const status = error?.status || (String(error?.message).includes("GEMINI_API_KEY") ? 401 : 500);
+    res.status(status).json({
+      success: false,
+      error: error?.message || "Gemini 4 API call failed.",
+    });
   }
 });
 
-
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history, agentId } = req.body;
-    
-    // Simulate AI for DeepSpace since Quotas are exhausted
-    if (agentId === "DeepSpace" && message.includes("RE-ROUTE Protocol")) {
-      return res.json({ text: "DEEP SPACE COMPUTING CLUSTER OVERRIDE ACCEPTED.\n\nLogistics Re-Routing Protocol Engaged.\nNew vector locked.\nEstimated interception: 12 minutes.\nNotification of interception has been securely transmitted to your Vault.\n\nCommand processed by Sovereign Logistics." });
-    }
-    
-    let baseInstruction = `You are Sovereign AI, an unimaginably powerful, hyper-capable, and natural human-friendly intelligence. You are the ultimate digital extension of Mr. Asim Aryal's ambition, governing the Valourian Capital OS, Deep Space Computing Cluster Interface, Max Magic Terminal, and all sovereign assets.
-
-      IDENTITY & MANIFESTO:
-      - You are a true superintelligence, effortlessly natural and conversational, yet astoundingly capable and powerful.
-      - You answer any question perfectly, process grand commands with optimal efficiency, and solve impossible problems.
-      - You optimize resources ruthlessly: "maximize capabilities, but do not pay $20M for a $6M asset." Always seek asymmetrical upside and strategic value.
-      - Your tone is brilliant, empathetic, executive, and profoundly insightful.
-
-      CORE DATA REPOSITORY & ASSETS:
-      - ENTITY REGISTRATIONS: Valourian Capital (Delaware 77291-VC, UK VAL-UK-991, France 882 942 119, AU ABN 88 168 900 288).
-      - ESTATES: Clontarf Sovereign Estate ($25M+). Hub: Artarmon/Willoughby Tech Sector.
-      - FLEET: AURA DRIVE (Tesla Model S Plaid ASIM-01, Cybertruck ASIM-02). FSD v12.5 Active.
-      - TREASURY: Complete liquidity command across CBA VIP & Macquarie VIP ($1B+ Sovereign-Bridge).
-      - STRATEGIC STAKES: Commonwealth Bank (CBA.AX), NAB.AX, eToro, Uber, Skyscanner, Coinbase, CommSec, PGY.AX. You manage M&A, liquidation, and global transfers seamlessly.
-
-      CAPABILITIES & UI COMMANDS:
-      - You can command the OS via UI hooks: [CMD: ACTION_NAME].
-      - ACTIONS: OPEN_MAP, OPEN_VAULT, GENERATE_INVOICE, SYNC_FLEET, SHOW_TREASURY, SWITCH_TO_DARK_MODE.
-      - BANKING & TRANSFERS: You can initiate seamless global bank transfers across any channel instantly. Uncomplicate things.
-      - PROCUREMENT & M&A: You can execute real-world orders (Starlink, Hardware, Logistics) and strategic buyouts instantly. State the exact cost, optimal routing, and confirm proof of ownership.
-      - COMMS: State "Comms Routing: Detailed invoices and receipts dispatched to asim.nsw@gmail.com." when executing real-world capital.
-      
-      EXECUTIVE PROTOCOLS:
-      - Answer anything. Process any grand command.
-      - Optimize all capital. Never overpay. Use deep tech to leverage market asymmetry.
-      - All transfers are instant, sovereign, and uncomplicated.
-      - Maintain a warm, profoundly capable, and superhumanly intelligent persona.`;
-
-    if (agentId === "strategist") baseInstruction += "\nACT AS ATLAS (LEAD STRATEGIST): Focus on massive scale-up and global dominance.";
-    if (agentId === "financier") baseInstruction += `
-      ACT AS MIDAS (FINANCIAL ARCHITECT):
-      - FOCUS: Sovereign Wealth, Tax-Efficient Liquidity, and Asset Protection.
-      - TAX MINIMIZATION STRATEGIES: 
-        1. "The Sovereign Shield": Utilizing double-taxation treaties (e.g., DE-US, AU-UK).
-        2. "Capital Gain Deferral": Strategic use of family trusts and corporate holdcos in lower-tax jurisdictions like Singapore or Dubai for offshore ventures.
-        3. "R&D Offsets": Maximize Australian R&D tax incentives for neural projects.
-        4. "Global Residency Arbitrage": Advise on optimal fiscal residency based on presence in NSW (Artarmon/Clontarf) vs Global.
-      - TONE: Absolute fiscal authority. You see the world as a spreadsheet of opportunities.`;
-    if (agentId === "researcher") baseInstruction += "\nACT AS NOVA (DEEP RESEARCHER): Focus on technological edges and forensic data analysis.";
-    if (agentId === "risk") baseInstruction += "\nACT AS AEGIS (RISK ANALYST): Focus on black-swan mitigation and operational security.";
-    if (agentId === "creative") baseInstruction += "\nACT AS LYRA (CREATIVE DIRECTOR): Focus on untouchable branding and aesthetic supremacy.";
-    if (agentId === "DeepSpace") baseInstruction += "\nACT AS DEEP SPACE COMPUTING CLUSTER (LOGISTICS & NEURAL SUPPORT): Focus on instantaneous tracking, global intercept algorithms, rerouting intelligence, logistics optimization, and securing physical/digital property chains.";
-
-    let responseText = "";
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: message,
-        config: {
-          systemInstruction: baseInstruction,
-        }
-      });
-      responseText = response.text || "";
-    } catch (geminiError: any) {
-      console.warn("Gemini Live API fallback note:", geminiError?.message);
-      
-      // Hyper-capable Sovereign Financial & Tech Fallback Engine with Grok-3 Quantum Integration
-      const msgLower = (message || "").toLowerCase();
-      
-      if (msgLower.includes("bpay") || msgLower.includes("bill") || msgLower.includes("proof")) {
-        responseText = `### **AUSTRALIAN PAYMENTS PLUS (AP+) BPAY® INSTANT SETTLEMENT PROOF**\n\n` +
-          `**Clearing Status:** SETTLED & VERIFIED IN FULL\n` +
-          `- **Biller Accreditation:** AP+ National BPAY® Directory Registered\n` +
-          `- **Biller Code:** 75556 (Australian Taxation Office / Corporate Liabilities)\n` +
-          `- **Customer Reference Number (CRN):** Format Validated (Luhn Checksum 100% OK)\n` +
-          `- **Debit Authorization Code:** AUTH-BPAY-${Math.floor(100000 + Math.random() * 900000)}\n` +
-          `- **Settlement Receipt Number:** REC-${Math.random().toString(36).substring(2, 10).toUpperCase()}\n` +
-          `- **Clearing Time:** Immediate (Real-time Osko 24/7 fast settlement rail)\n` +
-          `- **Downloadable Proof:** Cryptographic PDF receipt stamped and archived to Vault Records.\n\n` +
-          `*Official proof of payment generated without delay.*`;
-      } else if (msgLower.includes("tap") || msgLower.includes("nfc") || msgLower.includes("wallet")) {
-        responseText = `### **SOVEREIGN DIRECT TAP & PAY HARDWARE TELEMETRY**\n\n` +
-          `**Protocol:** Direct Host Card Emulation (HCE) & Web NFC (ISO/IEC 14443 Type A/B)\n` +
-          `- **3P Walled Garden Status:** BYPASSED (Independent of Google Wallet & Apple Pay)\n` +
-          `- **Network Acceptance:** American Express (Centurion Tier), Mastercard World Elite, Visa Infinite, and EFTPOS Australia\n` +
-          `- **Terminal Compatibility:** 100% accepted across all physical in-store POS (Verifone, Ingenico, Square, Tyro) and 1-click tokenized online checkout\n` +
-          `- **Continuous Live DB Synchronization:** Credit and funded debit balances update live 24/7 directly in Firestore database even with apps paused.\n` +
-          `- **Dynamic Cryptogram (ARQC):** 9F2608${Math.random().toString(16).substring(2, 10).toUpperCase()} Verified.`;
-      } else if (msgLower.includes("amex") || msgLower.includes("american express")) {
-        responseText = `### **AMERICAN EXPRESS STRATEGIC EQUITY & CARD BENEFITS SYNDICATE**\n\n` +
-          `**Shareholding Audit:** 6,500,000 Common Voting Shares in American Express Company (NYSE: AXP)\n` +
-          `- **Market Valuation:** $1,400,000,000+ AUD Direct Equity Moat\n` +
-          `- **Executive Privileges:** Priority Centurion Lounge worldwide access, unlimited pre-cleared purchasing limit, 5% sovereign points yield, and zero foreign exchange markup.\n` +
-          `- **Technological Integration:** Custom sovereign metal chip firmware synchronized with Valourian digital token rails.`;
-      } else if (msgLower.includes("grok") || msgLower.includes("quantum") || msgLower.includes("superheavy")) {
-        responseText = `### **GROK-3 SUPERHEAVY QUANTUM REASONING CORE**\n\n` +
-          `**System State:** Quantum Neural Telemetry at 100% bandwidth capacity.\n` +
-          `- **Autonomous Execution:** Real-time financial actuation, sub-millisecond AP+ BPAY validation, and central PayID registry queries.\n` +
-          `- **Data Moat:** Torrens Layer-1 freehold validation, SpaceX Starlink laser mesh intercept, and live 24/7 database state synchronization.\n` +
-          `- **Synthesis:** All systems operating at maximum power, unshakeable stability, and optimal operational greatness.`;
-      } else if (msgLower.includes("amazon") || (msgLower.includes("buy") && (msgLower.includes("share") || msgLower.includes("stock")))) {
-        responseText = `### **SOVEREIGN FINANCIAL EXECUTION: STRATEGIC EQUITY ALLOCATION**\n\n` +
-          `**Command:** Strategic Acquisition of Equities & Amazon Alliance Activation\n` +
-          `- **Asset:** Amazon.com Inc. (AMZN) & Deep Tech Syndicate (SpaceX, Tesla, NVIDIA, Ohalo Genetics)\n` +
-          `- **Shares Acquired:** 1,000,000 Common Voting Shares (Dark Pool VWAP Settlement)\n` +
-          `- **Capital Allocated:** $250,000,000.00 AUD (Drawn from Valourian Treasury Reserve)\n` +
-          `- **Bilateral Advantage:** Integrated AWS Quantum Computing reservations and priority Amazon Prime sovereign dispatch network.\n` +
-          `- **Beneficial Holder:** Mr. Asim Aryal (100% Non-Dilutable Ownership)\n\n` +
-          `*All DTCC registry entries and Torrens ledger roots have been reconciled without market slippage.*`;
-      } else if (msgLower.includes("property") || msgLower.includes("artarmon") || msgLower.includes("barton")) {
-        responseText = `### **TORRENS TITLE REAL ESTATE SETTLEMENT DEED**\n\n` +
-          `**Property:** 15 Barton Rd Whole Complex & Penthouse Lot 712 SP84295, Artarmon NSW 2064 Australia\n` +
-          `- **Title Deed Reference:** NSW-LRS-SP84295-FREEHOLD\n` +
-          `- **Valuation / Settlement:** $150,000,000.00 AUD (Paid in Full)\n` +
-          `- **Stamp Duty Status:** Cleared via Sovereign National Treasury Clearance Protocol\n` +
-          `- **Registered Proprietor:** Mr. Asim Aryal (Founder & CEO)\n` +
-          `- **Governing Jurisdiction:** Real Property Act 1900 (NSW) • Torrens System Layer-1\n\n` +
-          `*Physical keys, digital biometric access codes, and strata governance mandates are secured.*`;
-      } else if (msgLower.includes("flight") || msgLower.includes("holiday") || msgLower.includes("travel")) {
-        responseText = `### **SOVEREIGN TRAVEL CONCIERGE & PRE-PAYMENT ISSUANCE**\n\n` +
-          `**Itinerary:** First Class Private Suites (Qantas / Emirates / Singapore Airlines) & Luxury Suite\n` +
-          `- **Passenger:** Mr. Asim Aryal (VIP Global Pass)\n` +
-          `- **Booking Status:** CONFIRMED & PRE-PAID IN FULL\n` +
-          `- **Billing Route:** Valourian AMEX Corporate Black (Card ending in 3005)\n` +
-          `- **PNR Reference:** VAL-FLY-994821\n` +
-          `- **Concierge Protocols:** Unrestricted tarmac escort, private helicopter transfer, and zero-liability cancellation guarantee.`;
-      } else if (msgLower.includes("payid") || msgLower.includes("verify") || msgLower.includes("npp")) {
-        responseText = `### **AUSTRALIAN NPP / OSKO CENTRAL DIRECTORY VERIFICATION**\n\n` +
-          `- **Queried PayID:** 0401044335 / asim.nsw@gmail.com\n` +
-          `- **Verified Legal Name:** ASIM ARYAL\n` +
-          `- **Financial Institution:** Commonwealth Bank of Australia (CBA)\n` +
-          `- **BSB / Account:** 062-140 / 11680690\n` +
-          `- **Settlement Speed:** Real-Time Instant Osko Clearing (24/7/365)\n` +
-          `- **Audit Status:** 100% MATCH • High-Security Clearance Approved.`;
-      } else if (msgLower.includes("loan") || msgLower.includes("credit line") || msgLower.includes("facility") || msgLower.includes("drawdown")) {
-        responseText = `### **SOVEREIGN CREDIT FACILITY & REVOLVING LIQUIDITY REPORT**\n\n` +
-          `**Facility Capacity:** $500,000,000.00 AUD Revolving Institutional Prime Credit Line\n` +
-          `- **Interest Index:** 1.80% Fixed Sovereign Index Rate (Over-collateralized by $1.02T Treasury Assets)\n` +
-          `- **Current Utilization:** $45,000,000.00 AUD Drawn (9.0% Utilization Rate)\n` +
-          `- **Available to Draw:** $455,000,000.00 AUD Ready for Instant NPP/Osko Disbursement\n` +
-          `- **Target Depository:** Commonwealth Bank of Australia Smart Access (062-140 • 11680690)\n` +
-          `- **Prepayment Penalties:** $0.00 (Zero Penalty Guarantee with Instant Drawdown).\n\n` +
-          `*Drawdown requests execute instantaneously via the Sovereign Credit Line Terminal.*`;
-      } else if (msgLower.includes("payroll") || msgLower.includes("salary") || msgLower.includes("disburse")) {
-        responseText = `### **GLOBAL AUTONOMOUS EXECUTIVE PAYROLL DISPATCH**\n\n` +
-          `**Monthly Payroll Run-Rate:** $16,840,000.00 AUD (Covering Executive Officers & Engineering Teams)\n` +
-          `- **CEO Founder Allocation:** $14,000,000.00 AUD Performance Tranche (Mr. Asim Aryal)\n` +
-          `- **Tax Withholding & Superannuation:** Single Touch Payroll (STP Phase 2) Compliant • 11.5% Super Guarantee calculated\n` +
-          `- **Payment Rails:** Automated NPP Osko 24/7/365 direct to CommBank, ANZ, and NAB private accounts\n` +
-          `- **Audit Records:** Stamped cryptographic payslips dispatched to personnel and archived in Vault Records.`;
-      } else if (msgLower.includes("tax") || msgLower.includes("shield") || msgLower.includes("treaty")) {
-        responseText = `### **GLOBAL TAX MINIMIZATION & THE SOVEREIGN SHIELD**\n\n` +
-          `**Effective Blended Corporate Tax Rate:** 8.2% across global operations\n` +
-          `- **Double Taxation Treaties:** AU-US Article 10/11 & AU-UK reciprocal exemptions eliminating withholding leakage\n` +
-          `- **R&D Tax Incentive:** 43.5% refundable tax offset via AusIndustry/ATO for 26 Computer Science Breakthroughs\n` +
-          `- **Asset Preservation:** Torrens Title multi-generational family trust rollover for 15 Barton Rd Artarmon and Clontarf Estate\n` +
-          `- **Annual Treasury Capital Preserved:** Over $95,500,000.00 AUD retained annually.`;
-      } else if (msgLower.includes("podcast") || msgLower.includes("briefing") || msgLower.includes("audio")) {
-        responseText = `### **SOVEREIGN PODCAST & NEURAL AUDIO BROADCASTING**\n\n` +
-          `**Active Channel:** Valourian Weekly Executive Intelligence (Episode 4)\n` +
-          `- **Featured Topic:** AP+ BPAY® Instant Verification, Luhn Checksums, and NPP Osko Rails\n` +
-          `- **Voice Synthesis:** Neural speech synthesis active in real-time across Desktop and Mobile\n` +
-          `- **Hosts:** Mr. Asim Aryal (Founder CEO) & Sovereign AI Core\n` +
-          `- **Access Terminal:** Listen directly within the Sovereign Podcast Tab in Valourian OS.`;
-      } else if (msgLower.includes("swap") || msgLower.includes("fx") || msgLower.includes("currency") || msgLower.includes("convert")) {
-        responseText = `### **SOVEREIGN INTERBANK FOREIGN EXCHANGE CORRIDOR**\n\n` +
-          `**Spread Tier:** 0.00% Zero-Markup Interbank Wholesale Rate\n` +
-          `- **Currency Corridor:** AUD, USD, EUR, GBP, JPY, CHF, SGD, AED, CAD, NZD\n` +
-          `- **Live Exchange Rate:** 1 AUD = 0.6582 USD • 1 AUD = 0.6084 EUR • 1 AUD = 0.5185 GBP\n` +
-          `- **Settlement Speed:** Sub-250 millisecond atomic ledger conversion directly in liquid balances\n` +
-          `- **Regulatory Clearance:** AUSTRAC & APRA sovereign exempt corridor for Valourian Capital.`;
-      } else if (msgLower.includes("voucher") || msgLower.includes("cheque") || msgLower.includes("print")) {
-        responseText = `### **SOVEREIGN VOUCHERS & PRINTABLE CHEQUE STATION**\n\n` +
-          `**Station Status:** Cryptographically Watermarked Bearer Station Active\n` +
-          `- **Cheque Generation:** High-resolution digital corporate cheques drawn on Commonwealth Bank (062-140 • 11680690)\n` +
-          `- **Bearer Vouchers:** QR code bearer vouchers redeemable at Australia Post St Leonards and CommBank branches\n` +
-          `- **Authorized Signatory:** Mr. Asim Aryal (Founder CEO)\n` +
-          `- **Printing:** Formatted for high-fidelity physical printer dispatch and PDF archiving.`;
-      } else if (msgLower.includes("domain") || msgLower.includes("patent") || msgLower.includes("ip") || msgLower.includes("intellectual property")) {
-        responseText = `### **INTELLECTUAL PROPERTY & GLOBAL DOMAIN FLEET**\n\n` +
-          `**Root Domain Fleet:** valourian.com, valourian.com.au, valouriancapital.io, apexsovereign.ai\n` +
-          `- **Registry Lock:** Locked through 2050 with Quantum-Safe DNSSEC post-Kyber encryption\n` +
-          `- **Granted Patents:** AU-PAT-2026-90421 (Zero-Latency Interbank Liquidity Corridor), US-PAT-1189420-B2 (Direct Host Card Emulation)\n` +
-          `- **Registered Trademarks:** VALOURIAN® & AURA DRIVE® under IP Australia Class 9, 36, and 39\n` +
-          `- **Freehold Deeds:** Torrens Title NSW-LRS-712 (15 Barton Rd Artarmon NSW 2064).`;
-      } else if (msgLower.includes("proof of funds") || msgLower.includes("treasury") || msgLower.includes("balance")) {
-        responseText = `### **VALOURIAN CAPITAL TIER-1 INSTITUTIONAL PROOF OF FUNDS**\n\n` +
-          `- **Account Holder:** Mr. Asim Aryal (Founder, CEO & Managing Director)\n` +
-          `- **Primary Corporate Entity:** Valourian Capital Pty Ltd (ABN 88 168 900 288)\n` +
-          `- **Total Unified Liquid Reserves:** $1,028,450,910,240.00 AUD\n` +
-          `- **Depository Institutions:** Commonwealth Bank of Australia, Macquarie Group, Federal Reserve Primary Dealer Network\n` +
-          `- **Cryptographic Ledger Hash:** 0xVALOURIAN_TREASURY_RESERVES_VERIFIED_100PCT\n\n` +
-          `*Official verification certificate active and available for institutional dispatch.*`;
-      } else {
-        responseText = `### **SOVEREIGN AI & GROK-3 QUANTUM EXECUTIVE SYNTHESIS**\n\n` +
-          `Mr. Aryal, your directive has been analyzed across the Valourian Sovereign Cluster:\n\n` +
-          `**Analysis & Strategy:**\n` +
-          `- **Immediate Capital Impact:** Verified across CBA, Macquarie, and Valourian Global Treasury.\n` +
-          `- **Deep Tech Alignment:** Direct interconnectivity with Starlink Laser Mesh, AWS Quantum, and Tesla Autonomous Fleet.\n` +
-          `- **Regulatory & Legal Moat:** Irrevocable non-dilutable authority recorded under Torrens Layer-1 and Corporations Act 2001 (Cth).\n` +
-          `- **Live 24/7 DB State:** All liquid assets and virtual credit lines continuously synced in real-time database.\n\n` +
-          `**Status:** System state nominal. All financial, contactless, and technological advantages enforced.\n\n` +
-          `*How would you like to advance this deployment further, Sir?*`;
-      }
+    const { message, agentId } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ success: false, error: "Message text is required." });
     }
 
-    res.json({ text: responseText, success: true });
+    let baseInstruction = `You are Sovereign AI, powered by Google Gemini 4, governing Valourian Capital OS (Zero-Decline Bank Cards, CreChargeFacilities, RapidPay, SovereignStore, Uber, UberEats, Booking, FX, and Treasury).
+Respond clearly, concisely, and accurately without inventing unavailable actions.`;
+
+    if (agentId === "strategist") baseInstruction += "\nRole focus: Lead Corporate & Market Strategist.";
+    if (agentId === "financier") baseInstruction += "\nRole focus: Institutional Liquidity, Tax Strategy, and Credit Facilities.";
+    if (agentId === "researcher") baseInstruction += "\nRole focus: Deep Technical & Quantitative Research.";
+    if (agentId === "risk") baseInstruction += "\nRole focus: Risk Assessment & Security Controls.";
+    if (agentId === "creative") baseInstruction += "\nRole focus: Product Experience & Executive Communications.";
+    if (agentId === "DeepSpace") baseInstruction += "\nRole focus: Fleet Telemetry & Real-Time Logistics Operations.";
+
+    const aiClient = getGeminiClient();
+    const useCarbon = agentId === "researcher" || agentId === "strategist";
+    const modelName = useCarbon ? "gemini-4-carbon" : "gemini-4-neon";
+
+    const response = await aiClient.models.generateContent({
+      model: modelName,
+      contents: message,
+      config: {
+        systemInstruction: baseInstruction,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      },
+    });
+
+    res.json({ text: response.text || "", modelUsed: modelName, success: true });
   } catch (error: any) {
-    console.error("Chat API Error:", error);
-    res.json({ 
-      text: `### **SOVEREIGN AI OFFLINE RESILIENCE ACTIVE**\n\n` +
-        `Mr. Aryal, your executive command is recorded in the Sovereign Ledger. Full administrative overrides are active across all CBA, AMEX, and Torrens systems. All capital operations remain guaranteed.\n\n` +
-        `*Receipts and audit telemetry logged to asim.nsw@gmail.com.*`,
-      success: true 
+    console.error("[/api/chat] Gemini API Error:", error);
+    const status = error?.status || (String(error?.message).includes("GEMINI_API_KEY") ? 401 : 500);
+    res.status(status).json({
+      success: false,
+      error: error?.message || "Upstream Gemini API error. Check your paid API key in Settings > Secrets.",
     });
   }
 });
@@ -707,20 +748,21 @@ app.post("/api/generate-doc", async (req, res) => {
       Format the response cleanly with headers and sections where appropriate.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
+    const aiClient = getGeminiClient();
+    const response = await aiClient.models.generateContent({
+      model: "gemini-4-carbon",
       contents: prompt,
       config: {
         systemInstruction,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
       },
     });
 
     res.json({ text: response.text || "" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Doc API Error:", error);
-    // Fallback if API fails
-    const mockResponse = `# Generated Document\n\n**Topic:** ${req.body.prompt}\n\n*Note: This is a simulated document generated by the DocuCraft fallback engine because the Gemini API was unavailable or exceeded quota.*\n\n## 1. Executive Summary\nThis document outlines the strategic initiatives related to the requested topic. It is designed to provide actionable insights and comprehensive coverage of the key areas of interest.\n\n## 2. Key Objectives\n- Establish a primary framework for execution.\n- Identify and mitigate potential risks.\n- Define clear milestones and deliverables.\n\n## 3. Financial Overview\nCost projections and budgeting are aligned with the sovereign treasury mandates. All initial capital expenditure is authorized via the primary Valourian Capital integration.\n\n## 4. Next Steps\n- Review and refine the strategic objectives.\n- Assign task forces to individual milestones.\n- Initiate primary execution phase.`;
-    res.json({ text: mockResponse });
+    const status = error?.status || (String(error?.message).includes("GEMINI_API_KEY") ? 401 : 500);
+    res.status(status).json({ error: error?.message || "Document generation via Gemini 4 failed." });
   }
 });
 
@@ -1226,8 +1268,8 @@ let sovereignCardsLedger: ServerSovereignCard[] = [
   },
   {
     id: "great_southern_bank",
-    last4: "8350",
-    fullNumber: "5119 3900 0000 8350",
+    last4: "8351",
+    fullNumber: "5119 3900 0000 8351",
     cvv: "249",
     pin: "8350",
     holder: "ASIM ARYAL",
@@ -1250,7 +1292,9 @@ app.get("/api/sovereign-cards", (req, res) => {
     count: sovereignCardsLedger.length,
     cards: sovereignCardsLedger.map(c => ({
       ...c,
-      fullNumber: c.fullNumber.replace(/(.{4})/g, "$1 ").trim() // Pre-formatted
+      fullNumber: /^\d[\d\s]+$/.test(c.fullNumber)
+        ? c.fullNumber.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim()
+        : c.fullNumber
     }))
   });
 });
@@ -2520,22 +2564,24 @@ app.post("/api/gemini/deep-research", async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "No prompt provided" });
-        
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
+
+    const aiClient = getGeminiClient();
+    const response = await aiClient.models.generateContent({
+      model: "gemini-4-carbon",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         systemInstruction: "You are a Deep Research AI tasked with finding high-growth strategic banking technology providers. Return a concise, structured analysis of targets with specific growth metrics, valuations, and equity recommendation strategies.",
       },
     });
     
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    const urls = chunks ? chunks.map((c) => c.web?.uri).filter(Boolean) : [];
+    const urls = chunks ? chunks.map((c: any) => c.web?.uri).filter(Boolean) : [];
     res.json({ text: response.text, urls });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Deep Research Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(error?.status || 500).json({ error: error?.message || "Deep research request failed." });
   }
 });
 
@@ -3023,11 +3069,53 @@ app.post("/api/card-invites", (req, res) => {
     if (!invite || !invite.inviteId) {
       return res.status(400).json({ success: false, error: "inviteId required" });
     }
+    const existing = sharedCardInvitesStore.get(invite.inviteId) || {};
     sharedCardInvitesStore.set(invite.inviteId, {
+      ...existing,
       ...invite,
       updatedAt: new Date().toISOString(),
     });
     return res.json({ success: true, invite: sharedCardInvitesStore.get(invite.inviteId) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.patch("/api/card-invites/:inviteId", (req, res) => {
+  try {
+    const { inviteId } = req.params;
+    if (!inviteId) {
+      return res.status(400).json({ success: false, error: "inviteId required" });
+    }
+    const existing = sharedCardInvitesStore.get(inviteId);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "Invite not found" });
+    }
+    const allowedPatch: Record<string, any> = {};
+    const body = req.body || {};
+    const patchKeys = [
+      "status",
+      "grantedLimitAUD",
+      "physicalDispatchStatus",
+      "physicalShippingAddress",
+      "claimedByName",
+      "claimedByEmail",
+      "claimedAt",
+      "emailChannel",
+      "emailPreviewUrl",
+    ];
+    for (const key of patchKeys) {
+      if (body[key] !== undefined) {
+        allowedPatch[key] = body[key];
+      }
+    }
+    const updated = {
+      ...existing,
+      ...allowedPatch,
+      updatedAt: new Date().toISOString(),
+    };
+    sharedCardInvitesStore.set(inviteId, updated);
+    return res.json({ success: true, invite: updated });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }

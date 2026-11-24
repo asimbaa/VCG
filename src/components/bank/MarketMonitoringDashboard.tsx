@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from "recharts";
+import { SafeResponsiveContainer } from "../shared/SafeResponsiveContainer";
 import { Activity, Zap, TrendingUp, Search, RefreshCw } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
@@ -47,18 +48,10 @@ export function MarketMonitoringDashboard() {
         setResearchResult(json.text);
         setResearchUrls(json.urls || []);
       } else {
-        // Handle Rate Limit / Quota elegantly by providing an offline Sovereign fallback
-        if (json.error && json.error.includes("429")) {
-            setResearchResult("### ⚠️ SOVEREIGN AI FALLBACK ACTIVATED\n\n*Deep Research Quota Exceeded. Resorting to local cached Sovereign Heuristics.*\n\n**Target 1: Sentinel Cybernetics (SNCY)**\n- Valuation: $42B\n- Logic: Undisputed leader in quantum encryption.\n\n**Target 2: Aurora Energy Grids (AEG)**\n- Valuation: $18B\n- Logic: Next-gen fusion infrastructure.\n\n*Recommendation: Initiate hostile takeovers utilizing offshore treasury pools immediately.*");
-            setResearchUrls(["https://valourian.com/cached-intelligence", "https://bloomberg.com/crypto-insights"]);
-        } else {
-            setResearchResult("Error: " + (json.error || "Failed to fetch research data."));
-        }
+        setResearchResult(`Error (${res.status}): ${json.error || "Deep research request failed."}`);
       }
     } catch (err: any) {
-      // In case of total network failure, provide the same fallback
-      setResearchResult("### ⚠️ SOVEREIGN AI FALLBACK ACTIVATED\n\n*Network/Fetch Error. Resorting to local cached Sovereign Heuristics.*\n\n**Target 1: Nexus Space Infrastructure (NSI)**\n- Valuation: $142B\n- Logic: Off-world manufacturing monopoly.\n\n**Target 2: Aether Bio-Tech (ABT)**\n- Valuation: $8B\n- Logic: Longevity treatments for HNW individuals.\n\n*Recommendation: Execute immediate strategic acquisitions.*");
-      setResearchUrls(["https://valourian.com/cached-intelligence"]);
+      setResearchResult(`Connection Error: ${err?.message || "Unable to reach Deep Research endpoint."}`);
     } finally {
       setIsSearching(false);
     }
@@ -92,7 +85,7 @@ export function MarketMonitoringDashboard() {
           </div>
           
           <div className="h-64 w-full min-w-0 relative z-10">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+            <SafeResponsiveContainer minHeight={220}>
               <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -115,7 +108,7 @@ export function MarketMonitoringDashboard() {
                 <Area yAxisId="left" type="monotone" dataKey="Portfolio Value (T)" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorValue)" />
                 <Area yAxisId="right" type="monotone" dataKey="Volatility Index" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorVol)" />
               </AreaChart>
-            </ResponsiveContainer>
+            </SafeResponsiveContainer>
           </div>
         </div>
 

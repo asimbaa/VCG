@@ -540,7 +540,7 @@ export function ComputerScienceBreakthroughs() {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === cat
                   ? "bg-indigo-600 text-white shadow-sm"
-                  : "bg-slate-850 text-slate-400 hover:text-white hover:bg-slate-800"
+                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800"
               }`}
             >
               {cat}

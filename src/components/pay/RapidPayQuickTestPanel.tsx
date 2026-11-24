@@ -16,7 +16,7 @@ import {
   Check
 } from "lucide-react";
 import { toast } from "sonner";
-import { db } from "../../firebase";
+import { recordUnifiedTransaction } from "../../services/cloudSessionGuard";
 import { collection, addDoc } from "firebase/firestore";
 import { jsPDF } from "jspdf";
 
@@ -214,26 +214,23 @@ export const RapidPayQuickTestPanel: React.FC<RapidPayQuickTestPanelProps> = ({
 
     await new Promise((r) => setTimeout(r, 180));
 
-    // Commit to Firestore transactions collection so real-time history updates immediately
-    if (user?.uid) {
-      try {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          type: `Quick Test: ${rail.name}`,
-          amount: rail.amount,
-          currency: rail.currency,
-          recipient: rail.recipient,
-          date: timestamp,
-          status: "completed",
-          method: rail.rail,
-          authCode: authCode,
-          transactionId: txId,
-          testVerified: true,
-          latencyMs: latency
-        });
-      } catch (err) {
-        console.warn("Firestore test txn sync:", err);
-      }
+    // Commit via unified transaction recorder (guards Firestore behind verified auth + logs locally)
+    try {
+      await recordUnifiedTransaction({
+        type: `Quick Test: ${rail.name}`,
+        amount: rail.amount,
+        currency: rail.currency,
+        recipient: rail.recipient,
+        date: timestamp,
+        status: "completed",
+        method: rail.rail,
+        authCode: authCode,
+        transactionId: txId,
+        testVerified: true,
+        latencyMs: latency
+      });
+    } catch (err) {
+      console.warn("Test txn sync:", err);
     }
 
     const res = {

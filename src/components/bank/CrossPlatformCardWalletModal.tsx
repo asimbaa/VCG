@@ -115,8 +115,10 @@ export const CrossPlatformCardWalletModal: React.FC<CrossPlatformCardWalletModal
 
   if (!isOpen || !card) return null;
 
-  const rawNumber = String(card.fullNumber || card.cardNumber || card.number || "4532759281924242").replace(/\s+/g, "");
-  const formattedNumber = rawNumber.replace(/(\d{4})/g, "$1 ").trim();
+  const rawNumber = String(card.fullNumber || card.cardNumber || card.number || "4532759281924241").replace(/\s+/g, "");
+  const formattedNumber = rawNumber.length === 15
+    ? `${rawNumber.slice(0, 4)} ${rawNumber.slice(4, 10)} ${rawNumber.slice(10)}`
+    : rawNumber.replace(/(\d{4})/g, "$1 ").trim();
   const cardHolder = card.holder || TARGET_LINK_HOLDER;
   const expiry = card.expiry || "12/28";
   const network = (card.network || "Mastercard").toUpperCase();

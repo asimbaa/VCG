@@ -19,7 +19,9 @@ import {
   FileText,
   ShoppingBag,
   Share2,
-  Plus
+  Plus,
+  Car,
+  Utensils
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -30,16 +32,16 @@ import {
   TARGET_LINK_HOLDER,
   TARGET_LINK_EMAIL 
 } from "../../services/linkComService";
-import { SmartphoneNfcCardReaderModal } from "../pay/SmartphoneNfcCardReaderModal";
-import { CardGeniusInnovationsModal } from "../bank/CardGeniusInnovationsModal";
-import { ExternalAppAutoLoginModal } from "../bank/ExternalAppAutoLoginModal";
-import { MassiveRateExpansionModal } from "../bank/MassiveRateExpansionModal";
+const SmartphoneNfcCardReaderModal = React.lazy(() => import("../pay/SmartphoneNfcCardReaderModal").then(m => ({ default: m.SmartphoneNfcCardReaderModal })));
+const CardGeniusInnovationsModal = React.lazy(() => import("../bank/CardGeniusInnovationsModal").then(m => ({ default: m.CardGeniusInnovationsModal })));
+const ExternalAppAutoLoginModal = React.lazy(() => import("../bank/ExternalAppAutoLoginModal").then(m => ({ default: m.ExternalAppAutoLoginModal })));
+const MassiveRateExpansionModal = React.lazy(() => import("../bank/MassiveRateExpansionModal").then(m => ({ default: m.MassiveRateExpansionModal })));
 import { unifiedBankCardSync, UnifiedBankCard } from "../../services/unifiedBankCardSync";
 import { SectionWisdomTooltip } from "./SectionWisdomTooltip";
-import { GlobalMerchantPOSModal } from "../bank/GlobalMerchantPOSModal";
-import { CardBenefitsShowcaseModal } from "../bank/CardBenefitsShowcaseModal";
-import { ShareCardModal } from "../bank/ShareCardModal";
-import { IssueCardStudioModal } from "../bank/IssueCardStudioModal";
+const GlobalMerchantPOSModal = React.lazy(() => import("../bank/GlobalMerchantPOSModal").then(m => ({ default: m.GlobalMerchantPOSModal })));
+const CardBenefitsShowcaseModal = React.lazy(() => import("../bank/CardBenefitsShowcaseModal").then(m => ({ default: m.CardBenefitsShowcaseModal })));
+const ShareCardModal = React.lazy(() => import("../bank/ShareCardModal").then(m => ({ default: m.ShareCardModal })));
+const IssueCardStudioModal = React.lazy(() => import("../bank/IssueCardStudioModal").then(m => ({ default: m.IssueCardStudioModal })));
 import { smsEmailDispatchService } from "../../services/smsEmailDispatchService";
 
 interface QuickExecutiveDockProps {
@@ -101,13 +103,13 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
         
         {/* Left: Quick Copy Shortcuts for Instant Purchases */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 mr-1 hidden sm:inline">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
             Quick Checkout:
           </span>
 
           <button
             onClick={() => setShowCardModal(true)}
-            className="compact-touch whitespace-nowrap px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer tabular-nums"
             title="View & Copy Active Card for online payments"
           >
             <CreditCard className="w-3 h-3 text-emerald-400" />
@@ -116,7 +118,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowNfcReaderModal(true)}
-            className="compact-touch whitespace-nowrap px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Tap Card to Smartphone to read cash balance and inject immense funds"
           >
             <Smartphone className="w-3 h-3 text-indigo-400" />
@@ -125,7 +127,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowGeniusModal(true)}
-            className="compact-touch whitespace-nowrap px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Open 3D Holographic Card Innovations, Luhn Step-by-Step Proof, and Native Pass Provisioning"
           >
             <Sparkles className="w-3 h-3 text-emerald-400" />
@@ -134,7 +136,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowIssueStudio(true)}
-            className="compact-touch whitespace-nowrap px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
             title="Issue a new Luhn-verified Debit or Credit card in 1 tap"
           >
             <Plus className="w-3 h-3" />
@@ -143,7 +145,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowShareModal(true)}
-            className="compact-touch whitespace-nowrap px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-black flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-black flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Share any Debit or Credit Card via email or instant 1-tap link with VIP benefits"
           >
             <Share2 className="w-3 h-3" />
@@ -152,7 +154,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowAutoLoginModal(true)}
-            className="hidden sm:flex px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 hidden sm:flex px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Auto-Login and 1-Click Card Vault for Amazon, Tesla, Uber, Uber Eats, Apple, Qantas with asim.nsw@gmail.com"
           >
             <ShoppingBag className="w-3 h-3 text-amber-400" />
@@ -161,7 +163,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowRateExpansionModal(true)}
-            className="hidden lg:flex px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 hidden lg:flex px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Pay via Bank Card to expand card APY to 15.00% - 25.00% p.a. & 10% - 15% cashback"
           >
             <TrendingUp className="w-3 h-3 text-emerald-400" />
@@ -170,7 +172,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowGlobalPOSModal(true)}
-            className="hidden md:flex px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 hidden md:flex px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Global Merchant POS Terminal Simulator for USA, UK, EU, and AUS"
           >
             <Globe className="w-3 h-3 text-amber-400" />
@@ -179,7 +181,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => setShowBenefitsModal(true)}
-            className="hidden lg:flex px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 hidden lg:flex px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Restored Elite Benefits: 5% Uncapped Cashback, Private Aviation, 24/7 Diplomatic Concierge"
           >
             <Sparkles className="w-3 h-3 text-emerald-400" />
@@ -191,7 +193,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
               const cards = unifiedBankCardSync.getCards();
               smsEmailDispatchService.dispatchAllCardsPackage(cards);
             }}
-            className="hidden sm:flex px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="compact-touch whitespace-nowrap shrink-0 hidden sm:flex px-2.5 py-1.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-[11px] font-bold items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Email all legitimate card credentials to asim.nsw@gmail.com"
           >
             <Send className="w-3 h-3 text-blue-400" />
@@ -212,7 +214,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => handleCopy(activeCard.fullNumber, "Card Number")}
-            className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center gap-1 transition-colors"
+            className="compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center gap-1 transition-colors cursor-pointer"
             title="Copy 16-digit card number"
           >
             <span>{copiedLabel === "Card Number" ? "Copied!" : "No."}</span>
@@ -221,7 +223,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => handleCopy(FOUNDER_PRIMARY_ADDRESS, "Billing Address")}
-            className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] flex items-center gap-1 transition-colors"
+            className="compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
             title="Copy Address: Unit 712 15 Barton Rd Artarmon NSW 2064"
           >
             <span className="truncate max-w-[120px] sm:max-w-none">Artarmon 2064</span>
@@ -230,7 +232,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
           <button
             onClick={() => handleCopy(FOUNDER_PHONE_LOCAL, "Phone Number")}
-            className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center gap-1 transition-colors"
+            className="compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center gap-1 transition-colors cursor-pointer tabular-nums"
             title="Copy Phone: 0401044335"
           >
             <span>0401044335</span>
@@ -241,38 +243,73 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
         {/* Right: Instant Navigation Helpers */}
         <div className="flex items-center gap-1 shrink-0 ml-auto">
           <button
+            onClick={() => onNavigate("store")}
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
+              activeTab === "store" ? "text-emerald-400 bg-emerald-500/15 border border-emerald-500/30" : "text-slate-300 hover:text-white"
+            }`}
+            title="Sovereign Store"
+          >
+            <ShoppingBag className="w-3 h-3 text-emerald-400" />
+            <span className="hidden md:inline">Store</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("uber")}
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
+              activeTab === "uber" ? "text-cyan-400 bg-cyan-500/15 border border-cyan-500/30" : "text-slate-300 hover:text-white"
+            }`}
+            title="Uber Executive"
+          >
+            <Car className="w-3 h-3 text-cyan-400" />
+            <span className="hidden md:inline">Uber</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("ubereats")}
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
+              activeTab === "ubereats" ? "text-amber-400 bg-amber-500/15 border border-amber-500/30" : "text-slate-300 hover:text-white"
+            }`}
+            title="UberEats VIP"
+          >
+            <Utensils className="w-3 h-3 text-amber-400" />
+            <span className="hidden md:inline">Eats</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("booking")}
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
+              activeTab === "booking" ? "text-sky-400 bg-sky-500/15 border border-sky-500/30" : "text-slate-300 hover:text-white"
+            }`}
+            title="Booking & Suites"
+          >
+            <Plane className="w-3 h-3 text-sky-400" />
+            <span className="hidden md:inline">Booking</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("etoro")}
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
+              activeTab === "etoro" ? "text-lime-400 bg-lime-500/15 border border-lime-500/30" : "text-slate-300 hover:text-white"
+            }`}
+            title="eToro Trading"
+          >
+            <TrendingUp className="w-3 h-3 text-lime-400" />
+            <span className="hidden md:inline">eToro</span>
+          </button>
+
+          <button
             onClick={() => onNavigate("acquisitions", "properties")}
-            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 ${
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
               activeTab === "acquisitions" ? "text-indigo-400 bg-indigo-500/10" : "text-slate-400 hover:text-white"
             }`}
           >
             <Building2 className="w-3 h-3" />
-            <span className="hidden sm:inline">Properties</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("acquisitions", "flights")}
-            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 ${
-              activeTab === "acquisitions" ? "text-cyan-400 bg-cyan-500/10" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <Plane className="w-3 h-3" />
-            <span className="hidden sm:inline">Travel</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("acquisitions", "stocks")}
-            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 ${
-              activeTab === "acquisitions" ? "text-emerald-400 bg-emerald-500/10" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <TrendingUp className="w-3 h-3" />
-            <span className="hidden sm:inline">Amazon & Stocks</span>
+            <span className="hidden xl:inline">Acquire</span>
           </button>
 
           <button
             onClick={() => onNavigate("smarttech")}
-            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 ${
+            className={`compact-touch whitespace-nowrap shrink-0 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
               activeTab === "smarttech" ? "text-purple-400 bg-purple-500/10" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -296,7 +333,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative text-white space-y-5"
+              className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-6 shadow-2xl relative text-white space-y-5"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -312,7 +349,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
                 </div>
                 <button
                   onClick={() => setShowCardModal(false)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -320,7 +357,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
               {/* Card Switcher Selector */}
               <div>
-                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">Switch Card</label>
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Switch Card</label>
                 <select
                   value={selectedCardIdx}
                   onChange={(e) => setSelectedCardIdx(Number(e.target.value))}
@@ -328,7 +365,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
                 >
                   {cards.map((c, i) => (
                     <option key={`${c.id}-${i}`} value={i}>
-                      {c.name} ({c.network} • {c.last4}) - ${c.balance.toLocaleString()} AUD
+                      {c.name} ({c.network} · {c.last4}) - ${c.balance.toLocaleString()} AUD
                     </option>
                   ))}
                 </select>
@@ -345,7 +382,7 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
                   <span>{activeCard.fullNumber}</span>
                   <button
                     onClick={() => handleCopy(activeCard.fullNumber, "Card Number")}
-                    className="p-1.5 text-slate-400 hover:text-emerald-400 transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
                     title="Copy Card Number"
                   >
                     {copiedLabel === "Card Number" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -354,15 +391,15 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
 
                 <div className="grid grid-cols-3 gap-2 text-xs font-mono pt-2 border-t border-slate-800">
                   <div>
-                    <span className="text-[9px] text-slate-500 uppercase block">Holder</span>
+                    <span className="text-[9px] text-slate-400 uppercase block">Holder</span>
                     <strong className="text-white text-xs truncate block">{TARGET_LINK_HOLDER}</strong>
                   </div>
                   <div>
-                    <span className="text-[9px] text-slate-500 uppercase block">Expires</span>
+                    <span className="text-[9px] text-slate-400 uppercase block">Expires</span>
                     <strong className="text-white text-xs block tabular-nums">{activeCard.expiry}</strong>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] text-slate-500 uppercase block">CVV</span>
+                    <span className="text-[9px] text-slate-400 uppercase block">CVV</span>
                     <strong className="text-emerald-400 text-xs block tabular-nums">{activeCard.dynamicCvv || activeCard.cvv}</strong>
                   </div>
                 </div>
@@ -371,19 +408,19 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
               {/* Merchant Checkout Fields Quick-Copy Grid */}
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs space-y-2 font-mono">
                 <div className="flex items-center justify-between border-b border-slate-900 pb-1.5">
-                  <span className="text-slate-500 text-[11px]">Billing Address:</span>
+                  <span className="text-slate-400 text-[11px]">Billing Address:</span>
                   <span className="text-white text-right truncate max-w-[220px]">{FOUNDER_PRIMARY_ADDRESS}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-slate-900 pb-1.5">
-                  <span className="text-slate-500 text-[11px]">Postal Code:</span>
-                  <strong className="text-white">2064</strong>
+                  <span className="text-slate-400 text-[11px]">Postal Code:</span>
+                  <strong className="text-white tabular-nums">2064</strong>
                 </div>
                 <div className="flex items-center justify-between border-b border-slate-900 pb-1.5">
-                  <span className="text-slate-500 text-[11px]">Phone:</span>
-                  <strong className="text-white">{FOUNDER_PHONE_LOCAL}</strong>
+                  <span className="text-slate-400 text-[11px]">Phone:</span>
+                  <strong className="text-white tabular-nums">{FOUNDER_PHONE_LOCAL}</strong>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-[11px]">Link.com Account:</span>
+                  <span className="text-slate-400 text-[11px]">Link.com Account:</span>
                   <strong className="text-emerald-400">{TARGET_LINK_EMAIL}</strong>
                 </div>
               </div>
@@ -392,14 +429,14 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
               <div className="flex flex-col sm:flex-row items-center gap-2">
                 <button
                   onClick={handleCopyAllCardInfo}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2"
+                  className="w-full min-h-[44px] py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Copy className="w-4 h-4" />
                   <span>Copy Complete Checkout Form</span>
                 </button>
                 <button
                   onClick={() => setShowCardModal(false)}
-                  className="w-full sm:w-auto px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
                   Done
                 </button>
@@ -410,61 +447,72 @@ export function QuickExecutiveDock({ onNavigate, activeTab }: QuickExecutiveDock
         )}
       </AnimatePresence>
 
-      {/* Smartphone NFC Balance Reader & Immense Funding Terminal */}
-      <SmartphoneNfcCardReaderModal 
-        isOpen={showNfcReaderModal} 
-        onClose={() => setShowNfcReaderModal(false)} 
-      />
+      {/* Lazy-Loaded Feature Modals (Mounted on demand) */}
+      <React.Suspense fallback={null}>
+        {showNfcReaderModal && (
+          <SmartphoneNfcCardReaderModal
+            isOpen={showNfcReaderModal}
+            onClose={() => setShowNfcReaderModal(false)}
+          />
+        )}
 
-      {/* Card Genius Innovations & Luhn Accuracy Proof Modal */}
-      <CardGeniusInnovationsModal
-        card={unifiedBankCardSync.getActivePaymentCard()}
-        isOpen={showGeniusModal}
-        onClose={() => setShowGeniusModal(false)}
-      />
+        {showGeniusModal && (
+          <CardGeniusInnovationsModal
+            card={unifiedBankCardSync.getActivePaymentCard()}
+            isOpen={showGeniusModal}
+            onClose={() => setShowGeniusModal(false)}
+          />
+        )}
 
-      {/* External Apps Auto-Login & Card Vault Modal */}
-      <ExternalAppAutoLoginModal
-        isOpen={showAutoLoginModal}
-        onClose={() => setShowAutoLoginModal(false)}
-        initialCard={activeCard}
-      />
+        {showAutoLoginModal && (
+          <ExternalAppAutoLoginModal
+            isOpen={showAutoLoginModal}
+            onClose={() => setShowAutoLoginModal(false)}
+            initialCard={activeCard}
+          />
+        )}
 
-      {/* Massive Rate Expansion Modal */}
-      <MassiveRateExpansionModal
-        isOpen={showRateExpansionModal}
-        onClose={() => setShowRateExpansionModal(false)}
-      />
+        {showRateExpansionModal && (
+          <MassiveRateExpansionModal
+            isOpen={showRateExpansionModal}
+            onClose={() => setShowRateExpansionModal(false)}
+          />
+        )}
 
-      {/* Global Merchant POS Simulator Modal */}
-      <GlobalMerchantPOSModal
-        isOpen={showGlobalPOSModal}
-        onClose={() => setShowGlobalPOSModal(false)}
-      />
+        {showGlobalPOSModal && (
+          <GlobalMerchantPOSModal
+            isOpen={showGlobalPOSModal}
+            onClose={() => setShowGlobalPOSModal(false)}
+          />
+        )}
 
-      {/* Restored Elite Benefits Matrix Modal */}
-      <CardBenefitsShowcaseModal
-        isOpen={showBenefitsModal}
-        onClose={() => setShowBenefitsModal(false)}
-      />
+        {showBenefitsModal && (
+          <CardBenefitsShowcaseModal
+            isOpen={showBenefitsModal}
+            onClose={() => setShowBenefitsModal(false)}
+          />
+        )}
 
-      {/* Instant Shareable Debit & Credit Card Modal */}
-      <ShareCardModal
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        card={unifiedBankCardSync.getActivePaymentCard() as any}
-        allCards={cards as any}
-        onPreviewClaimPortal={(inviteId) =>
-          window.dispatchEvent(new CustomEvent('valourian_open_claim_portal', { detail: { inviteId } }))
-        }
-      />
+        {showShareModal && (
+          <ShareCardModal
+            isOpen={showShareModal}
+            onClose={() => setShowShareModal(false)}
+            card={unifiedBankCardSync.getActivePaymentCard() as any}
+            allCards={cards as any}
+            onPreviewClaimPortal={(inviteId) =>
+              window.dispatchEvent(new CustomEvent('valourian_open_claim_portal', { detail: { inviteId } }))
+            }
+          />
+        )}
 
-      {/* 1-Tap Luhn-Valid Card Studio */}
-      <IssueCardStudioModal
-        isOpen={showIssueStudio}
-        onClose={() => setShowIssueStudio(false)}
-        onOpenShare={() => setShowShareModal(true)}
-      />
+        {showIssueStudio && (
+          <IssueCardStudioModal
+            isOpen={showIssueStudio}
+            onClose={() => setShowIssueStudio(false)}
+            onOpenShare={() => setShowShareModal(true)}
+          />
+        )}
+      </React.Suspense>
     </>
   );
 }

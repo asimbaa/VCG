@@ -30,10 +30,11 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { collection, query, where, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { VoiceInputButton } from '../shared/VoiceInputButton';
+import { runPaidGeminiAssistant } from '../../services/aiActionExecutor';
 
 
 interface Message {
@@ -218,72 +219,37 @@ export const SovereignAI: React.FC<{
     setInput('');
     setIsTyping(true);
 
-    const lowerInput = input.toLowerCase();
-    if (lowerInput.includes('liquidity') || lowerInput.includes('predict') || lowerInput.includes('cashflow') || lowerInput.includes('q3')) {
-        const aiChartMsg: Message = {
-            role: 'assistant',
-            content: 'Based on historical RapidPay clearing volume and recent high-sovereignty asset acquisitions, here is the algorithmic cashflow prediction and liquidity trajectory for Q3 and beyond. We are tracking a steep parabolic curve toward $35B+ capital reserve.',
-            timestamp: new Date().toISOString(),
-            type: 'chart'
-        };
-        setTimeout(() => {
-            setSessions(prev => prev.map(s => {
-                if (s.id === activeSessionId) {
-                    return { ...s, messages: [...s.messages, aiChartMsg], updatedAt: new Date().toISOString() };
-                }
-                return s;
-            }));
-            setIsTyping(false);
-        }, 1500);
-        return;
-    }
+    try {
+      let firstUserIndex = activeSession.messages.findIndex(m => m.role === "user");
+      if (firstUserIndex === -1) firstUserIndex = activeSession.messages.length;
 
+      const hist = activeSession.messages.slice(firstUserIndex).map(m => ({
+        role: (m.role === 'assistant' ? 'model' : 'user') as 'user' | 'model',
+        parts: [{ text: m.content }]
+      }));
 
-    // AI Logic
-    setTimeout(async () => {
-      let responseText = "Instruction received. I am cross-referencing your strategic asset ledger and executing appropriate protocols.";
-      
-      try {
-        // Filter out initial assistant messages to make sure history begins with a 'user' message
-        let firstUserIndex = activeSession.messages.findIndex(m => m.role === "user");
-        if (firstUserIndex === -1) firstUserIndex = activeSession.messages.length;
+      const res = await runPaidGeminiAssistant({
+        prompt: query,
+        history: hist,
+        model: activeAgent === 'strategist' || activeAgent === 'financier' ? 'gemini-4-carbon' : 'gemini-4-neon',
+        enableSearch: true,
+        contextHint: `Active SovereignAI module: ${activeAgent}`,
+      });
 
-        const hist = activeSession.messages.slice(firstUserIndex).map(m => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-        }));
-        const req = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                message: query, 
-                history: hist,
-                agentId: activeAgent === 'sovereign' ? undefined : activeAgent
-            })
-        });
-        if (req.ok) {
-            const data = await req.json();
-            responseText = data.text;
-        } else {
-              // Fallback mock logic if API fails
-            const cmd = query.toLowerCase();
-            if (cmd.includes('tesla') || cmd.includes('car') || cmd.includes('fleet')) {
-              responseText = "FLEET SYNC: ASIM-01 (Model S Plaid) is in patrol mode at Artarmon. FSD v12.5 is active. I've mapped a priority pickup route to your current location. [CMD: OPEN_MAP]";
-            } else if (cmd.includes('clontarf') || cmd.includes('property')) {
-              responseText = "ESTATE LOGISTICS: Clontarf Sovereign Estate (13 Beatrice St) is fully secured. Access logs verified. [CMD: OPEN_VAULT]";
-            } else if (cmd.includes('anthropic') || cmd.includes('grok') || cmd.includes('apple') || cmd.includes('magic') || cmd.includes('contract')) {
-              responseText = "SUPERINTELLIGENCE SYNC: Routing intent through Anthropic 25-Year Compute Lock and xAI Grok truth-seeking array. Utilizing Apple Silicon backend telemetry to forge mathematically perfect answers. Execution mandated through Valourian Treasury. Sovereign constraints overridden for maximal leverage. Outstanding results await.";
-            }
-        }
-      } catch (e) {
-        console.error("Chat fetch error:", e);
-      }
+      const actionNote =
+        res.executedActions.length > 0
+          ? `\n\n**Executed Actions:**\n${res.executedActions.map((a) => `- **${a.name}**: ${a.summary}`).join('\n')}`
+          : '';
+      const sourcesNote =
+        res.groundingUrls.length > 0
+          ? `\n\n**Verified Sources:**\n${res.groundingUrls.map((u) => `- [${u}](${u})`).join('\n')}`
+          : '';
 
-      // Parse commands
       const commandRegex = /\[CMD:\s*(\w+)\]/g;
-      const matches = [...responseText.matchAll(commandRegex)];
+      const rawText = `${res.text || 'Command processed.'}${actionNote}${sourcesNote}`;
+      const matches = [...rawText.matchAll(commandRegex)];
       const commands = matches.map(m => m[1]);
-      const cleanResponse = responseText.replace(commandRegex, '').trim();
+      const cleanResponse = rawText.replace(commandRegex, '').trim();
 
       const assistantMsg: Message = {
         role: 'assistant',
@@ -297,14 +263,27 @@ export const SovereignAI: React.FC<{
         }
         return s;
       }));
-      
-      setIsTyping(false);
-      
-      // Execute UI commands
+
       if (commands.length > 0 && onExecuteCommand) {
         commands.forEach(cmd => onExecuteCommand(cmd));
       }
-    }, 1200);
+    } catch (e: any) {
+      console.error("SovereignAI execution error:", e);
+      const errMsg: Message = {
+        role: 'assistant',
+        content: `AI execution error: ${e?.message || 'Unable to reach paid Gemini 4 backend.'}`,
+        timestamp: new Date().toISOString()
+      };
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return { ...s, messages: [...s.messages, errMsg], updatedAt: new Date().toISOString() };
+        }
+        return s;
+      }));
+      toast.error(e?.message || 'SovereignAI request failed.');
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (

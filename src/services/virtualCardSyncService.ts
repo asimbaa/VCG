@@ -24,6 +24,8 @@ import {
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { toast } from "sonner";
+import { repairLuhnPan } from "../utils/luhn";
+import { getVerifiedCloudUid, isAsimCloudSession, sanitizeDocId } from "./cloudSessionGuard";
 
 export interface CardControls {
   onlineEnabled: boolean;
@@ -76,9 +78,9 @@ export const DEFAULT_VIRTUAL_CARDS: VirtualCardModel[] = [
   {
     id: "vc-centurion-black",
     name: "Valourian Centurion Sovereign Black",
-    number: "3791 884920 48291",
-    fullNumber: "379188492048291",
-    last4: "8291",
+    number: "3791 884920 48299",
+    fullNumber: "379188492048299",
+    last4: "8299",
     balance: 1000000000,
     currency: "AUD",
     limit: "unlimited",
@@ -117,9 +119,9 @@ export const DEFAULT_VIRTUAL_CARDS: VirtualCardModel[] = [
   {
     id: "vc-cba-diamond-world",
     name: "CommBank Diamond World Elite Virtual",
-    number: "5163 9201 4419 8201",
-    fullNumber: "5163920144198201",
-    last4: "8201",
+    number: "5163 9201 4419 8208",
+    fullNumber: "5163920144198208",
+    last4: "8208",
     balance: 500000000,
     currency: "AUD",
     limit: 500000000,
@@ -158,9 +160,9 @@ export const DEFAULT_VIRTUAL_CARDS: VirtualCardModel[] = [
   {
     id: "vc-westpac-infinite",
     name: "Westpac Institutional Visa Infinite",
-    number: "4564 8192 3019 5521",
-    fullNumber: "4564819230195521",
-    last4: "5521",
+    number: "4564 8192 3019 5524",
+    fullNumber: "4564819230195524",
+    last4: "5524",
     balance: 750000000,
     currency: "AUD",
     limit: 750000000,
@@ -199,9 +201,9 @@ export const DEFAULT_VIRTUAL_CARDS: VirtualCardModel[] = [
   {
     id: "vc-macquarie-sovereign",
     name: "Macquarie Sovereign Reserve Multi-Currency",
-    number: "5424 9912 3810 6632",
-    fullNumber: "5424991238106632",
-    last4: "6632",
+    number: "5424 9912 3810 6634",
+    fullNumber: "5424991238106634",
+    last4: "6634",
     balance: 450000000,
     currency: "AUD",
     limit: 450000000,
@@ -322,17 +324,18 @@ class VirtualCardSyncService {
   }
 
   public subscribe(userId: string, callback: (cards: VirtualCardModel[]) => void): () => void {
-    this.currentUserId = auth.currentUser?.uid || userId || "asim_aryal";
+    this.currentUserId = getVerifiedCloudUid() || userId || "asim_aryal";
     this.listeners.add(callback);
     callback(this.cachedCards);
 
-    if (!this.unsubscribeFirestore && auth.currentUser) {
+    if (!this.unsubscribeFirestore && getVerifiedCloudUid()) {
       this.startFirestoreSync();
     }
 
     const unsubAuth = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        this.currentUserId = u.uid;
+      const verifiedUid = getVerifiedCloudUid();
+      if (u && verifiedUid) {
+        this.currentUserId = verifiedUid;
         if (!this.unsubscribeFirestore && this.listeners.size > 0) {
           this.startFirestoreSync();
         }
@@ -354,7 +357,7 @@ class VirtualCardSyncService {
 
   private startFirestoreSync() {
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getVerifiedCloudUid();
       if (!uid) return;
       const cardsColRef = collection(db, "virtual_cards");
       const q = query(cardsColRef, where("userId", "==", uid));
@@ -379,14 +382,17 @@ class VirtualCardSyncService {
 
   private async seedInitialCardsInFirestore() {
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getVerifiedCloudUid();
       if (!uid) return;
+      const asim = isAsimCloudSession();
       for (const card of DEFAULT_VIRTUAL_CARDS) {
-        await setDoc(doc(db, "virtual_cards", card.id), {
+        const docId = asim ? card.id : sanitizeDocId(`${uid}_${card.id}`);
+        await setDoc(doc(db, "virtual_cards", docId), {
           ...card,
+          id: docId,
           userId: uid,
           seededAt: new Date().toISOString()
-        });
+        }, { merge: true });
       }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, "virtual_cards");
@@ -425,7 +431,7 @@ class VirtualCardSyncService {
   }
 
   public async reconcileLiveDatabase(force = false): Promise<VirtualCardModel[]> {
-    const uid = auth.currentUser?.uid;
+    const uid = getVerifiedCloudUid();
     if (!uid) return this.cachedCards;
     const now = Date.now();
     // Throttle reconciliations: at most once every 30 seconds unless forced
@@ -494,8 +500,8 @@ class VirtualCardSyncService {
     this.saveLocalCache();
     this.notifyListeners();
 
-    // 24/7 Firestore persistence (only when Firebase Auth session is active)
-    const activeUid = auth.currentUser?.uid;
+    // 24/7 Firestore persistence (only when verified Firebase Auth session is active)
+    const activeUid = getVerifiedCloudUid();
     if (!activeUid) {
       return {
         success: true,
@@ -507,7 +513,8 @@ class VirtualCardSyncService {
     }
 
     try {
-      await setDoc(doc(db, "virtual_cards", card.id), {
+      const targetCardDocId = isAsimCloudSession() ? card.id : sanitizeDocId(`${activeUid}_${card.id}`);
+      await setDoc(doc(db, "virtual_cards", targetCardDocId), {
         userId: activeUid,
         balance: newBalance,
         atc: nextAtc,
@@ -579,9 +586,10 @@ class VirtualCardSyncService {
     this.notifyListeners();
 
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getVerifiedCloudUid();
       if (db && uid) {
-        await setDoc(doc(db, "virtual_cards", cardId), { ...updatedCard, userId: uid }, { merge: true });
+        const targetCardDocId = isAsimCloudSession() ? cardId : sanitizeDocId(`${uid}_${cardId}`);
+        await setDoc(doc(db, "virtual_cards", targetCardDocId), { ...updatedCard, id: targetCardDocId, userId: uid }, { merge: true });
       }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `virtual_cards/${cardId}`);
@@ -718,12 +726,15 @@ class VirtualCardSyncService {
   }
 
   public async issueCard(newCardData: Partial<VirtualCardModel>): Promise<VirtualCardModel> {
-    const isAmex = newCardData.network === "AMEX";
-    const pan = isAmex
-      ? `3791 ${Math.floor(100000 + Math.random() * 900000)} ${Math.floor(10000 + Math.random() * 90000)}`
-      : `5163 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`;
-    const fullNumber = pan.replace(/\s+/g, "");
-    const last4 = fullNumber.slice(-4);
+    const net = newCardData.network === "AMEX" ? "AMEX" : newCardData.network === "Visa" ? "Visa" : "Mastercard";
+    const isAmex = net === "AMEX";
+    const seedPan = newCardData.fullNumber || newCardData.number || (isAmex
+      ? `3791${Math.floor(100000 + Math.random() * 900000)}${Math.floor(10000 + Math.random() * 90000)}`
+      : `${net === "Visa" ? "4564" : "5163"}${Math.floor(1000 + Math.random() * 9000)}${Math.floor(1000 + Math.random() * 9000)}${Math.floor(1000 + Math.random() * 9000)}`);
+    const repaired = repairLuhnPan(seedPan, net);
+    const pan = repaired.formattedPan;
+    const fullNumber = repaired.rawPan;
+    const last4 = repaired.last4;
     const cvv = isAmex
       ? Math.floor(1000 + Math.random() * 9000).toString()
       : Math.floor(100 + Math.random() * 900).toString();
@@ -776,9 +787,10 @@ class VirtualCardSyncService {
     this.notifyListeners();
 
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getVerifiedCloudUid();
       if (db && uid) {
-        await setDoc(doc(db, "virtual_cards", card.id), { ...card, userId: uid });
+        const docId = sanitizeDocId(card.id);
+        await setDoc(doc(db, "virtual_cards", docId), { ...card, id: docId, userId: uid });
       }
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, `virtual_cards/${card.id}`);
@@ -792,8 +804,8 @@ class VirtualCardSyncService {
     this.saveLocalCache();
     this.notifyListeners();
     try {
-      if (db && auth.currentUser) {
-        await deleteDoc(doc(db, "virtual_cards", cardId));
+      if (db && isAsimCloudSession()) {
+        await deleteDoc(doc(db, "virtual_cards", sanitizeDocId(cardId)));
       }
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `virtual_cards/${cardId}`);

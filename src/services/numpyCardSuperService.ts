@@ -259,8 +259,8 @@ export const AMEX_AUSTRALIA_CREDIT_CARDS: AmexAustraliaCardProfile[] = [
   {
     id: "amex_au_platinum_business",
     name: "American Express Platinum Business Card (Australia)",
-    pan: "3760 918210 41008",
-    rawPan: "376091821041008", // 15-digit 100% Luhn Mod 10 Verified
+    pan: "3760 918210 41006",
+    rawPan: "376091821041006", // 15-digit 100% Luhn Mod 10 Verified
     cid: "8819",
     csc: "819",
     securityPin: "8819",
@@ -302,8 +302,8 @@ export const AMEX_AUSTRALIA_CREDIT_CARDS: AmexAustraliaCardProfile[] = [
   {
     id: "amex_au_explorer",
     name: "American Express Explorer Credit Card (Australia)",
-    pan: "3759 849210 62004",
-    rawPan: "375984921062004", // 15-digit 100% Luhn Mod 10 Verified
+    pan: "3759 849210 62008",
+    rawPan: "375984921062008", // 15-digit 100% Luhn Mod 10 Verified
     cid: "4201",
     csc: "420",
     securityPin: "4201",
@@ -345,8 +345,8 @@ export const AMEX_AUSTRALIA_CREDIT_CARDS: AmexAustraliaCardProfile[] = [
   {
     id: "amex_au_corporate_black_diamond",
     name: "American Express Corporate Black Diamond (Valourian Treasury AU)",
-    pan: "3791 748210 03005",
-    rawPan: "379174821003005", // 15-digit 100% Luhn Mod 10 Verified
+    pan: "3791 748210 03007",
+    rawPan: "379174821003007", // 15-digit 100% Luhn Mod 10 Verified
     cid: "9305",
     csc: "930",
     securityPin: "9305",

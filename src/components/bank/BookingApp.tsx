@@ -49,11 +49,27 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { HotelMapViewer } from './HotelMapViewer';
-import { db } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, getDocs, query, orderBy, where, limit } from 'firebase/firestore';
 import { sendEmailViaService, EmailPreviewModal, EmailData } from './EmailService';
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { creChargeFacilitiesService } from "../../services/creChargeFacilitiesService";
+import {
+  UniversalPaymentRailSelector,
+  UniversalPaymentRail,
+  executeUniversalSettlement,
+} from "../shared/UniversalPaymentRailSelector";
+import {
+  getVerifiedCloudUid,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalTransactions,
+  getAvailableBenefitVouchers,
+  redeemBenefitVoucher,
+  SharedBenefitVoucher,
+} from "../../services/cloudSessionGuard";
 
 export function BookingApp({ user, balances, setBalances }: {
   user: any;
@@ -81,6 +97,16 @@ export function BookingApp({ user, balances, setBalances }: {
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewEmail, setPreviewEmail] = useState<EmailData | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [appliedVoucher, setAppliedVoucher] = useState<SharedBenefitVoucher | null>(null);
+  const [availableVouchers, setAvailableVouchers] = useState<SharedBenefitVoucher[]>(() =>
+    getAvailableBenefitVouchers("booking")
+  );
+
+  useEffect(() => {
+    const syncV = () => setAvailableVouchers(getAvailableBenefitVouchers("booking"));
+    window.addEventListener("valourian_vouchers_updated", syncV);
+    return () => window.removeEventListener("valourian_vouchers_updated", syncV);
+  }, []);
   const [minRatingFilter, setMinRatingFilter] = useState<number>(0);
   const [showMap, setShowMap] = useState(false);
   const [bookingHistory, setBookingHistory] = useState<any[]>([]);
@@ -99,86 +125,13 @@ export function BookingApp({ user, balances, setBalances }: {
   const [includeDinner, setIncludeDinner] = useState(false);
   const [includeAllInclusive, setIncludeAllInclusive] = useState(false);
 
-  // Live cards list loaded from storage
-  const [bookingCards, setBookingCards] = useState<any[]>(() => {
-    try {
-      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: "visa_primary",
-        last4: "4242",
-        fullNumber: "4242 4242 4242 4242",
-        cvv: "123",
-        pin: "0000",
-        holder: "ASIM ARYAL",
-        expiry: "12/28",
-        type: "primary",
-        limit: "$10,000.00 USD",
-        region: "Global",
-        network: "Visa",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        netbankId: "43359948",
-        balance: 15000,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Standard Checking",
-          benefits: "Cashback on all purchases",
-          atm: "Global Free Withdrawal",
-        },
-      },
-      {
-        id: "mastercard_sec",
-        last4: "5100",
-        fullNumber: "5105 1051 0510 5100",
-        cvv: "456",
-        pin: "1234",
-        holder: "ASIM ARYAL",
-        expiry: "05/29",
-        type: "primary",
-        limit: "$20,000.00 USD",
-        region: "Global",
-        network: "Mastercard",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        netbankId: "88019948",
-        balance: 12500,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Premium Savings",
-          benefits: "Travel rewards and lounge access",
-          chips: "Contactless enabled",
-        },
-      },
-      {
-        id: "amex_corp",
-        last4: "0005",
-        fullNumber: "3782 822463 10005",
-        cvv: "7890",
-        pin: "4321",
-        holder: "ASIM ARYAL",
-        expiry: "04/30",
-        type: "primary",
-        limit: "No Preset Spending Limit",
-        region: "Global",
-        network: "American Express",
-        bsb: "834-472",
-        accountNumber: "242719180",
-        netbankId: "8207647128",
-        balance: 55000,
-        isFlipped: false,
-        details: {
-          access: "Corporate Account",
-          benefits: "Centurion Lounge Access",
-          atm: "Cash advance available",
-        },
-      }
-    ];
-  });
+  const [paymentRail, setPaymentRail] = useState<UniversalPaymentRail>("card");
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(() =>
+    creChargeFacilitiesService.getActiveFacilityId()
+  );
+
+  // Live cards list synced directly from unifiedBankCardSync
+  const [bookingCards, setBookingCards] = useState<any[]>(() => unifiedBankCardSync.getCards());
   const [selectedBookingCardIndex, setSelectedBookingCardIndex] = useState<number>(0);
 
   // QR-Based Payment Verification Overlay States
@@ -249,24 +202,34 @@ export function BookingApp({ user, balances, setBalances }: {
     setIsLoadingPosHistory(true);
     try {
       let records: any[] = [];
-      try {
-        const qUser = query(
-          collection(db, "transactions"),
-          where("userId", "==", user?.uid || "anonymous"),
-          orderBy("date", "desc"),
-          limit(10)
-        );
-        const snap = await getDocs(qUser);
-        records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      } catch (primaryErr) {
-        const qFallback = query(
-          collection(db, "transactions"),
-          orderBy("date", "desc"),
-          limit(10)
-        );
-        const snap = await getDocs(qFallback);
-        records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const authUid = getVerifiedCloudUid();
+      const localBookingPos = getLocalTransactions().filter(
+        (tx) =>
+          tx.recipient?.includes("Booking.com") ||
+          tx.recipient?.includes("POS") ||
+          tx.category === "POS Settlement"
+      );
+      if (authUid && db) {
+        try {
+          const qUser = query(
+            collection(db, "transactions"),
+            where("userId", "==", authUid),
+            orderBy("date", "desc"),
+            limit(10)
+          );
+          const snap = await getDocs(qUser);
+          records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch {
+          const qFallback = query(
+            collection(db, "transactions"),
+            where("userId", "==", authUid),
+            limit(10)
+          );
+          const snap = await getDocs(qFallback);
+          records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
       }
+      records = [...localBookingPos, ...records];
 
       const posFiltered = records
         .filter(tx => {
@@ -358,41 +321,48 @@ export function BookingApp({ user, balances, setBalances }: {
   const handleSimulateTerminalScan = () => {
     setSimulatingScan(true);
     setScanApproved(false);
-    // Initial tactile pulse for RF connection
     triggerPosVibration([80, 40, 100]);
 
     setTimeout(async () => {
-      setSimulatingScan(false);
-      setScanApproved(true);
-      playTerminalScanTone();
-      // Strong clearance vibration pattern upon successful authorization
-      triggerPosVibration([220, 90, 320, 90, 500]);
-      toast.success("Affiliated POS Terminal clearance approved! Ref: VAL-POS-8801");
-
-      // Auto-record POS transaction to Firestore
       try {
         const curCard = bookingCards[selectedBookingCardIndex] || bookingCards[0];
-        const newTx = {
-          userId: user?.uid || "anonymous",
-          amount: -(bookingGrandTotal || 2500),
+        const scanAmt = bookingGrandTotal || 2500;
+        const settlement = await executeUniversalSettlement({
+          rail: paymentRail === "vault" ? "card" : paymentRail,
+          cardId: curCard?.id,
+          facilityId: selectedFacilityId,
+          amountAUD: scanAmt,
+          merchantName: selectedHotel?.name ? `${selectedHotel.name} POS Terminal` : "Crown Towers Sydney POS Terminal",
+          merchantLocation: selectedHotel?.location || "Sydney NSW Australia",
+          storeApp: "BookingApp POS",
+          vaultBalanceAUD: balances.AUD || 0,
+        });
+
+        setSimulatingScan(false);
+        setScanApproved(true);
+        playTerminalScanTone();
+        triggerPosVibration([220, 90, 320, 90, 500]);
+        toast.success(`POS Terminal clearance approved via ${settlement.labelUsed}! Auth: ${settlement.authCode}`);
+
+        const txId = await recordUnifiedTransaction({
+          amount: -scanAmt,
           currency: globalCur || "AUD",
-          date: new Date().toISOString(),
           recipient: selectedHotel?.name ? `${selectedHotel.name} POS Terminal` : "Crown Towers Sydney POS Terminal",
-          type: "pos_terminal",
+          type: paymentRail === "facility" ? "crecharge_facility" : "pos_terminal",
           status: "settled",
-          reference: `VAL-POS-SYD-${Math.floor(1000 + Math.random() * 9000)}`,
+          reference: settlement.reference || `VAL-POS-SYD-${Math.floor(1000 + Math.random() * 9000)}`,
           terminalRef: "VAL-POS-SYD-8801",
-          traceId: `APRA-POS-${Date.now().toString().slice(-8)}`,
-          settlementRail: "NPP / eftpos Contactless",
+          traceId: settlement.authCode || `APRA-POS-${Date.now().toString().slice(-8)}`,
+          settlementRail: settlement.labelUsed || "NPP / eftpos Contactless",
           cardLast4: curCard?.last4 || "4242",
           category: "POS Settlement"
-        };
-        await addDoc(collection(db, "transactions"), newTx);
-        fetchRecentPosTransactions();
+        });
+        if (txId) fetchRecentPosTransactions();
       } catch (err) {
+        setSimulatingScan(false);
         console.warn("POS transaction recording fallback:", err);
       }
-    }, 1200);
+    }, 800);
   };
 
   const generateNewOtp = () => {
@@ -402,34 +372,12 @@ export function BookingApp({ user, balances, setBalances }: {
   };
 
   useEffect(() => {
-    const syncCards = () => {
-      try {
-        const saved = window.localStorage.getItem('valourian_vbank_virtual_cards_v9') || window.localStorage.getItem('valourian_digital_cards_v8');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const uniqueCards: any[] = [];
-            const seen = new globalThis.Set<string>();
-            parsed.forEach((c: any, idx: number) => {
-              const key = c?.id || `bcard-${idx}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                uniqueCards.push(c);
-              }
-            });
-            setBookingCards(uniqueCards);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to sync cards in BookingApp", e);
+    const unsub = unifiedBankCardSync.subscribe((nextCards) => {
+      if (nextCards.length > 0) {
+        setBookingCards(nextCards);
       }
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key && e.key !== "valourian_vcard_db_247") return;
-      syncCards();
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -543,29 +491,27 @@ export function BookingApp({ user, balances, setBalances }: {
   };
 
   const loadHistory = async () => {
-    if (!user || !user.uid) return;
+    const authUid = getVerifiedCloudUid();
     setIsLoadingHistory(true);
     try {
-      const q = query(
-        collection(db, "transactions"), 
-        where("userId", "==", user.uid),
-        where("recipient", ">=", "Booking.com"),
-        where("recipient", "<=", "Booking.com\uf8ff"),
-        orderBy("recipient"), 
-        orderBy("date", "desc")
-      );
-      // Fallback query if composite index missing
-      const qFallback = query(collection(db, "transactions"), where("userId", "==", user.uid), orderBy("date", "desc"));
-      
-      let snapshot;
-      try {
-        snapshot = await getDocs(q);
-      } catch (e: any) {
-         if (e.message.includes('index')) {
-           snapshot = await getDocs(qFallback);
-         } else {
-           throw e;
-         }
+      let snapshot: any = { docs: [] };
+      if (authUid && db) {
+        const q = query(
+          collection(db, "transactions"), 
+          where("userId", "==", authUid),
+          where("recipient", ">=", "Booking.com"),
+          where("recipient", "<=", "Booking.com\uf8ff"),
+          orderBy("recipient"), 
+          orderBy("date", "desc")
+        );
+        const qFallback = query(collection(db, "transactions"), where("userId", "==", authUid), orderBy("date", "desc"));
+        try {
+          snapshot = await getDocs(q);
+        } catch (e: any) {
+          if (e?.message?.includes('index')) {
+            snapshot = await getDocs(qFallback);
+          }
+        }
       }
 
       // Seed default 78-day stay at Crown Towers Sydney
@@ -1039,35 +985,69 @@ export function BookingApp({ user, balances, setBalances }: {
     setIsProcessing(true);
     try {
       const currency = selectedHotel.currency;
-      const priceToDeduct = bookingGrandTotal;
-      
-      const updatedBalances = {
-        ...balances,
-        [currency]: (balances[currency] || 0) - priceToDeduct
+      const discountAUD = appliedVoucher ? appliedVoucher.amountAUD : 0;
+      const priceToDeduct = Math.max(0, bookingGrandTotal - discountAUD);
+      const selectedCard = bookingCards && bookingCards[selectedBookingCardIndex];
+
+      let settlement = {
+        success: true,
+        labelUsed: appliedVoucher ? `Benefit Voucher (${appliedVoucher.code})` : "Valourian Sovereign Card",
+        authCode: `VOUCH-${Date.now().toString(36).toUpperCase()}`,
+        reference: `BKG-${Math.floor(100000 + Math.random() * 900000)}`,
+        error: "",
       };
 
-      if (user && user.uid) {
-        await updateDoc(doc(db, "users", user.uid), {
-          balances: updatedBalances
+      if (priceToDeduct > 0) {
+        const res = await executeUniversalSettlement({
+          rail: paymentRail,
+          cardId: selectedCard?.id,
+          facilityId: selectedFacilityId,
+          amountAUD: priceToDeduct,
+          merchantName: `Booking.com - ${selectedHotel.name}`,
+          merchantLocation: selectedHotel.location || "Australia",
+          storeApp: "BookingApp",
+          vaultBalanceAUD: balances[currency] ?? balances.AUD ?? 0,
+          onVaultDeduct: async (newBal) => {
+            const updatedBalances = {
+              ...balances,
+              [currency]: newBal,
+            };
+            await safeUpdateUserBalances(updatedBalances);
+            setBalances(updatedBalances);
+          },
         });
+        settlement = {
+          success: res.success,
+          labelUsed: res.labelUsed,
+          authCode: res.authCode,
+          reference: res.reference || settlement.reference,
+          error: res.error || "",
+        };
       }
-      setBalances(updatedBalances);
+
+      if (!settlement.success) {
+        toast.error(settlement.error || "Payment authorization declined.");
+        return;
+      }
+
+      if (appliedVoucher) {
+        await redeemBenefitVoucher(appliedVoucher.code);
+        setAppliedVoucher(null);
+      }
 
       const isStays = activeService === "stays";
       const descText = isStays 
-        ? `Premium reservation: ${calculatedNights} nights (${roomsCount} room/s) at ${selectedHotel.name}. Included Meal packages: ${includeAllInclusive ? "VIP All-Inclusive Butler Dining Board" : [includeBreakfast && "Buffet Breakfast", includeLunch && "Executive Lunch", includeDinner && "Fine Degustation Dinner"].filter(Boolean).join(", ") || "Room Only"}`
-        : `${activeService.toUpperCase()} Booking: ${selectedHotel.name}. ${baseUnits} units selected.`;
+        ? `Premium reservation (${settlement.labelUsed} • ${settlement.authCode}): ${calculatedNights} nights (${roomsCount} room/s) at ${selectedHotel.name}. Included Meal packages: ${includeAllInclusive ? "VIP All-Inclusive Butler Dining Board" : [includeBreakfast && "Buffet Breakfast", includeLunch && "Executive Lunch", includeDinner && "Fine Degustation Dinner"].filter(Boolean).join(", ") || "Room Only"}`
+        : `${activeService.toUpperCase()} Booking (${settlement.labelUsed} • ${settlement.authCode}): ${selectedHotel.name}. ${baseUnits} units selected.`;
 
-      // Book transaction receipt
-      await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
+      await recordUnifiedTransaction({
         amount: -priceToDeduct,
         currency: currency,
-        date: new Date().toISOString(),
         recipient: `Booking.com - ${selectedHotel.name}`,
-        type: "card",
+        type: paymentRail === "facility" ? "crecharge_facility" : "card",
         status: "completed",
-        description: descText
+        settlementRail: settlement.labelUsed,
+        description: descText,
       });
 
       const datesLabel = isStays 
@@ -1077,31 +1057,27 @@ export function BookingApp({ user, balances, setBalances }: {
         ? `${adultsCount} Adults, ${childrenCount} Children (${roomsCount} Room${roomsCount > 1 ? 's' : ''})`
         : `${totalGuests} Guests`;
 
-      // Dispatch verified invoice directly to Workspace Mail platform
-      if (user && user.uid) {
-        const selectedCard = bookingCards && bookingCards[selectedBookingCardIndex];
-        const cardRefLabel = selectedCard 
-          ? `${selectedCard.network || 'VALOURIAN'} CORP **** ${selectedCard.last4 || selectedCard.fullNumber?.replace(/\s+/g, '').slice(-4) || '4242'}`
-          : "MASTERCARD VIP CORPORATE SIGNATURE";
+      const cardRefLabel = settlement.labelUsed || (selectedCard
+        ? `${selectedCard.network || 'VALOURIAN'} CORP **** ${selectedCard.last4 || '4242'}`
+        : "MASTERCARD VIP CORPORATE SIGNATURE");
 
-        await sendEmailViaService(user, {
-          sender: "Booking.com Reservations Desk",
-          email: "reservations@booking.com",
-          receiverEmail: confirmationEmail,
-          subject: `CONFIRMED: Sovereign Stay booking at ${selectedHotel.name} (${calculatedNights} Nights)`,
-          preview: `Booking approved. Payment of ${currency} ${priceToDeduct.toLocaleString()} settled cleanly via Sovereign Treasury Card ${cardRefLabel}.`,
-          body: `Dear Mr. Asim Aryal,\n\nYour luxury travel stay booked via Booking.com is officially confirmed and registered in our worldwide travel ledger.\n\nRESERVATION PERIOD AND DETAILS:\n- Resort Property: ${selectedHotel.name}\n- Strategic Address: ${selectedHotel.location}\n- Active Period: ${datesLabel} (${calculatedNights} nights total stay)\n- Room Arrangement: ${guestsLabel}\n- Active Dining Packages: ${includeAllInclusive ? "VIP Executive All-Inclusive (Breakfast, Lunch, Dinner with high-shelf bar and personal chef-table butler)" : [includeBreakfast && "Fresh Breakfast Buffet", includeLunch && "Three-Course Executive Culinary Lunch", includeDinner && "Six-Course Degustation Dinner Pairing"].filter(Boolean).join(", ") || "Strictly Room Only"}\n\nSOVEREIGN TREASURY BILLING SUMMARY:\n- Nightly Room Rate: ${currency} ${(selectedHotel.price).toLocaleString()} per unit\n- Accommodation Subtotal (${calculatedNights} nights, ${roomsCount} Room/s): ${currency} ${roomRatesSubtotal.toLocaleString()}\n- Optional Dining Addons Subtotal: ${currency} ${foodPackagesSubtotal.toLocaleString()}\n- Local Australian Tourism Surcharge & GST (10%): ${currency} ${taxAddition.toLocaleString()}\n- Absolute Grand Settle Total: ${currency} ${priceToDeduct.toLocaleString()}\n- Processing Ledger Gateway: Sovereign Wealth Capital Global Clearing\n- Payment Method: Secured via ${cardRefLabel}\n- Authorization Code: VAL-${Date.now().toString().substring(0,6)}\n\nYour electronic contactless hotel keys and secure QR access codes have been synced directly with your vehicle fleet console.\n\nSincerely,\nBooking.com Executive Concierge Team`,
-          attachments: [
-            { name: `Booking_Invoice_${selectedHotel.name.replace(/\s+/g, "_")}.pdf`, size: "4.8 MB" }
-          ]
-        }, setPreviewEmail);
-      }
+      await sendEmailViaService(user, {
+        sender: "Booking.com Reservations Desk",
+        email: "reservations@booking.com",
+        receiverEmail: confirmationEmail,
+        subject: `CONFIRMED: Sovereign Stay booking at ${selectedHotel.name} (${calculatedNights} Nights)`,
+        preview: `Booking approved. Payment of ${currency} ${priceToDeduct.toLocaleString()} settled cleanly via ${cardRefLabel}.`,
+        body: `Dear Mr. Asim Aryal,\n\nYour luxury travel stay booked via Booking.com is officially confirmed and registered in our worldwide travel ledger.\n\nRESERVATION PERIOD AND DETAILS:\n- Resort Property: ${selectedHotel.name}\n- Strategic Address: ${selectedHotel.location}\n- Active Period: ${datesLabel} (${calculatedNights} nights total stay)\n- Room Arrangement: ${guestsLabel}\n- Active Dining Packages: ${includeAllInclusive ? "VIP Executive All-Inclusive (Breakfast, Lunch, Dinner with high-shelf bar and personal chef-table butler)" : [includeBreakfast && "Fresh Breakfast Buffet", includeLunch && "Three-Course Executive Culinary Lunch", includeDinner && "Six-Course Degustation Dinner Pairing"].filter(Boolean).join(", ") || "Strictly Room Only"}\n\nSOVEREIGN TREASURY BILLING SUMMARY:\n- Nightly Room Rate: ${currency} ${(selectedHotel.price).toLocaleString()} per unit\n- Accommodation Subtotal (${calculatedNights} nights, ${roomsCount} Room/s): ${currency} ${roomRatesSubtotal.toLocaleString()}\n- Optional Dining Addons Subtotal: ${currency} ${foodPackagesSubtotal.toLocaleString()}\n- Local Australian Tourism Surcharge & GST (10%): ${currency} ${taxAddition.toLocaleString()}\n- Benefit Voucher Applied: -${currency} ${discountAUD.toLocaleString()}\n- Absolute Grand Settle Total: ${currency} ${priceToDeduct.toLocaleString()}\n- Payment Rail: Secured via ${cardRefLabel}\n- Authorization Code: ${settlement.authCode}\n\nYour electronic contactless hotel keys and secure QR access codes have been synced directly with your vehicle fleet console.\n\nSincerely,\nBooking.com Executive Concierge Team`,
+        attachments: [
+          { name: `Booking_Invoice_${selectedHotel.name.replace(/\s+/g, "_")}.pdf`, size: "4.8 MB" }
+        ]
+      }, setPreviewEmail);
 
       // Physical haptic vibration pattern for real POS/booking authorization clearance
       triggerPosVibration([250, 100, 350, 100, 500]);
       playTerminalScanTone();
 
-      toast.success(`Accommodation confirmed! Total of ${currency} ${priceToDeduct.toLocaleString()} cleared cleanly. Invoice emailed to Workspace Mail.`);
+      toast.success(`Accommodation confirmed via ${settlement.labelUsed}! Total ${currency} ${priceToDeduct.toLocaleString()} cleared (Auth ${settlement.authCode}).`);
       
       setConfirmedBookingData({
         hotelName: selectedHotel.name,
@@ -2116,12 +2092,49 @@ export function BookingApp({ user, balances, setBalances }: {
                           </div>
                         </div>
 
-                        {/* Dedicated Card Details Display & Affiliated POS Settlement Rail */}
+                        {/* Card & Facility Settlement Rail + 1-Tap Benefit Vouchers */}
                         <div className="mt-4 pt-3 border-t border-slate-200 space-y-3">
+                          {availableVouchers.length > 0 && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+                                  Cardholder Suite Credits Available
+                                </div>
+                                <div className="text-xs font-semibold text-amber-950">
+                                  {appliedVoucher
+                                    ? `Applied ${appliedVoucher.code} (-$${appliedVoucher.amountAUD.toLocaleString()} AUD)`
+                                    : `${availableVouchers[0].title} (${availableVouchers[0].code})`}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAppliedVoucher(appliedVoucher ? null : availableVouchers[0])
+                                }
+                                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#003580] text-white text-[11px] font-bold cursor-pointer"
+                              >
+                                {appliedVoucher ? "Remove Credit" : `Apply -$${availableVouchers[0].amountAUD.toLocaleString()}`}
+                              </button>
+                            </div>
+                          )}
+                          <UniversalPaymentRailSelector
+                            theme="light"
+                            rail={paymentRail}
+                            onRailChange={setPaymentRail}
+                            selectedCardId={bookingCards[selectedBookingCardIndex]?.id || ""}
+                            onSelectCardId={(cid) => {
+                              const idx = bookingCards.findIndex((c) => c.id === cid);
+                              if (idx >= 0) setSelectedBookingCardIndex(idx);
+                            }}
+                            selectedFacilityId={selectedFacilityId}
+                            onSelectFacilityId={setSelectedFacilityId}
+                            amountAUD={Math.max(0, bookingGrandTotal - (appliedVoucher?.amountAUD || 0))}
+                            vaultBalanceAUD={balances[selectedHotel?.currency || "AUD"] ?? balances.AUD ?? 0}
+                          />
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <CreditCard className="w-4 h-4 text-[#003580]" />
-                              <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Settlement Virtual Card Details</span>
+                              <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Settlement Virtual Card Preview</span>
                             </div>
                             <span className="text-[9px] bg-blue-100 text-[#003580] font-extrabold px-2 py-0.5 rounded-full font-mono uppercase">
                               Active Route: {bookingCards[selectedBookingCardIndex]?.network || 'Visa'} (*{bookingCards[selectedBookingCardIndex]?.last4 || '4242'})

@@ -54,26 +54,22 @@ export function AutoBugCatcherConsole() {
 
   return (
     <>
-      {/* Sleek Floating Status Pill */}
-      <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40">
+      {/* Floating Resilience Console Trigger (Positioned clear of bottom nav and speed dial) */}
+      <div className="fixed bottom-20 left-4 md:bottom-8 md:left-72 lg:left-80 z-40">
         <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-slate-950/90 border border-emerald-500/40 text-white shadow-2xl backdrop-blur-md hover:border-emerald-400 group cursor-pointer transition-all"
-          title="Auto Bug Catcher & Human Flourishing Resilience Monitor"
+          className="flex items-center gap-2.5 min-h-[44px] px-3.5 py-2 rounded-full bg-slate-950/90 border border-emerald-500/40 text-white shadow-2xl backdrop-blur-md hover:border-emerald-400 group cursor-pointer transition-all"
+          title="Auto Bug Catcher & Resilience Monitor"
         >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-          </span>
-          <ShieldCheck className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
-          <div className="text-left hidden sm:block">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="text-left hidden sm:block tabular-nums">
             <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 leading-none">
               Auto Bug Catcher
             </div>
-            <div className="text-[9px] text-slate-400 font-mono leading-tight">
-              {stats.resilienceScore}% • {stats.autoHealedCount} Healed
+            <div className="text-[10px] text-slate-400 font-mono leading-tight">
+              {stats.resilienceScore}% · {stats.autoHealedCount} Healed
             </div>
           </div>
         </motion.button>
@@ -88,25 +84,20 @@ export function AutoBugCatcherConsole() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-slate-100"
+              className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden text-slate-100"
             >
               {/* Header */}
-              <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
+              <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-black text-white tracking-tight">
-                        Sovereign Auto Bug Catcher
-                      </h2>
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                        24/7/365 Deep Future
-                      </span>
-                    </div>
+                    <h2 className="text-base font-black text-white tracking-tight">
+                      Sovereign Auto Bug Catcher
+                    </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Autonomous self-healing & continuous resilience for humanity's flourishing.
+                      Continuous resilience monitor · 24/7 Self-Healing Safeguards
                     </p>
                   </div>
                 </div>
@@ -131,29 +122,29 @@ export function AutoBugCatcherConsole() {
               </div>
 
               {/* Stat Highlights */}
-              <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-900/40 border-b border-slate-800/80">
+              <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-900/40 border-b border-slate-800/80 tabular-nums">
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 text-center">
-                  <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Resilience Score</div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Resilience Score</div>
                   <div className="text-xl font-black text-emerald-400 mt-0.5">{stats.resilienceScore}%</div>
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">Fault Tolerant</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">Fault Tolerant</div>
                 </div>
 
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 text-center">
-                  <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Auto-Healed</div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Auto-Healed</div>
                   <div className="text-xl font-black text-cyan-400 mt-0.5">{stats.autoHealedCount}</div>
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">Zero Human Effort</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">Zero Effort</div>
                 </div>
 
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 text-center">
-                  <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Interceptions</div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Interceptions</div>
                   <div className="text-xl font-black text-indigo-400 mt-0.5">{stats.totalInterceptions}</div>
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">Shielded Gracefully</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">Shielded</div>
                 </div>
 
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 text-center">
-                  <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">System Uptime</div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">System Uptime</div>
                   <div className="text-xl font-black text-amber-400 mt-0.5">{stats.systemUptimeSeconds}s</div>
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">Uninterrupted</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">Uninterrupted</div>
                 </div>
               </div>
 

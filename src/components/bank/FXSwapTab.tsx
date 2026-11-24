@@ -10,8 +10,7 @@ import {
   Globe 
 } from "lucide-react";
 import { toast } from "sonner";
-import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
-import { db } from "../../firebase";
+import { safeUpdateUserBalances, recordUnifiedTransaction } from "../../services/cloudSessionGuard";
 
 interface FXSwapTabProps {
   user: any;
@@ -71,38 +70,29 @@ export function FXSwapTab({ user, balances, setBalances }: FXSwapTabProps) {
       const parsedToNum = parseFloat(calculatedTo);
       const newFrom = currentFromBalance - parsedFrom;
       const newTo = (balances[toCurrency] || 0) + parsedToNum;
-
-      if (user?.uid) {
-        const userRef = doc(db, "users", user.uid);
-        await updateDoc(userRef, {
-          [`balances.${fromCurrency}`]: newFrom,
-          [`balances.${toCurrency}`]: newTo,
-        });
-      }
+      const nextBalances = {
+        ...balances,
+        [fromCurrency]: newFrom,
+        [toCurrency]: newTo,
+      };
 
       if (setBalances) {
-        setBalances(prev => ({
-          ...prev,
-          [fromCurrency]: newFrom,
-          [toCurrency]: newTo,
-        }));
+        setBalances(nextBalances);
       }
+      await safeUpdateUserBalances(nextBalances);
 
-      if (user?.uid) {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          date: new Date().toISOString(),
-          amount: parsedFrom,
-          currency: fromCurrency,
-          recipient: `Sovereign FX Swap to ${toCurrency}`,
-          type: "fx_swap",
-          rate: effectiveRate,
-          receivedAmount: parsedToNum,
-          receivedCurrency: toCurrency,
-          status: "completed",
-          description: `Zero-Spread Institutional Conversion: ${parsedFrom.toLocaleString()} ${fromCurrency} → ${parsedToNum.toLocaleString()} ${toCurrency}`
-        });
-      }
+      await recordUnifiedTransaction({
+        date: new Date().toISOString(),
+        amount: parsedFrom,
+        currency: fromCurrency,
+        recipient: `Sovereign FX Swap to ${toCurrency}`,
+        type: "fx_swap",
+        rate: effectiveRate,
+        receivedAmount: parsedToNum,
+        receivedCurrency: toCurrency,
+        status: "completed",
+        description: `Zero-Spread Institutional Conversion: ${parsedFrom.toLocaleString()} ${fromCurrency} → ${parsedToNum.toLocaleString()} ${toCurrency}`
+      });
 
       setFromAmount("");
       toast.success(`✓ Sovereign FX Swap Settled: +${parsedToNum.toLocaleString()} ${toCurrency} credited at 0.00% markup!`);

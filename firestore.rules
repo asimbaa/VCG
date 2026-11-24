@@ -56,7 +56,7 @@ service cloud.firestore {
                'recipientEmail', 'recipientName', 'grantedLimitAUD', 'cardMode',
                'allowPhysicalCard', 'physicalDispatchStatus', 'autoShareVipBenefits',
                'vipBenefits', 'status', 'claimedByName', 'claimedByEmail',
-               'claimedAt', 'shareUrl', 'createdAt'
+               'claimedAt', 'shareUrl', 'createdAt', 'updatedAt'
              ]) &&
              isValidId(data.inviteId) &&
              data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
@@ -72,16 +72,31 @@ service cloud.firestore {
              data.grantedLimitAUD is number && (data.grantedLimitAUD == -1 || data.grantedLimitAUD >= 0) &&
              data.cardMode in ['virtual_instant', 'virtual_and_physical'] &&
              data.allowPhysicalCard is bool &&
-             data.physicalDispatchStatus in ['not_requested', 'queued_production', 'courier_dispatched'] &&
+             data.physicalDispatchStatus in ['not_requested', 'queued_production', 'courier_dispatched', 'delivered'] &&
              data.autoShareVipBenefits is bool &&
              data.vipBenefits is list && data.vipBenefits.size() <= 8 &&
              (data.vipBenefits.size() == 0 || (data.vipBenefits[0] is string && data.vipBenefits[0].size() <= 120)) &&
-             data.status in ['pending', 'claimed', 'revoked'] &&
+             data.status in ['pending', 'claimed', 'paused', 'revoked'] &&
              (!('claimedByName' in data) || (data.claimedByName is string && data.claimedByName.size() <= 100)) &&
              (!('claimedByEmail' in data) || (data.claimedByEmail is string && data.claimedByEmail.size() <= 120)) &&
              (!('claimedAt' in data) || (data.claimedAt is string && data.claimedAt.size() <= 64)) &&
              data.shareUrl is string && data.shareUrl.size() >= 1 && data.shareUrl.size() <= 260 &&
-             data.createdAt == request.time;
+             data.createdAt == request.time &&
+             (!('updatedAt' in data) || data.updatedAt == request.time);
+    }
+
+    function isValidVirtualCard(data) {
+      return (!('userId' in data) || (data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128)) &&
+             (!('name' in data) || (data.name is string && data.name.size() >= 1 && data.name.size() <= 160)) &&
+             (!('network' in data) || (data.network is string && data.network.size() >= 1 && data.network.size() <= 32)) &&
+             (!('cardCategory' in data) || data.cardCategory in ['debit', 'credit']) &&
+             (!('status' in data) || data.status in ['active', 'frozen']) &&
+             (!('balance' in data) || (data.balance is number && data.balance >= 0)) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() >= 1 && data.currency.size() <= 12)) &&
+             (!('burnerMode' in data) || data.burnerMode is bool) &&
+             (!('luhnVerified' in data) || data.luhnVerified is bool) &&
+             (!('merchantLockMode' in data) || data.merchantLockMode in ['off', 'allowlist', 'blocklist']) &&
+             (!('merchantLocks' in data) || (data.merchantLocks is list && data.merchantLocks.size() <= 20 && (data.merchantLocks.size() == 0 || (data.merchantLocks[0] is string && data.merchantLocks[0].size() <= 120))));
     }
 
     function isValidEmailDispatchLog(data) {
@@ -118,6 +133,63 @@ service cloud.firestore {
              (!('read' in data) || data.read is bool);
     }
 
+    function isValidCreditFacility(data) {
+      return data.keys().hasAll([
+               'facilityId', 'userId', 'facilityName', 'facilityCode',
+               'facilityType', 'network', 'holderName', 'totalLimitAUD',
+               'drawnAmountAUD', 'availableCreditAUD', 'primeAprPercent',
+               'interestFreeDays', 'status', 'autoReplenish',
+               'linkedCardLast4', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'facilityId', 'userId', 'facilityName', 'facilityCode',
+               'facilityType', 'network', 'holderName', 'totalLimitAUD',
+               'drawnAmountAUD', 'availableCreditAUD', 'primeAprPercent',
+               'interestFreeDays', 'status', 'autoReplenish',
+               'linkedCardLast4', 'updatedAt'
+             ]) &&
+             isValidId(data.facilityId) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.facilityName is string && data.facilityName.size() >= 1 && data.facilityName.size() <= 140 &&
+             data.facilityCode is string && data.facilityCode.size() >= 1 && data.facilityCode.size() <= 64 &&
+             data.facilityType in ['revolving_prime', 'corporate_charge', 'fleet_operational', 'custom'] &&
+             data.network is string && data.network.size() >= 1 && data.network.size() <= 64 &&
+             data.holderName is string && data.holderName.size() >= 1 && data.holderName.size() <= 120 &&
+             data.totalLimitAUD is number && data.totalLimitAUD >= 0 &&
+             data.drawnAmountAUD is number && data.drawnAmountAUD >= 0 &&
+             data.availableCreditAUD is number && data.availableCreditAUD >= 0 &&
+             data.primeAprPercent is number && data.primeAprPercent >= 0 &&
+             data.interestFreeDays is number && data.interestFreeDays >= 0 &&
+             data.status in ['active', 'paused'] &&
+             data.autoReplenish is bool &&
+             data.linkedCardLast4 is string && data.linkedCardLast4.size() >= 1 && data.linkedCardLast4.size() <= 8 &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidFacilityEvent(data) {
+      return data.keys().hasAll([
+               'eventId', 'userId', 'facilityId', 'facilityName',
+               'action', 'amountAUD', 'merchantName', 'storeApp',
+               'authCode', 'reference', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'eventId', 'userId', 'facilityId', 'facilityName',
+               'action', 'amountAUD', 'merchantName', 'storeApp',
+               'authCode', 'reference', 'createdAt'
+             ]) &&
+             isValidId(data.eventId) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             isValidId(data.facilityId) &&
+             data.facilityName is string && data.facilityName.size() >= 1 && data.facilityName.size() <= 140 &&
+             data.action in ['store_charge', 'drawdown', 'repayment', 'limit_increase', 'facility_created'] &&
+             data.amountAUD is number && data.amountAUD >= 0 &&
+             data.merchantName is string && data.merchantName.size() >= 1 && data.merchantName.size() <= 160 &&
+             data.storeApp is string && data.storeApp.size() >= 1 && data.storeApp.size() <= 64 &&
+             data.authCode is string && data.authCode.size() >= 1 && data.authCode.size() <= 64 &&
+             data.reference is string && data.reference.size() >= 1 && data.reference.size() <= 120 &&
+             data.createdAt == request.time;
+    }
+
     // Read-only startup connectivity check document
     match /test/connection {
       allow get: if true;
@@ -142,6 +214,17 @@ service cloud.firestore {
         allow delete: if isValidId(eventId) && isAsim();
       }
 
+      match /receipts/{receiptId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update: if isValidId(receiptId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+        allow delete: if isValidId(receiptId) && isAsim();
+      }
+
+      match /uber_eats_favorites/{favoriteId} {
+        allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
+        allow create, update, delete: if isValidId(favoriteId) && isVerifiedUser() && (isAsim() || isOwner(userId));
+      }
+
       match /cheque_records/{chequeId} {
         allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
         allow create, update: if isValidId(chequeId) && isVerifiedUser() && (isAsim() || isOwner(userId));
@@ -152,6 +235,41 @@ service cloud.firestore {
         allow get, list: if isSignedIn() && (isAsim() || isOwner(userId));
         allow create, update, delete: if isValidId(configId) && isVerifiedUser() && (isAsim() || isOwner(userId));
       }
+    }
+
+    // CreChargeFacilities & Audit Events
+    match /credit_facilities/{facilityId} {
+      allow get: if isValidId(facilityId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isValidId(facilityId) && isVerifiedUser() &&
+                    isValidCreditFacility(incoming()) &&
+                    (isAsim() || incoming().userId == request.auth.uid);
+      allow update: if isValidId(facilityId) && isVerifiedUser() &&
+                    isValidCreditFacility(incoming()) &&
+                    incoming().userId == existing().userId &&
+                    incoming().facilityId == existing().facilityId &&
+                    (
+                      isAsim() ||
+                      (
+                        existing().userId == request.auth.uid &&
+                        incoming().diff(existing()).affectedKeys().hasOnly([
+                          'facilityName', 'facilityCode', 'facilityType', 'network',
+                          'holderName', 'totalLimitAUD', 'drawnAmountAUD', 'availableCreditAUD',
+                          'primeAprPercent', 'interestFreeDays', 'status', 'autoReplenish',
+                          'linkedCardLast4', 'updatedAt'
+                        ])
+                      )
+                    );
+      allow delete: if isValidId(facilityId) && (isAsim() || (isSignedIn() && existing().userId == request.auth.uid));
+    }
+
+    match /facility_events/{eventId} {
+      allow get: if isValidId(eventId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isValidId(eventId) && isVerifiedUser() &&
+                    isValidFacilityEvent(incoming()) &&
+                    (isAsim() || incoming().userId == request.auth.uid);
+      allow update, delete: if isValidId(eventId) && isAsim();
     }
 
     // Shareable Debit & Credit Card Invitations
@@ -172,7 +290,8 @@ service cloud.firestore {
                         existing().ownerUid == request.auth.uid &&
                         incoming().diff(existing()).affectedKeys().hasOnly([
                           'status', 'claimedByName', 'claimedByEmail', 'claimedAt',
-                          'physicalDispatchStatus', 'createdAt'
+                          'physicalDispatchStatus', 'grantedLimitAUD', 'cardMode',
+                          'allowPhysicalCard', 'createdAt', 'updatedAt'
                         ])
                       )
                     );
@@ -210,6 +329,14 @@ service cloud.firestore {
     match /virtual_cards/{cardId} {
       allow get: if isValidId(cardId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
       allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isValidId(cardId) && isVerifiedUser() && isValidVirtualCard(incoming()) && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow update: if isValidId(cardId) && isVerifiedUser() && isValidVirtualCard(incoming()) && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow delete: if isValidId(cardId) && isAsim();
+    }
+
+    match /digital_bsb_cards/{cardId} {
+      allow get: if isValidId(cardId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
+      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
       allow create, update: if isValidId(cardId) && isVerifiedUser() && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
       allow delete: if isValidId(cardId) && isAsim();
     }
@@ -217,7 +344,8 @@ service cloud.firestore {
     match /cards/{cardId} {
       allow get: if isValidId(cardId) && isSignedIn() && (isAsim() || !('userId' in existing()) || existing().userId == request.auth.uid);
       allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
-      allow create, update: if isValidId(cardId) && isVerifiedUser() && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow create: if isValidId(cardId) && isVerifiedUser() && isValidVirtualCard(incoming()) && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
+      allow update: if isValidId(cardId) && isVerifiedUser() && isValidVirtualCard(incoming()) && (isAsim() || !('userId' in incoming()) || incoming().userId == request.auth.uid);
       allow delete: if isValidId(cardId) && isAsim();
     }
 
@@ -285,8 +413,7 @@ service cloud.firestore {
 
     // Mobility, Logistics & Telemetry Collections
     match /driver_ratings/{ratingId} {
-      allow get: if isValidId(ratingId) && isSignedIn();
-      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow get, list: if isSignedIn();
       allow create: if isValidId(ratingId) && isVerifiedUser() && isValidDriverRating(incoming()) && (isAsim() || incoming().userId == request.auth.uid);
       allow update: if isValidId(ratingId) && isVerifiedUser() && isValidDriverRating(incoming()) && (isAsim() || (existing().userId == request.auth.uid && incoming().userId == existing().userId));
       allow delete: if isValidId(ratingId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
@@ -400,9 +527,9 @@ service cloud.firestore {
     }
 
     match /vouchers/{voucherId} {
-      allow get: if isValidId(voucherId) && isSignedIn() && (isAsim() || existing().userId == request.auth.uid);
-      allow list: if isAsim() || (isSignedIn() && existing().userId == request.auth.uid);
-      allow create, update: if isValidId(voucherId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow get, list: if isSignedIn();
+      allow create: if isValidId(voucherId) && isVerifiedUser() && (isAsim() || incoming().userId == request.auth.uid);
+      allow update: if isValidId(voucherId) && isVerifiedUser() && (isAsim() || existing().userId == request.auth.uid || (incoming().claimed == true && incoming().claimedBy == request.auth.uid));
       allow delete: if isValidId(voucherId) && isAsim();
     }
 

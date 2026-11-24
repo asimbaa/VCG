@@ -6,6 +6,7 @@ import {
   OperationType,
 } from '../firebase';
 import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getVerifiedCloudUid } from '../services/cloudSessionGuard';
 import { toast } from 'sonner';
 
 export interface EmailDispatchAttachment {
@@ -113,12 +114,13 @@ async function persistEmailLog(entry: EmailDispatchLogEntry): Promise<void> {
   } catch {}
 
   try {
-    if (db && auth.currentUser) {
+    const cloudUid = getVerifiedCloudUid();
+    if (db && cloudUid) {
       const path = `email_dispatch_logs/${entry.logId}`;
       try {
         await setDoc(doc(collection(db, 'email_dispatch_logs'), entry.logId), {
           logId: entry.logId.slice(0, 128),
-          ownerUid: auth.currentUser.uid,
+          ownerUid: cloudUid,
           to: entry.to.slice(0, 250),
           subject: entry.subject.slice(0, 250),
           channel: entry.channel,
@@ -167,7 +169,7 @@ export async function sendUnifiedEmail(payload: UnifiedEmailPayload): Promise<{
 
   const logId = `em_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const senderName = payload.senderName || 'Valourian Sovereign Banking';
-  const ownerUid = auth.currentUser?.uid || 'ceo-founder-override';
+  const ownerUid = getVerifiedCloudUid() || 'local-session';
 
   if (!recipientStr) {
     const failedLog: EmailDispatchLogEntry = {

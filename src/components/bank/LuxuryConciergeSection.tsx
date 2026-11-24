@@ -408,6 +408,11 @@ export const LuxuryConciergeSection: React.FC = () => {
           foreignCurrency: "AUD",
           category: "Private Aviation Charter"
         });
+        if (!spendResult.success) {
+          setIsSubmittingAviation(false);
+          toast.error(spendResult.declinedReason || "Card authorization declined.");
+          return;
+        }
 
         const code = `VAL-ICAO-${selectedAircraft.model.replace(/\s+/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
         const bookingId = `BK-JET-${Date.now().toString(36).toUpperCase()}`;
@@ -489,6 +494,11 @@ export const LuxuryConciergeSection: React.FC = () => {
           foreignCurrency: "AUD",
           category: "Michelin Fine Dining Pre-Payment"
         });
+        if (!spendResult.success) {
+          setIsSubmittingDining(false);
+          toast.error(spendResult.declinedReason || "Card authorization declined.");
+          return;
+        }
 
         const code = `RES-${selectedRestaurant.name.replace(/\s+/g, "").slice(0, 4).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
         const bookingId = `BK-DIN-${Date.now().toString(36).toUpperCase()}`;
@@ -566,6 +576,11 @@ export const LuxuryConciergeSection: React.FC = () => {
           foreignCurrency: "AUD",
           category: "Bespoke Asset Procurement Deposit"
         });
+        if (!spendResult.success) {
+          setIsSubmittingProcurement(false);
+          toast.error(spendResult.declinedReason || "Card authorization declined.");
+          return;
+        }
 
         const code = `AST-PROC-${Math.floor(10000 + Math.random() * 90000)}`;
         const bookingId = `BK-AST-${Date.now().toString(36).toUpperCase()}`;

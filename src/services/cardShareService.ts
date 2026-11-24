@@ -36,10 +36,10 @@ export interface SharedCardInvite {
   cardMode: CardShareMode;
   allowPhysicalCard: boolean;
   physicalShippingAddress?: string;
-  physicalDispatchStatus: "not_requested" | "queued_production" | "courier_dispatched";
+  physicalDispatchStatus: "not_requested" | "queued_production" | "courier_dispatched" | "delivered";
   autoShareVipBenefits: boolean;
   vipBenefits: string[];
-  status: "pending" | "claimed" | "revoked";
+  status: "pending" | "claimed" | "paused" | "revoked";
   claimedByName?: string;
   claimedByEmail?: string;
   claimedAt?: string;
@@ -47,6 +47,7 @@ export interface SharedCardInvite {
   emailChannel?: string;
   emailPreviewUrl?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export const DEFAULT_VIP_BENEFITS: string[] = [
@@ -111,14 +112,32 @@ async function syncInviteToServer(invite: SharedCardInvite): Promise<void> {
   } catch {}
 }
 
+async function patchInviteOnServer(inviteId: string, patch: Partial<SharedCardInvite>, fallbackFull?: SharedCardInvite): Promise<void> {
+  try {
+    const res = await fetch(`/api/card-invites/${encodeURIComponent(inviteId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok && fallbackFull) {
+      await syncInviteToServer(fallbackFull);
+    }
+  } catch {
+    if (fallbackFull) {
+      await syncInviteToServer(fallbackFull);
+    }
+  }
+}
+
 async function syncInviteToFirestore(invite: SharedCardInvite): Promise<void> {
   try {
-    if (!db || !auth.currentUser) return;
+    const cu = auth.currentUser;
+    if (!db || !cu?.uid || (cu.email && !cu.emailVerified)) return;
     const path = `shared_card_invites/${invite.inviteId}`;
     try {
       await setDoc(doc(collection(db, "shared_card_invites"), invite.inviteId), {
         inviteId: invite.inviteId,
-        ownerUid: auth.currentUser.uid,
+        ownerUid: cu.uid,
         cardId: invite.cardId.slice(0, 64),
         cardName: invite.cardName.slice(0, 120),
         cardCategory: invite.cardCategory,
@@ -140,7 +159,7 @@ async function syncInviteToFirestore(invite: SharedCardInvite): Promise<void> {
         claimedAt: invite.claimedAt || "",
         shareUrl: invite.shareUrl.slice(0, 260),
         createdAt: serverTimestamp(),
-      });
+      }, { merge: true });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -231,9 +250,10 @@ class CardShareService {
     const local = loadLocalInvites().find((i) => i.inviteId === inviteId);
     if (local) return local;
 
-    // 3. Check Firestore if signed in
+    // 3. Check Firestore only if verified cloud session
     try {
-      if (db && auth.currentUser) {
+      const cu = auth.currentUser;
+      if (db && cu?.uid && (!cu.email || cu.emailVerified)) {
         const snap = await getDoc(doc(collection(db, "shared_card_invites"), inviteId));
         if (snap.exists()) {
           const data = snap.data() as any;
@@ -394,7 +414,7 @@ class CardShareService {
     }
   ): Promise<SharedCardInvite | null> {
     const existing = await this.getSharedCardInvite(inviteId);
-    if (!existing || existing.status === "revoked") return null;
+    if (!existing || existing.status === "revoked" || existing.status === "paused") return null;
 
     const updated: SharedCardInvite = {
       ...existing,
@@ -402,6 +422,7 @@ class CardShareService {
       claimedByName: payload.fullName.trim(),
       claimedByEmail: payload.email.trim(),
       claimedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       physicalShippingAddress: payload.requestPhysicalCard ? (payload.shippingAddress || "").trim() : existing.physicalShippingAddress,
       physicalDispatchStatus:
         payload.requestPhysicalCard && existing.allowPhysicalCard
@@ -410,23 +431,78 @@ class CardShareService {
     };
 
     upsertLocalInvite(updated);
-    await syncInviteToServer(updated);
+    await patchInviteOnServer(inviteId, {
+      status: updated.status,
+      claimedByName: updated.claimedByName,
+      claimedByEmail: updated.claimedByEmail,
+      claimedAt: updated.claimedAt,
+      physicalShippingAddress: updated.physicalShippingAddress,
+      physicalDispatchStatus: updated.physicalDispatchStatus,
+    }, updated);
     await syncInviteToFirestore(updated);
     return updated;
   }
 
-  public async revokeSharedCardInvite(inviteId: string): Promise<SharedCardInvite | null> {
+  public async updateSharedCardInviteControls(
+    inviteId: string,
+    patch: {
+      status?: "pending" | "claimed" | "paused" | "revoked";
+      grantedLimitAUD?: number | "unlimited";
+      physicalDispatchStatus?: "not_requested" | "queued_production" | "courier_dispatched" | "delivered";
+    }
+  ): Promise<SharedCardInvite | null> {
     const existing = await this.getSharedCardInvite(inviteId);
     if (!existing) return null;
 
     const updated: SharedCardInvite = {
       ...existing,
-      status: "revoked",
+      ...patch,
+      updatedAt: new Date().toISOString(),
     };
+
     upsertLocalInvite(updated);
-    await syncInviteToServer(updated);
+    await patchInviteOnServer(inviteId, patch, updated);
     await syncInviteToFirestore(updated);
     return updated;
+  }
+
+  public async resendSharedCardInviteEmail(inviteId: string): Promise<SharedCardInvite | null> {
+    const existing = await this.getSharedCardInvite(inviteId);
+    if (!existing) return null;
+
+    const targetEmail = (existing.recipientEmail || existing.claimedByEmail || TARGET_LINK_EMAIL).trim();
+    const emailResult = await smsEmailDispatchService.dispatchSharedCardInviteEmail({
+      recipientEmail: targetEmail,
+      recipientName: existing.claimedByName || existing.recipientName || undefined,
+      senderName: TARGET_LINK_HOLDER,
+      cardName: existing.cardName,
+      cardCategory: existing.cardCategory,
+      network: existing.network,
+      maskedLast4: existing.maskedLast4,
+      grantedLimitAUD: existing.grantedLimitAUD,
+      allowPhysicalCard: existing.allowPhysicalCard,
+      vipBenefits: existing.vipBenefits,
+      shareUrl: existing.shareUrl,
+    });
+
+    const updated: SharedCardInvite = {
+      ...existing,
+      emailChannel: emailResult.channel,
+      emailPreviewUrl: emailResult.previewUrl || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    upsertLocalInvite(updated);
+    await patchInviteOnServer(inviteId, {
+      emailChannel: updated.emailChannel,
+      emailPreviewUrl: updated.emailPreviewUrl,
+    }, updated);
+    await syncInviteToFirestore(updated);
+    return updated;
+  }
+
+  public async revokeSharedCardInvite(inviteId: string): Promise<SharedCardInvite | null> {
+    return this.updateSharedCardInviteControls(inviteId, { status: "revoked" });
   }
 }
 

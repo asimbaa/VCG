@@ -1,82 +1,172 @@
-import { Globe, BarChart2, LineChart } from 'lucide-react';
-import { CheckCircle2, Loader2, Activity, Bot, TrendingUp, ShieldCheck, DollarSign, Zap, Search } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Globe,
+  BarChart2,
+  LineChart,
+  CheckCircle2,
+  Loader2,
+  Activity,
+  Bot,
+  TrendingUp,
+  ShieldCheck,
+  DollarSign,
+  Zap,
+  Search,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Layers,
+} from "lucide-react";
 import { motion } from "framer-motion";
-
-import React, { useState } from 'react';
 import { CryptoPortfolioWidget } from "./CryptoPortfolioWidget";
-
 import { toast } from "sonner";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase";
-// Mock auth
-const useAuth = () => ({ user: { uid: 'mock-user-123' } });
+import {
+  loadSyncedBalances,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+} from "../../services/cloudSessionGuard";
 
-export function EToroApp() {
-  const [activeTab, setActiveTab] = useState<string>('portfolio');
-  const [availableCash, setAvailableCash] = useState(2000000); // Start with 2M from Treasury
-  const [totalEquity, setTotalEquity] = useState(100240500);
-  const [fundingAmount, setFundingAmount] = useState('');
-  const [tradeAction, setTradeAction] = useState('BUY');
-  const [tradeAmount, setTradeAmount] = useState('');
+interface EToroAppProps {
+  user?: any;
+  balances?: Record<string, number>;
+  setBalances?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+}
+
+const MARKET_ASSETS = [
+  { ticker: "SPX", name: "SpaceX (Private Equity)", price: 245.5, change: "+4.2%", category: "Aerospace" },
+  { ticker: "TSLA", name: "Tesla Inc.", price: 342.8, change: "+2.8%", category: "EV & Energy" },
+  { ticker: "NVDA", name: "NVIDIA Corp.", price: 148.2, change: "+3.9%", category: "AI Silicon" },
+  { ticker: "AAPL", name: "Apple Inc.", price: 234.1, change: "+1.1%", category: "Tech" },
+  { ticker: "PLTR", name: "Palantir Technologies", price: 68.4, change: "+5.4%", category: "Defense AI" },
+  { ticker: "BTC", name: "Bitcoin Spot Reserve", price: 96400.0, change: "+2.4%", category: "Crypto" },
+];
+
+export function EToroApp({ user, balances: externalBalances, setBalances: setExternalBalances }: EToroAppProps = {}) {
+  const [activeTab, setActiveTab] = useState<string>("portfolio");
+  const [availableCash, setAvailableCash] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("valourian_etoro_cash");
+      return saved ? Number(saved) : 25000000;
+    } catch {
+      return 25000000;
+    }
+  });
+  const [totalEquity, setTotalEquity] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("valourian_etoro_equity");
+      return saved ? Number(saved) : 148240500;
+    } catch {
+      return 148240500;
+    }
+  });
+  const [holdings, setHoldings] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("valourian_etoro_holdings");
+      return saved
+        ? JSON.parse(saved)
+        : {
+            "SpaceX (Private Equity)": 45000000,
+            "Tesla Inc.": 38500000,
+            "NVIDIA Corp.": 18240500,
+            "Bitcoin Spot Reserve": 21500000,
+          };
+    } catch {
+      return {
+        "SpaceX (Private Equity)": 45000000,
+        "Tesla Inc.": 38500000,
+        "NVIDIA Corp.": 18240500,
+        "Bitcoin Spot Reserve": 21500000,
+      };
+    }
+  });
+
+  const [assetSearch, setAssetSearch] = useState("");
+  const [selectedAsset, setSelectedAsset] = useState(MARKET_ASSETS[0]);
+  const [fundingAmount, setFundingAmount] = useState("");
+  const [tradeAction, setTradeAction] = useState<"BUY" | "SELL">("BUY");
+  const [tradeAmount, setTradeAmount] = useState("");
+  const [liquidationAsset, setLiquidationAsset] = useState("Tesla (TSLA) - 2% Strategic Stake ($2,509,000 USD)");
+  const [liquidationBank, setLiquidationBank] = useState("Commonwealth Bank (BSB 062-000)");
   const [isTrading, setIsTrading] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+
+  const [targetBtcAlloc, setTargetBtcAlloc] = useState(60);
+  const [thresholdDev, setThresholdDev] = useState(5);
+
   const [showExecutionModal, setShowExecutionModal] = useState(false);
-  const [rebalanceStatus, setRebalanceStatus] = useState<'idle' | 'executing' | 'complete'>('idle');
+  const [rebalanceStatus, setRebalanceStatus] = useState<"idle" | "executing" | "complete">("idle");
   const [executionProgress, setExecutionProgress] = useState(0);
   const [currentExecutionStep, setCurrentExecutionStep] = useState(0);
 
-
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiStatus, setAiStatus] = useState("Standby");
-  const [bridgeAsset, setBridgeAsset] = useState('BTC');
-  const [bridgeAddress, setBridgeAddress] = useState('');
-  const [bridgeAmount, setBridgeAmount] = useState('');
+  const [bridgeAsset, setBridgeAsset] = useState("BTC");
+  const [bridgeAddress, setBridgeAddress] = useState("bc1qvalouriancapital0001sovereignvault");
+  const [bridgeAmount, setBridgeAmount] = useState("");
   const [isBridging, setIsBridging] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState<null | 'validating' | 'confirmed' | 'failed'>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<null | "validating" | "confirmed" | "failed">(null);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("valourian_etoro_cash", String(availableCash));
+      localStorage.setItem("valourian_etoro_equity", String(totalEquity));
+      localStorage.setItem("valourian_etoro_holdings", JSON.stringify(holdings));
+    } catch {}
+  }, [availableCash, totalEquity, holdings]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let interval: any;
     if (aiEnabled) {
-      setAiStatus("Analyzing Market Liquidity...");
+      setAiStatus("Analyzing Market Liquidity & Dark Pool Depth...");
       interval = setInterval(() => {
-        setAiStatus(prev => prev === "Analyzing Market Liquidity..." ? "Rebalancing Portfolios..." : "Analyzing Market Liquidity...");
-        if (Math.random() > 0.7) {
-            toast.success("AI Agent executed micro-rebalance across Tech Sector", { icon: <Zap className="w-4 h-4 text-emerald-400" /> });
-        }
-      }, 5000);
+        setAiStatus((prev) =>
+          prev.includes("Analyzing")
+            ? "Executing Sovereign Micro-Rebalance..."
+            : "Analyzing Market Liquidity & Dark Pool Depth..."
+        );
+      }, 4500);
     } else {
       setAiStatus("Standby");
     }
     return () => clearInterval(interval);
   }, [aiEnabled]);
 
-  const [isFunding, setIsFunding] = useState(false);
-  const { user } = useAuth();
-  
+  const currentBalances = externalBalances || loadSyncedBalances();
 
   const handleTrade = async () => {
-    if (!tradeAmount || isNaN(Number(tradeAmount)) || Number(tradeAmount) <= 0) {
-      toast.error("Please enter a valid trade amount.");
+    const amt = Number(tradeAmount);
+    if (!tradeAmount || isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid USD trade amount.");
       return;
     }
-    
+    if (tradeAction === "BUY" && amt > availableCash) {
+      toast.error("Insufficient eToro available cash. Deposit funds from Valourian Treasury first.");
+      return;
+    }
+
     setIsTrading(true);
-    
     try {
-      if (user) {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          type: "ETORO_TRADE",
-          action: tradeAction,
-          amount: Number(tradeAmount),
-          asset: "SpaceX",
-          status: "completed",
-          timestamp: serverTimestamp()
-        });
-      }
-      
-      toast.success(`Successfully executed ${tradeAction} order for SpaceX.`, {
-        icon: <Zap className="w-4 h-4 text-emerald-400" />
+      const nextCash = tradeAction === "BUY" ? availableCash - amt : availableCash + amt;
+      const prevHolding = holdings[selectedAsset.name] || 0;
+      const nextHolding = tradeAction === "BUY" ? prevHolding + amt : Math.max(0, prevHolding - amt);
+      const nextHoldings = { ...holdings, [selectedAsset.name]: nextHolding };
+      const holdingsSum = Object.values(nextHoldings).reduce((acc, v) => acc + v, 0);
+
+      setAvailableCash(nextCash);
+      setHoldings(nextHoldings);
+      setTotalEquity(nextCash + holdingsSum);
+
+      await recordUnifiedTransaction({
+        type: "ETORO_TRADE",
+        action: tradeAction,
+        amount: tradeAction === "BUY" ? -amt : amt,
+        currency: "USD",
+        recipient: `eToro Dark Pool · ${selectedAsset.name}`,
+        settlementRail: "Valourian Institutional VWAP Router",
+        description: `Executed ${tradeAction} order of $${amt.toLocaleString()} USD for ${selectedAsset.name} (${selectedAsset.ticker})`,
+      });
+
+      toast.success(`Executed ${tradeAction} $${amt.toLocaleString()} USD in ${selectedAsset.name}.`, {
+        icon: <Zap className="w-4 h-4 text-emerald-400" />,
       });
       setTradeAmount("");
     } catch (error) {
@@ -86,29 +176,46 @@ export function EToroApp() {
       setIsTrading(false);
     }
   };
-  
-  const handleFunding = async (type: 'deposit' | 'withdraw') => {
-    if (!fundingAmount || isNaN(Number(fundingAmount)) || Number(fundingAmount) <= 0) {
-      toast.error("Please enter a valid amount.");
+
+  const handleFunding = async (type: "deposit" | "withdraw") => {
+    const amt = Number(fundingAmount);
+    if (!fundingAmount || isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid USD amount.");
       return;
     }
-    
+
+    if (type === "withdraw" && amt > availableCash) {
+      toast.error("Withdrawal exceeds eToro available cash balance.");
+      return;
+    }
+
     setIsFunding(true);
-    
     try {
-      if (user) {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          type: type === 'deposit' ? "ETORO_DEPOSIT" : "ETORO_WITHDRAWAL",
-          amount: Number(fundingAmount),
-          status: "completed",
-          timestamp: serverTimestamp()
-        });
-      }
-      
-      toast.success(`Successfully ${type === 'deposit' ? 'deposited to' : 'withdrew from'} eToro.`, {
-        icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />
+      const treasuryUsd = currentBalances.USD || 0;
+      const nextUsd = type === "deposit" ? Math.max(0, treasuryUsd - amt) : treasuryUsd + amt;
+      const updatedBalances = { ...currentBalances, USD: nextUsd };
+
+      await safeUpdateUserBalances(updatedBalances);
+      if (setExternalBalances) setExternalBalances(updatedBalances);
+
+      const nextCash = type === "deposit" ? availableCash + amt : Math.max(0, availableCash - amt);
+      const holdingsSum = Object.values(holdings).reduce((acc, v) => acc + v, 0);
+      setAvailableCash(nextCash);
+      setTotalEquity(nextCash + holdingsSum);
+
+      await recordUnifiedTransaction({
+        type: type === "deposit" ? "ETORO_DEPOSIT" : "ETORO_WITHDRAWAL",
+        amount: type === "deposit" ? -amt : amt,
+        currency: "USD",
+        recipient: type === "deposit" ? "eToro Sovereign Brokerage Account" : "Valourian USD Treasury Vault",
+        settlementRail: "Instant Treasury Prime Clearing",
+        description: `${type === "deposit" ? "Transferred from Valourian Treasury to eToro" : "Withdrew from eToro to Valourian Treasury"}: $${amt.toLocaleString()} USD`,
       });
+
+      toast.success(
+        `${type === "deposit" ? "Deposited" : "Withdrew"} $${amt.toLocaleString()} USD ${type === "deposit" ? "into eToro" : "to Valourian Treasury"}.`,
+        { icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> }
+      );
       setFundingAmount("");
     } catch (error) {
       console.error("Funding error:", error);
@@ -118,496 +225,597 @@ export function EToroApp() {
     }
   };
 
+  const handleLiquidateAndWithdraw = async () => {
+    setIsFunding(true);
+    const amountUSD = liquidationAsset.includes("TSLA") ? 2509000 : 5000000;
+    try {
+      const updatedBalances = {
+        ...currentBalances,
+        USD: (currentBalances.USD || 0) + amountUSD,
+      };
+      await safeUpdateUserBalances(updatedBalances);
+      if (setExternalBalances) setExternalBalances(updatedBalances);
+
+      await recordUnifiedTransaction({
+        type: "ETORO_LIQUIDATION",
+        amount: amountUSD,
+        currency: "USD",
+        recipient: liquidationBank || "Commonwealth Bank (BSB 062-000)",
+        settlementRail: "Sovereign Equity Liquidation + NPP Dispatch",
+        description: `Liquidated ${liquidationAsset} and settled $${amountUSD.toLocaleString()} USD to ${liquidationBank}`,
+      });
+
+      toast.success(
+        `$${amountUSD.toLocaleString()}.00 USD settled cleanly to ${liquidationBank}.`,
+        { icon: <DollarSign className="w-4 h-4 text-emerald-400" /> }
+      );
+    } catch {
+      toast.error("Liquidation settlement encountered an error.");
+    } finally {
+      setIsFunding(false);
+    }
+  };
+
+  const handleExecuteBridge = async () => {
+    const amt = Number(bridgeAmount);
+    if (!amt || amt <= 0 || !bridgeAddress.trim()) {
+      toast.error("Enter a valid destination address and crypto amount.");
+      return;
+    }
+    setIsBridging(true);
+    setBridgeStatus("validating");
+    setTimeout(async () => {
+      setBridgeStatus("confirmed");
+      setIsBridging(false);
+      await recordUnifiedTransaction({
+        type: "ETORO_CRYPTO_BRIDGE",
+        amount: -amt,
+        currency: bridgeAsset,
+        recipient: bridgeAddress.trim(),
+        settlementRail: "Valourian Zero-Fee Sovereign Bridge",
+        description: `Bridged ${amt} ${bridgeAsset} to ${bridgeAddress.trim()}`,
+      });
+      toast.success(`Cross-chain bridge confirmed: ${amt} ${bridgeAsset} dispatched!`);
+      setBridgeAmount("");
+    }, 1200);
+  };
+
+  const filteredMarketAssets = MARKET_ASSETS.filter(
+    (a) =>
+      !assetSearch.trim() ||
+      a.name.toLowerCase().includes(assetSearch.toLowerCase()) ||
+      a.ticker.toLowerCase().includes(assetSearch.toLowerCase()) ||
+      a.category.toLowerCase().includes(assetSearch.toLowerCase())
+  );
+
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="w-full max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
-          
-          <div className="p-8 border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-xl relative">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none"></div>
-          
-          <div className="flex items-center justify-between mb-8 relative z-10">
+        <div className="p-5 sm:p-8 border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-xl relative">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 relative z-10">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30">
+              <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30 shrink-0">
                 <TrendingUp className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-white tracking-tight">eToro Sovereign Brokerage</h2>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">eToro Sovereign Brokerage</h2>
                 <p className="text-emerald-400/80 text-xs font-bold uppercase tracking-widest flex items-center gap-1">
-                   <ShieldCheck className="w-3 h-3" /> Fully Integrated with Valourian Treasury
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Integrated with Valourian Treasury ({user?.email || "Founder Vault"})
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setActiveTab("portfolio")} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'portfolio' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>Portfolio</button>
-              <button onClick={() => setActiveTab("trade")} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'trade' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>Trade</button>
-                            <button onClick={() => setActiveTab("funding")} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'funding' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>Funding</button>
-              <button onClick={() => setActiveTab("bridge")} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'bridge' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>Bridge</button>
-
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "portfolio", label: "Portfolio" },
+                { id: "trade", label: "Trade & Liquidate" },
+                { id: "funding", label: "Treasury Funding" },
+                { id: "bridge", label: "Crypto Bridge" },
+                { id: "rebalance", label: "AI Rebalance" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    activeTab === t.id
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-transparent"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
           </div>
-          
-          <div className="relative z-10 min-h-[400px]">
-            {activeTab === 'portfolio' && (
+
+          <div className="relative z-10 min-h-[380px]">
+            {activeTab === "portfolio" && (
               <div className="space-y-6">
-                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 flex justify-between items-center">
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                   <div>
-                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Equity</div>
-                    <div className="text-4xl font-black text-white">${totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Sovereign Equity</div>
+                    <div className="text-3xl sm:text-4xl font-black text-white tabular-nums">
+                      ${totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Available Cash</div>
-                    <div className="text-2xl font-black text-emerald-400">${availableCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="sm:text-right">
+                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Available Brokerage Cash (USD)</div>
+                    <div className="text-2xl font-black text-emerald-400 tabular-nums">
+                      ${availableCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1 tabular-nums">
+                      Treasury USD Link: ${(currentBalances.USD || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
                   </div>
                 </div>
-                
+
+                {/* Positions Overview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {Object.entries(holdings).map(([name, val]) => (
+                    <div key={name} className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                      <div className="text-xs font-bold text-slate-300 truncate">{name}</div>
+                      <div className="text-lg font-black text-white font-mono mt-1 tabular-nums">
+                        ${Number(val).toLocaleString()}
+                      </div>
+                      <div className="text-[11px] text-emerald-400 font-semibold mt-0.5">Active Sovereign Position</div>
+                    </div>
+                  ))}
+                </div>
+
                 <CryptoPortfolioWidget totalEquity={totalEquity} />
-                {/* Automated Crypto Rebalancing Strategy Widget */}
-                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6 relative overflow-hidden">
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] -mr-16 -mt-16 pointer-events-none"></div>
-                   <div className="flex items-center gap-3 mb-6">
-                     <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
-                       <BarChart2 className="w-5 h-5 text-blue-400" />
-                     </div>
-                     <div>
-                       <h3 className="text-lg font-black text-white">Custom Rebalancing Strategies</h3>
-                       <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold">Automated Allocation Rules</p>
-                     </div>
-                   </div>
-                   
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Target BTC Allocation (%)</label>
-                       <input 
-                         type="number" 
-                         defaultValue={60}
-                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                       />
-                     </div>
-                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Threshold Deviation (%)</label>
-                       <input 
-                         type="number" 
-                         defaultValue={5}
-                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                       />
-                     </div>
-                   </div>
-                   
-                   <button 
-                     onClick={() => toast.success("Custom rebalancing strategy saved and deployed to execution engine.")}
-                     className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-colors text-xs"
-                   >
-                     Save & Deploy Strategy
-                   </button>
+
+                {/* Custom Rebalancing Strategy Widget */}
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 relative overflow-hidden">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+                      <BarChart2 className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-white">Custom Rebalancing Strategies</h3>
+                      <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold">Automated Allocation Rules</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Target BTC Allocation (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={targetBtcAlloc}
+                        onChange={(e) => setTargetBtcAlloc(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Threshold Deviation (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={thresholdDev}
+                        onChange={(e) => setThresholdDev(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      toast.success(
+                        `Rebalancing strategy locked (${targetBtcAlloc}% BTC target, ±${thresholdDev}% band).`
+                      )
+                    }
+                    className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-colors text-xs cursor-pointer"
+                  >
+                    Save &amp; Deploy Strategy
+                  </button>
                 </div>
 
-                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6">
-                  <div className="flex items-center justify-between mb-4">
+                {/* AI Liquidity Management */}
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${aiEnabled ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-slate-800 border border-slate-700'}`}>
-                        <Bot className={`w-5 h-5 ${aiEnabled ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          aiEnabled ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-slate-800 border border-slate-700"
+                        }`}
+                      >
+                        <Bot className={`w-5 h-5 ${aiEnabled ? "text-emerald-400" : "text-slate-400"}`} />
                       </div>
                       <div>
                         <h4 className="text-white font-black">AI Liquidity Management</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-widest ${aiEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>{aiStatus}</p>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${aiEnabled ? "text-emerald-400" : "text-slate-400"}`}>
+                          {aiStatus}
+                        </p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setAiEnabled(!aiEnabled)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${aiEnabled ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'}`}
+                      className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer ${
+                        aiEnabled
+                          ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30"
+                          : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30"
+                      }`}
                     >
-                      {aiEnabled ? 'Deactivate AI' : 'Activate AI'}
+                      {aiEnabled ? "Deactivate AI" : "Activate AI"}
                     </button>
                   </div>
                   {aiEnabled && (
                     <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                      <p className="text-xs text-emerald-300/80 leading-relaxed">
-                        Sovereign Agent is now actively managing liquidity, rebalancing assets in real-time, and targeting high-growth technology equities based on Deep Tech predictive models.
-                      </p>
-                    </div>
-                  )}
-                
-                {/* Automated Crypto Rebalancing Strategy Widget */}
-                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6 relative overflow-hidden">
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] -mr-16 -mt-16 pointer-events-none"></div>
-                   <div className="flex items-center gap-3 mb-6">
-                     <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
-                       <BarChart2 className="w-5 h-5 text-blue-400" />
-                     </div>
-                     <div>
-                       <h3 className="text-lg font-black text-white">Custom Rebalancing Strategies</h3>
-                       <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold">Automated Allocation Rules</p>
-                     </div>
-                   </div>
-                   
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Target BTC Allocation (%)</label>
-                       <input 
-                         type="number" 
-                         defaultValue={60}
-                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                       />
-                     </div>
-                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Threshold Deviation (%)</label>
-                       <input 
-                         type="number" 
-                         defaultValue={5}
-                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                       />
-                     </div>
-                   </div>
-                   
-                   <button 
-                     onClick={() => toast.success("Custom rebalancing strategy saved and deployed to execution engine.")}
-                     className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-colors text-xs"
-                   >
-                     Save & Deploy Strategy
-                   </button>
-                </div>
-
-                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 mt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${aiEnabled ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-slate-800 border border-slate-700'}`}>
-                        <Bot className={`w-5 h-5 ${aiEnabled ? 'text-emerald-400' : 'text-slate-400'}`} />
-                      </div>
-                      <div>
-                        <h4 className="text-white font-black">AI Liquidity Management</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-widest ${aiEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>{aiStatus}</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setAiEnabled(!aiEnabled)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors ${aiEnabled ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'}`}
-                    >
-                      {aiEnabled ? 'Deactivate AI' : 'Activate AI'}
-                    </button>
-                  </div>
-                  {aiEnabled && (
-                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                      <p className="text-xs text-emerald-300/80 leading-relaxed">
-                        Sovereign Agent is now actively managing liquidity, rebalancing assets in real-time, and targeting high-growth technology equities based on Deep Tech predictive models.
+                      <p className="text-xs text-emerald-300 leading-relaxed">
+                        Sovereign Agent is actively managing dark-pool liquidity, rebalancing equity &amp; crypto weights in real time, and sweeping dividend yields back to your Treasury Vault.
                       </p>
                     </div>
                   )}
                 </div>
-
               </div>
-                </div>
             )}
-            
-            {activeTab === 'trade' && (
+
+            {activeTab === "trade" && (
               <div className="space-y-6">
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                  <input type="text" placeholder="Search assets (e.g. SpaceX, OpenAI, PLTR)..." className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-emerald-500/50 font-medium placeholder:text-slate-600" />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={assetSearch}
+                    onChange={(e) => setAssetSearch(e.target.value)}
+                    placeholder="Search sovereign assets (SpaceX, Tesla, NVIDIA, Palantir, Bitcoin)..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3.5 pl-12 pr-4 text-white focus:outline-none focus:border-emerald-500/50 font-medium placeholder:text-slate-500"
+                  />
                 </div>
-                
-                                  <div className="bg-slate-950 rounded-2xl p-6 border border-emerald-500/30">
-                     <div className="flex items-center gap-3 mb-2">
-                        <Globe className="w-5 h-5 text-emerald-400" />
-                        <h3 className="text-lg font-black text-white">Strategic Asset Liquidation</h3>
-                     </div>
-                     <p className="text-xs text-slate-400 mb-6">Transfer sovereign assets (e.g. Tesla, SpaceX) into eToro for immediate liquidation and bank withdrawal.</p>
-                     
-                     <div className="space-y-4">
-                       <div>
-                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Asset Allocation</label>
-                         <select className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white font-semibold">
-                             <option>Tesla (TSLA) - 2% Strategic Stake Liquidation</option>
-                             <option>SpaceX (SPX) - Secondary Market Offload</option>
-                         </select>
-                       </div>
-                       <div>
-                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Destination Bank Account</label>
-                         <input type="text" placeholder="e.g. Commonwealth Bank (BSB 062-000)" className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white" />
-                       </div>
-                       <button onClick={() => {
-                           setIsFunding(true);
-                           toast.success("Initiating 2% TSLA transfer to eToro...", { icon: <Activity className="w-4 h-4 text-emerald-400"/> });
-                           setTimeout(() => {
-                               toast.success("TSLA shares liquidated at market rate.", { icon: <LineChart className="w-4 h-4 text-emerald-400"/> });
-                           }, 2000);
-                           setTimeout(() => {
-                               toast.success("$2,509,000.00 withdrawn to Commonwealth Bank successfully.", { icon: <DollarSign className="w-4 h-4 text-emerald-400"/> });
-                               setIsFunding(false);
-                           }, 4000);
-                       }} disabled={isFunding} className="w-full py-3 bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-400 font-bold rounded-xl transition-colors border border-emerald-500/50 uppercase tracking-widest text-xs">
-                         Execute 2% Transfer & Withdraw
-                       </button>
-                     </div>
+
+                {/* Asset Quick Picker */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  {filteredMarketAssets.map((asset) => {
+                    const active = selectedAsset.ticker === asset.ticker;
+                    return (
+                      <button
+                        key={asset.ticker}
+                        onClick={() => setSelectedAsset(asset)}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          active
+                            ? "bg-emerald-500/15 border-emerald-500 text-white"
+                            : "bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs font-black">
+                          <span>{asset.ticker}</span>
+                          <span className="text-emerald-400">{asset.change}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate mt-0.5">{asset.name}</div>
+                        <div className="text-xs font-mono font-bold text-white mt-1 tabular-nums">
+                          ${asset.price.toLocaleString()}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Execute Order Desk */}
+                <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
+                  <h3 className="text-lg font-black text-white mb-4">
+                    Execute Trade: {selectedAsset.name} ({selectedAsset.ticker})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Action</label>
+                      <select
+                        value={tradeAction}
+                        onChange={(e) => setTradeAction(e.target.value as "BUY" | "SELL")}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold"
+                      >
+                        <option value="BUY">BUY (Dark Pool VWAP)</option>
+                        <option value="SELL">SELL (Instant Cash Sweep)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Amount (USD)</label>
+                      <input
+                        type="number"
+                        value={tradeAmount}
+                        onChange={(e) => setTradeAmount(e.target.value)}
+                        placeholder="e.g. 250000"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono"
+                      />
+                    </div>
                   </div>
 
-                  <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
-                   <h3 className="text-lg font-black text-white mb-4">Execute Trade: SpaceX (Private Equity)</h3>
-                   <div className="grid grid-cols-2 gap-4 mb-6">
-                     <div>
-                       <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Action</label>
-                       <select value={tradeAction} onChange={e => setTradeAction(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white">
-                         <option>BUY</option>
-                         <option>SELL</option>
-                       </select>
-                     </div>
-                     <div>
-                       <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Amount (USD)</label>
-                       <input type="number" value={tradeAmount} onChange={e => setTradeAmount(e.target.value)} placeholder="0.00" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white" />
-                     </div>
-                   </div>
-                   
-                   <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 mb-6">
-                     <Zap className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                     <p className="text-xs text-emerald-300/80 leading-relaxed">
-                       Sovereign AI Routing Active: This order will be routed directly through Valourian Capital's dark pools to ensure zero market impact. Execution guaranteed at VWAP.
-                     </p>
-                   </div>
-                   
-                   <button onClick={handleTrade} disabled={isTrading} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl transition-colors text-sm tracking-widest shadow-lg shadow-emerald-500/20">
-                     EXECUTE SOVEREIGN TRADE
-                   </button>
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 mb-5">
+                    <Zap className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-emerald-300 leading-relaxed">
+                      Sovereign Dark Pool Routing Active: Orders execute immediately at VWAP with zero market impact and record straight to your Valourian Unified Audit Ledger.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleTrade}
+                    disabled={isTrading}
+                    className="w-full min-h-[46px] py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl transition-colors text-sm tracking-widest shadow-lg shadow-emerald-500/20 cursor-pointer"
+                  >
+                    {isTrading ? "EXECUTING..." : `EXECUTE ${tradeAction} ORDER`}
+                  </button>
+                </div>
+
+                {/* Strategic Asset Liquidation */}
+                <div className="bg-slate-950 rounded-2xl p-6 border border-emerald-500/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Globe className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-black text-white">Strategic Asset Liquidation</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-5">
+                    Liquidate strategic equity tranches (Tesla, SpaceX) directly into your Valourian Treasury &amp; Australian Bank accounts.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                        Asset Allocation
+                      </label>
+                      <select
+                        value={liquidationAsset}
+                        onChange={(e) => setLiquidationAsset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white font-semibold"
+                      >
+                        <option>Tesla (TSLA) - 2% Strategic Stake ($2,509,000 USD)</option>
+                        <option>SpaceX (SPX) - Secondary Market Offload ($5,000,000 USD)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                        Destination Bank Account
+                      </label>
+                      <input
+                        type="text"
+                        value={liquidationBank}
+                        onChange={(e) => setLiquidationBank(e.target.value)}
+                        placeholder="e.g. Commonwealth Bank (BSB 062-000)"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white"
+                      />
+                    </div>
+                    <button
+                      onClick={handleLiquidateAndWithdraw}
+                      disabled={isFunding}
+                      className="w-full min-h-[44px] py-3 bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-400 font-bold rounded-xl transition-colors border border-emerald-500/50 uppercase tracking-widest text-xs cursor-pointer"
+                    >
+                      {isFunding ? "Settling..." : "Execute Liquidation & Withdraw"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
-            
-            {activeTab === 'funding' && (
+
+            {activeTab === "funding" && (
               <div className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
-                     <h3 className="text-lg font-black text-white mb-2">Deposit Funds</h3>
-                     <p className="text-xs text-slate-400 mb-6">Transfer from Valourian Treasury to eToro instantly.</p>
-                     <div className="space-y-4">
-                       <div>
-                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount</label>
-                         <div className="relative">
-                           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                           <input type="text" value={fundingAmount} onChange={e => setFundingAmount(e.target.value)} placeholder="0.00" className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-9 pr-4 text-white" />
-                         </div>
-                       </div>
-                       <button onClick={() => handleFunding('deposit')} disabled={isFunding} className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">
-                         Deposit Now
-                       </button>
-                     </div>
+                    <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2">
+                      <ArrowDownLeft className="w-5 h-5 text-blue-400" /> Deposit Funds (USD)
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-6">Transfer USD instantaneously from Valourian Treasury to eToro brokerage cash.</p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Amount (USD)</label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="number"
+                            value={fundingAmount}
+                            onChange={(e) => setFundingAmount(e.target.value)}
+                            placeholder="100000"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-9 pr-4 text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleFunding("deposit")}
+                        disabled={isFunding}
+                        className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl transition-colors cursor-pointer"
+                      >
+                        Deposit to eToro Now
+                      </button>
+                    </div>
                   </div>
                   <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">
-                     <h3 className="text-lg font-black text-white mb-2">Withdraw Funds</h3>
-                     <p className="text-xs text-slate-400 mb-6">Transfer from eToro back to Valourian Treasury.</p>
-                     <div className="space-y-4">
-                       <div>
-                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount</label>
-                         <div className="relative">
-                           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                           <input type="text" value={fundingAmount} onChange={e => setFundingAmount(e.target.value)} placeholder="0.00" className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-9 pr-4 text-white" />
-                         </div>
-                       </div>
-                       <button onClick={() => handleFunding('withdraw')} disabled={isFunding} className="w-full py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors border border-slate-700">
-                         Withdraw Now
-                       </button>
-                     </div>
+                    <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2">
+                      <ArrowUpRight className="w-5 h-5 text-emerald-400" /> Withdraw Funds (USD)
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-6">Transfer available eToro cash back into Valourian Treasury Vault.</p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Amount (USD)</label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="number"
+                            value={fundingAmount}
+                            onChange={(e) => setFundingAmount(e.target.value)}
+                            placeholder="100000"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-9 pr-4 text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleFunding("withdraw")}
+                        disabled={isFunding}
+                        className="w-full min-h-[44px] py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-bold rounded-xl transition-colors border border-slate-700 cursor-pointer"
+                      >
+                        Withdraw to Treasury Now
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
-            {activeTab === 'rebalance' && (
+
+            {activeTab === "bridge" && (
+              <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                    <Layers className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white">Sovereign Cross-Chain Liquidity Bridge</h3>
+                    <p className="text-xs text-slate-400">Zero-fee institutional settlement across BTC, ETH, SOL, and USDC custodial addresses.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Asset</label>
+                    <select
+                      value={bridgeAsset}
+                      onChange={(e) => setBridgeAsset(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold"
+                    >
+                      <option value="BTC">Bitcoin (BTC)</option>
+                      <option value="ETH">Ethereum (ETH)</option>
+                      <option value="SOL">Solana (SOL)</option>
+                      <option value="USDC">USD Coin (USDC)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Amount</label>
+                    <input
+                      type="number"
+                      value={bridgeAmount}
+                      onChange={(e) => setBridgeAmount(e.target.value)}
+                      placeholder="10.0"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Destination Vault</label>
+                    <input
+                      type="text"
+                      value={bridgeAddress}
+                      onChange={(e) => setBridgeAddress(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleExecuteBridge}
+                  disabled={isBridging}
+                  className="w-full min-h-[44px] py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase tracking-widest text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  {isBridging ? "Bridging Across Sovereign Relay..." : `Dispatch ${bridgeAsset} Cross-Chain Bridge`}
+                </button>
+                {bridgeStatus === "confirmed" && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Cross-chain settlement finalized on Sovereign Ledger.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === "rebalance" && (
               <div className="space-y-6">
                 <div className="bg-slate-950 rounded-2xl p-6 border border-emerald-500/30 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[40px] -mr-16 -mt-16 pointer-events-none"></div>
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                            <Bot className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-black text-white">AI Crypto Rebalancing</h3>
-                            <p className="text-xs text-emerald-400/80 uppercase tracking-widest font-bold">Real-time Sentiment Analysis Active</p>
-                        </div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                      <Bot className="w-5 h-5 text-emerald-400" />
                     </div>
-                    
-                    <div className="grid md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                            <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Market Sentiment</div>
-                            <div className="text-xl font-black text-emerald-400">Extreme Greed (84)</div>
-                        </div>
-                        <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                            <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Recommended Action</div>
-                            <div className="text-xl font-black text-white">De-risk to BTC/ETH</div>
-                        </div>
-                        <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                            <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Expected Yield</div>
-                            <div className="text-xl font-black text-emerald-400">+14.2% APY</div>
-                        </div>
+                    <div>
+                      <h3 className="text-lg font-black text-white">AI Crypto &amp; Equities Rebalancing</h3>
+                      <p className="text-xs text-emerald-400/80 uppercase tracking-widest font-bold">Real-time Sentiment Analysis Active</p>
                     </div>
+                  </div>
 
-                    <div className="space-y-4 mb-6">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-widest">Proposed Portfolio Adjustments</h4>
-                        
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-red-500/20">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 font-bold text-xs">SELL</div>
-                                    <span className="text-white font-bold">Solana (SOL)</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-white font-mono font-bold">-25%</div>
-                                    <div className="text-xs text-slate-500 font-mono">Take profit on recent rally</div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-red-500/20">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 font-bold text-xs">SELL</div>
-                                    <span className="text-white font-bold">Dogecoin (DOGE)</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-white font-mono font-bold">-100%</div>
-                                    <div className="text-xs text-slate-500 font-mono">Sentiment turned bearish</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-emerald-500/20">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-xs">BUY</div>
-                                    <span className="text-white font-bold">Bitcoin (BTC)</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-white font-mono font-bold">+15%</div>
-                                    <div className="text-xs text-slate-500 font-mono">Safe haven asset</div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between bg-slate-900 p-3 rounded-xl border border-emerald-500/20">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-xs">BUY</div>
-                                    <span className="text-white font-bold">Ethereum (ETH)</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-white font-mono font-bold">+10%</div>
-                                    <div className="text-xs text-slate-500 font-mono">Yield opportunities via staking</div>
-                                </div>
-                            </div>
-                        </div>
+                  <div className="grid md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                      <div className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Market Sentiment</div>
+                      <div className="text-xl font-black text-emerald-400">Constructive (84)</div>
                     </div>
-                    
-                    <button 
-                        onClick={() => setShowExecutionModal(true)}
-                        className="w-full py-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 font-black rounded-xl transition-colors text-sm tracking-widest"
-                    >
-                        PREVIEW & EXECUTE AI REBALANCE
-                    </button>
+                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                      <div className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Recommended Action</div>
+                      <div className="text-xl font-black text-white">Core BTC/ETH + AI</div>
+                    </div>
+                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                      <div className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Projected Yield</div>
+                      <div className="text-xl font-black text-emerald-400">+14.2% APY</div>
+                    </div>
+                  </div>
 
-                    {showExecutionModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-                            <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-full max-w-md shadow-[0_0_50px_rgba(16,185,129,0.1)] relative">
-                                {rebalanceStatus === 'idle' && (
-                                    <button onClick={() => setShowExecutionModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                    </button>
-                                )}
-                                
-                                <div className="flex items-center gap-3 mb-6">
-                                    <Activity className={`w-6 h-6 text-emerald-400 ${rebalanceStatus === 'executing' ? 'animate-pulse' : ''}`} />
-                                    <h3 className="text-xl font-black text-white">{rebalanceStatus === 'idle' ? 'Execution Details' : rebalanceStatus === 'executing' ? 'AI Execution in Progress' : 'Execution Complete'}</h3>
-                                </div>
-                                
-                                {rebalanceStatus === 'idle' ? (
-                                    <>
-                                        <div className="space-y-4 mb-8">
-                                            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-                                                <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">Routing Strategy</span>
-                                                <span className="text-white font-black">TWAP (Smart Router)</span>
-                                            </div>
-                                            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-                                                <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">Estimated Gas Fees</span>
-                                                <span className="text-yellow-400 font-mono font-bold">$142.50 (0.045 ETH)</span>
-                                            </div>
-                                            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-                                                <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">Est. Slippage Impact</span>
-                                                <span className="text-emerald-400 font-mono font-bold">0.12%</span>
-                                            </div>
-                                            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-                                                <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">Execution Time</span>
-                                                <span className="text-white font-mono font-bold">~45 minutes</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <button 
-                                            onClick={() => {
-                                                setRebalanceStatus('executing');
-                                                setExecutionProgress(0);
-                                                setCurrentExecutionStep(0);
-                                                
-                                                toast.success("AI Agent executing portfolio rebalance...", { icon: <Bot className="w-4 h-4 text-emerald-400" />});
-                                                
-                                                // Simulate steps
-                                                const simulateStep = (step, progress, delay) => {
-                                                    setTimeout(() => {
-                                                        setCurrentExecutionStep(step);
-                                                        setExecutionProgress(progress);
-                                                    }, delay);
-                                                };
-                                                
-                                                simulateStep(1, 25, 1000); // Route optimization
-                                                simulateStep(2, 50, 2500); // Acquiring liquidations
-                                                simulateStep(3, 75, 4000); // Balancing assets
-                                                simulateStep(4, 100, 5500); // Finalizing
-                                                
-                                                setTimeout(() => {
-                                                    setRebalanceStatus('complete');
-                                                    toast.success("Rebalance complete. Orders filled via TWAP.");
-                                                    setTimeout(() => {
-                                                        setShowExecutionModal(false);
-                                                        setRebalanceStatus('idle');
-                                                    }, 2000);
-                                                }, 6000);
-                                            }}
-                                            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl transition-colors uppercase tracking-widest text-xs"
-                                        >
-                                            CONFIRM REBALANCE
-                                        </button>
-                                    </>
-                                ) : (
-                                    <div className="space-y-6 mb-4">
-                                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                                            <motion.div 
-                                                className="h-full bg-emerald-500"
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${executionProgress}%` }}
-                                                transition={{ duration: 0.5 }}
-                                            />
-                                        </div>
-                                        
-                                        <div className="space-y-3">
-                                            {[
-                                                { label: "Neural Route Optimization", time: "est. 12s" },
-                                                { label: "Executing Limit Orders (TWAP)", time: "est. 45m" },
-                                                { label: "Validating Blockchain Confirmations", time: "est. 3m" },
-                                                { label: "Finalizing Vault Deposits", time: "est. 1s" }
-                                            ].map((step, idx) => (
-                                                <div key={`etoro-step-${step.label}-${idx}`} className={`flex justify-between items-center pb-2 border-b border-slate-800 ${currentExecutionStep > idx ? 'text-emerald-400' : currentExecutionStep === idx ? 'text-white' : 'text-slate-600'}`}>
-                                                    <div className="flex items-center gap-2">
-                                                        {currentExecutionStep > idx ? (
-                                                            <CheckCircle2 className="w-4 h-4" />
-                                                        ) : currentExecutionStep === idx ? (
-                                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                                        ) : (
-                                                            <div className="w-4 h-4 rounded-full border border-slate-700" />
-                                                        )}
-                                                        <span className="font-bold text-xs uppercase tracking-widest">{step.label}</span>
-                                                    </div>
-                                                    <span className="font-mono text-xs">{step.time}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        
-                                        {rebalanceStatus === 'complete' && (
-                                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center">
-                                                <p className="text-emerald-400 font-bold uppercase tracking-widest text-xs">Rebalance Finished Successfully</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                  <button
+                    onClick={() => setShowExecutionModal(true)}
+                    className="w-full min-h-[46px] py-3.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 font-black rounded-xl transition-colors text-xs uppercase tracking-widest cursor-pointer"
+                  >
+                    Preview &amp; Execute AI Rebalance
+                  </button>
+
+                  {showExecutionModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+                      <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+                        {rebalanceStatus === "idle" && (
+                          <button
+                            onClick={() => setShowExecutionModal(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                        <div className="flex items-center gap-3 mb-5">
+                          <Activity className={`w-6 h-6 text-emerald-400 ${rebalanceStatus === "executing" ? "animate-pulse" : ""}`} />
+                          <h3 className="text-xl font-black text-white">
+                            {rebalanceStatus === "idle"
+                              ? "Execution Details"
+                              : rebalanceStatus === "executing"
+                                ? "AI Execution in Progress"
+                                : "Execution Complete"}
+                          </h3>
                         </div>
-                    )}
+
+                        {rebalanceStatus === "idle" ? (
+                          <>
+                            <div className="space-y-3 mb-6 text-xs">
+                              <div className="flex justify-between pb-2 border-b border-slate-800">
+                                <span className="text-slate-400 font-bold uppercase">Routing Strategy</span>
+                                <span className="text-white font-black">TWAP (Smart Router)</span>
+                              </div>
+                              <div className="flex justify-between pb-2 border-b border-slate-800">
+                                <span className="text-slate-400 font-bold uppercase">Est. Slippage Impact</span>
+                                <span className="text-emerald-400 font-mono font-bold">0.08%</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setRebalanceStatus("executing");
+                                setExecutionProgress(25);
+                                setCurrentExecutionStep(1);
+                                setTimeout(() => { setExecutionProgress(65); setCurrentExecutionStep(2); }, 700);
+                                setTimeout(() => {
+                                  setExecutionProgress(100);
+                                  setCurrentExecutionStep(4);
+                                  setRebalanceStatus("complete");
+                                  toast.success("AI Rebalance complete via TWAP dark pool.");
+                                  setTimeout(() => {
+                                    setShowExecutionModal(false);
+                                    setRebalanceStatus("idle");
+                                  }, 1200);
+                                }, 1400);
+                              }}
+                              className="w-full min-h-[44px] py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl transition-colors uppercase tracking-widest text-xs cursor-pointer"
+                            >
+                              Confirm Rebalance
+                            </button>
+                          </>
+                        ) : (
+                          <div className="space-y-4 mb-2">
+                            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                              <motion.div
+                                className="h-full bg-emerald-500"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${executionProgress}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-emerald-400 font-bold text-center">
+                              {rebalanceStatus === "complete" ? "All Allocations Finalized" : "Executing Sovereign Dark Pool Orders..."}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

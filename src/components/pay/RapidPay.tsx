@@ -52,6 +52,7 @@ import { CryptoKeysModal } from "../bank/CryptoKeysModal";
 import { ShareCardModal } from "../bank/ShareCardModal";
 import { cardShareService } from "../../services/cardShareService";
 import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { creChargeFacilitiesService, CreChargeFacility } from "../../services/creChargeFacilitiesService";
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -67,6 +68,7 @@ import {
   limit,
   onSnapshot,
   doc,
+  getDoc,
   getDocs
 } from "firebase/firestore";
 import { AIGuide } from "../AIGuide";
@@ -93,6 +95,15 @@ import {
   TARGET_LINK_EMAIL,
   LINK_COM_URL,
 } from "../../services/linkComService";
+import {
+  getVerifiedCloudUid,
+  isAsimCloudSession,
+  loadSyncedBalances,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalTransactions,
+  BENEFIT_VOUCHERS_KEY,
+} from "../../services/cloudSessionGuard";
 
 
 
@@ -472,6 +483,16 @@ export function RapidPay({ user }: { user: any }) {
   const { currency: globalCur, setCurrency, formatConverted, supportedCurrencies } = useGlobalCurrency();
   const [isNfcModalOpen, setIsNfcModalOpen] = useState(false);
   const [transferType, setTransferType] = useState<"standard" | "au_bsb" | "payid" | "bpay" | "credit_card" | "digital_bsb_card" | "digital_assets" | "uber_vouchers" | "scan_qr" | "receive_qr" | "external_accounts" | "history" | "quick_test">("standard");
+  const [creFacilities, setCreFacilities] = useState<CreChargeFacility[]>(() => creChargeFacilitiesService.getFacilities());
+  const [activeCreId, setActiveCreId] = useState<string>(() => creChargeFacilitiesService.getActiveFacilityId());
+
+  useEffect(() => {
+    const unsubCre = creChargeFacilitiesService.subscribe((next) => {
+      setCreFacilities(next);
+      setActiveCreId(creChargeFacilitiesService.getActiveFacilityId());
+    });
+    return () => unsubCre();
+  }, []);
   const [recipient, setRecipient] = useState("");
   const [payIdType, setPayIdType] = useState<"email" | "phone" | "abn" | "organization">("phone");
   const [payIdValue, setPayIdValue] = useState("");
@@ -586,12 +607,35 @@ export function RapidPay({ user }: { user: any }) {
 
   const [history, setHistory] = useState<any[]>([]);
 
-  // Fetch real-time transactions
+  // Fetch real-time transactions (cloud + local unified history)
   useEffect(() => {
-    if (!user?.uid || !auth.currentUser) return;
+    const mergeHistory = (cloudTxns: any[] = []) => {
+      const localTxns = getLocalTransactions();
+      const map = new Map<string, any>();
+      [...cloudTxns, ...localTxns].forEach((t) => {
+        if (t && t.id && !map.has(t.id)) map.set(t.id, t);
+      });
+      return Array.from(map.values())
+        .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+        .slice(0, 15);
+    };
+
+    const onLocalSettled = () => {
+      setHistory((prev) => mergeHistory(prev));
+    };
+    window.addEventListener("valourian_payment_settled", onLocalSettled);
+
+    const cloudUid = getVerifiedCloudUid();
+    if (!cloudUid) {
+      setHistory(mergeHistory([]));
+      return () => {
+        window.removeEventListener("valourian_payment_settled", onLocalSettled);
+      };
+    }
+
     const q = query(
       collection(db, "transactions"),
-      where("userId", "==", auth.currentUser.uid),
+      where("userId", "==", cloudUid),
       orderBy("date", "desc"),
       limit(10)
     );
@@ -599,40 +643,31 @@ export function RapidPay({ user }: { user: any }) {
       q,
       (snap) => {
         const txns = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-        setHistory(txns);
+        setHistory(mergeHistory(txns));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, "transactions");
+        setHistory(mergeHistory([]));
       }
     );
-    
-    // Automatically verify that all previous payments are sent and accepted/received
-    reconcileAndSettleAllPayments(auth.currentUser.uid).catch((err) => {
+
+    reconcileAndSettleAllPayments(cloudUid).catch((err) => {
       handleFirestoreError(err, OperationType.LIST, "transactions");
     });
 
-    return () => unsub();
+    return () => {
+      window.removeEventListener("valourian_payment_settled", onLocalSettled);
+      unsub();
+    };
   }, [user]);
 
   // Fetch real-time user profile (for balances) and linked cards (funding_sources)
   useEffect(() => {
-    if (!user?.uid) return;
-
     const applyMergedLocalFallback = () => {
-      let localVip: any = {};
-      let localVal: any = {};
-      try {
-        localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
-        localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
-      } catch {}
-      const balances: Record<string, number> = {};
-      ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach((cur) => {
-        balances[cur] = localVip[cur] || localVal[cur] || 940000000.0;
-      });
-      setUserData({ balances });
+      setUserData({ balances: loadSyncedBalances() });
     };
 
-    const currentUid = auth.currentUser?.uid;
+    const currentUid = getVerifiedCloudUid();
     let unsubUser: (() => void) | null = null;
     if (currentUid) {
       const userDocRef = doc(db, "users", currentUid);
@@ -641,19 +676,12 @@ export function RapidPay({ user }: { user: any }) {
         (docSnap) => {
           let data = docSnap.exists() ? docSnap.data() : { balances: {} };
           if (!data.balances) data.balances = {};
-          
-          let localVip: any = {};
-          let localVal: any = {};
-          try {
-            localVip = JSON.parse(window.localStorage.getItem('commbank_vip_balances') || '{}');
-            localVal = JSON.parse(window.localStorage.getItem('valourian_balances') || '{}');
-          } catch (e) {}
 
+          const synced = loadSyncedBalances();
           ['AUD', 'USD', 'EUR', 'GBP', 'JPY'].forEach(cur => {
             let amt = parseFloat(data.balances[cur]);
             if (isNaN(amt) || amt <= 0) {
-              // If the user is the master account or balances missing, ensure massive asset pool
-              amt = localVip[cur] || localVal[cur] || 940000000.00; 
+              amt = synced[cur] || 940000000.0;
             }
             data.balances[cur] = amt;
           });
@@ -669,15 +697,16 @@ export function RapidPay({ user }: { user: any }) {
       applyMergedLocalFallback();
     }
 
-    // Helper to merge local digital cards and institutional cards into Link.com
+    const onBalancesUpdated = (e: any) => {
+      const next = e?.detail?.balances;
+      if (next) setUserData((prev: any) => ({ ...(prev || {}), balances: { ...(prev?.balances || {}), ...next } }));
+    };
+    window.addEventListener("valourian_balances_updated", onBalancesUpdated);
+
     const getMergedLocalCards = () => {
       let merged: any[] = [];
       try {
-        const v5 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
-        const v7 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
         const v8 = JSON.parse(window.localStorage.getItem('valourian_digital_cards_v8') || '[]');
-
-        // Map baseline institutional cards so RapidPay immediately reflects all banking cards
         const baseCardsMapped = BASE_BANKING_CREDIT_CARDS.map((bc) => ({
           id: bc.id,
           type: "credit_card",
@@ -697,32 +726,24 @@ export function RapidPay({ user }: { user: any }) {
           createdAt: bc.addedAt,
         }));
 
-        merged = [...v5, ...v7, ...v8, ...baseCardsMapped];
-        // Deduplicate by ID and fullNumber
+        merged = [...v8, ...baseCardsMapped];
         const unique = new Map();
         merged.forEach((c) => {
           const key = (c.fullNumber || c.details || c.id || "").replace(/\s+/g, "");
-          if (!unique.has(key)) {
-            unique.set(key, c);
-          }
+          if (!unique.has(key)) unique.set(key, c);
         });
         return Array.from(unique.values());
-      } catch (e) {
+      } catch {
         return merged;
       }
     };
 
-    // Auto-sync all banking cards into asim.nsw@gmail.com's link.com account
-    syncAllCardsToLinkAccount(TARGET_LINK_EMAIL).catch((err) => {
-      console.debug("Link.com initial background sync:", err);
-    });
+    syncAllCardsToLinkAccount(TARGET_LINK_EMAIL).catch(() => {});
 
     const combineUniqueCards = (fsCards: any[], localCards: any[]) => {
       const uniqueMap = new Map<string, any>();
       fsCards.forEach((c) => {
-        if (c && c.id) {
-          uniqueMap.set(c.id, c);
-        }
+        if (c && c.id) uniqueMap.set(c.id, c);
       });
       localCards.forEach((c) => {
         if (!c) return;
@@ -743,7 +764,6 @@ export function RapidPay({ user }: { user: any }) {
     let unsubDigitalBsb: (() => void) | null = null;
 
     if (currentUid) {
-      // Listen to credit cards in funding_sources
       const fundingQ = query(
         collection(db, "funding_sources"),
         where("userId", "==", currentUid),
@@ -753,15 +773,14 @@ export function RapidPay({ user }: { user: any }) {
         fundingQ,
         (snap) => {
           const cards = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-          const allCards = combineUniqueCards(cards, getMergedLocalCards());
-          setCreditCards(allCards);
+          setCreditCards(combineUniqueCards(cards, getMergedLocalCards()));
         },
         (error) => {
           handleFirestoreError(error, OperationType.LIST, "funding_sources");
+          setCreditCards(getMergedLocalCards());
         }
       );
 
-      // Listen to digital BSB cards in funding_sources
       const digitalBsbQ = query(
         collection(db, "funding_sources"),
         where("userId", "==", currentUid),
@@ -776,9 +795,7 @@ export function RapidPay({ user }: { user: any }) {
 
           if (allCards.length > 0) {
             setSelectedBsbCard((prev: any) => {
-              if (prev) {
-                return allCards.find((c: any) => c.id === prev.id) || allCards[0];
-              }
+              if (prev) return allCards.find((c: any) => c.id === prev.id) || allCards[0];
               return allCards[0];
             });
           } else {
@@ -787,6 +804,9 @@ export function RapidPay({ user }: { user: any }) {
         },
         (error) => {
           handleFirestoreError(error, OperationType.LIST, "funding_sources");
+          const localCards = getMergedLocalCards();
+          setBsbLinkedCards(localCards);
+          if (localCards.length > 0) setSelectedBsbCard((prev: any) => prev || localCards[0]);
         }
       );
     } else {
@@ -799,6 +819,7 @@ export function RapidPay({ user }: { user: any }) {
     }
 
     return () => {
+      window.removeEventListener("valourian_balances_updated", onBalancesUpdated);
       if (unsubUser) unsubUser();
       if (unsubFunding) unsubFunding();
       if (unsubDigitalBsb) unsubDigitalBsb();
@@ -847,24 +868,29 @@ export function RapidPay({ user }: { user: any }) {
 
   // Quick setup default premium credit card
   const handleClaimDefaultCard = async () => {
-    if (!user?.uid) return;
     setStatus("processing");
     try {
-      await addDoc(collection(db, "funding_sources"), {
-        userId: user.uid,
+      const newCardData: any = {
+        id: `AMEX-TITAN-${Date.now().toString(36).toUpperCase()}`,
         type: "credit_card",
         name: "Sovereign Titanium Executive Card",
-        details: "8899",
-        fullNumber: "3782821937188899",
-        holder: (user.displayName || "FOUNDER MEMBER").toUpperCase(),
+        details: "8887",
+        fullNumber: "378282193718887",
+        holder: (user?.displayName || "FOUNDER MEMBER").toUpperCase(),
         expiry: "12/30",
-        cvv: "888",
+        cvv: "8887",
         limit: 940000000,
         currentBalance: 1250,
         status: "active",
         network: "AMEX",
         createdAt: new Date().toISOString()
-      });
+      };
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        await addDoc(collection(db, "funding_sources"), { ...newCardData, userId: cloudUid });
+      } else {
+        setCreditCards(prev => [newCardData, ...prev]);
+      }
       toast.success("Exclusive Sovereign AMEX Titanium card linked successfully!");
     } catch (e) {
       console.error(e);
@@ -877,7 +903,6 @@ export function RapidPay({ user }: { user: any }) {
   // Add/Link a new custom credit card
   const handleLinkCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid) return;
 
     const cleanNum = cardNumber.replace(/\s+/g, "");
     if (cleanNum.length < 15 || cleanNum.length > 16) {
@@ -892,7 +917,7 @@ export function RapidPay({ user }: { user: any }) {
       toast.error("Expiry must be in MM/YY format");
       return;
     }
-    const [month, year] = cardExpiry.split("/").map(Number);
+    const [month] = cardExpiry.split("/").map(Number);
     if (month < 1 || month > 12) {
       toast.error("Expiry month must be between 01 and 12");
       return;
@@ -906,8 +931,8 @@ export function RapidPay({ user }: { user: any }) {
     const network = getCardNetwork(cardNumber);
 
     try {
-      await addDoc(collection(db, "funding_sources"), {
-        userId: user.uid,
+      const cardObj: any = {
+        id: `LINKED-${Date.now().toString(36).toUpperCase()}`,
         type: "credit_card",
         name: cardNickname || `${network} Platinum Card`,
         details: cleanNum.slice(-4),
@@ -920,7 +945,13 @@ export function RapidPay({ user }: { user: any }) {
         status: "active",
         network,
         createdAt: new Date().toISOString()
-      });
+      };
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        await addDoc(collection(db, "funding_sources"), { ...cardObj, userId: cloudUid });
+      } else {
+        setCreditCards(prev => [cardObj, ...prev]);
+      }
 
       toast.success("Credit card integrated & stored securely!");
       setIsAddingCard(false);
@@ -942,9 +973,13 @@ export function RapidPay({ user }: { user: any }) {
   const handleToggleFreezeCard = async (card: any) => {
     try {
       const newStatus = card.status === "active" ? "frozen" : "active";
-      await updateDoc(doc(db, "funding_sources", card.id), {
-        status: newStatus
-      });
+      setCreditCards(prev => prev.map(c => c.id === card.id ? { ...c, status: newStatus } : c));
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid && !String(card.id).startsWith("LINKED-") && !String(card.id).startsWith("cba_") && !String(card.id).startsWith("amex_")) {
+        await updateDoc(doc(db, "funding_sources", card.id), {
+          status: newStatus
+        }).catch(() => {});
+      }
       toast.success(`Card ${newStatus === "active" ? "activated" : "frozen"} successfully`);
     } catch (e) {
       console.error(e);
@@ -952,11 +987,15 @@ export function RapidPay({ user }: { user: any }) {
     }
   };
 
-  // Remove card from cloud storage
+  // Remove card from storage
   const handleRemoveCard = async (cardId: string) => {
     if (!confirm("Are you sure you want to de-authorize and remove this credit card integration?")) return;
     try {
-      await deleteDoc(doc(db, "funding_sources", cardId));
+      setCreditCards(prev => prev.filter(c => c.id !== cardId));
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        await deleteDoc(doc(db, "funding_sources", cardId)).catch(() => {});
+      }
       toast.success("Card integration deleted successfully");
       if (selectedFundingSource === cardId) {
         setSelectedFundingSource("balance");
@@ -970,7 +1009,6 @@ export function RapidPay({ user }: { user: any }) {
   // Generate and issue a new BSB-linked digital card
   const handleGenerateDigitalBsbCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid) return;
 
     if (!newBsb.trim() || !newAccNo.trim() || !newSwiftCode.trim()) {
       toast.error("Please enter the BSB, Account Number, and SWIFT Code");
@@ -986,13 +1024,12 @@ export function RapidPay({ user }: { user: any }) {
     const numericLimit = parseFloat(newCardLimit) || 940000000;
 
     setIsGeneratingDigitalCard(true);
-    // Generate secure randomized digital card details
     const randomCardNo = "4211" + Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join("");
     const randomCvv = Math.floor(Math.random() * 900 + 100).toString();
 
     try {
-      await addDoc(collection(db, "funding_sources"), {
-        userId: user.uid,
+      const bsbCardObj: any = {
+        id: `BSB-CARD-${Date.now().toString(36).toUpperCase()}`,
         type: "digital_bsb_card",
         name: newCardNickname || "Sovereign Digital Card",
         details: randomCardNo.slice(-4),
@@ -1004,14 +1041,21 @@ export function RapidPay({ user }: { user: any }) {
         accountNumber: numericAcc,
         swiftCode: newSwiftCode.trim().toUpperCase(),
         limit: numericLimit,
-        currentBalance: numericLimit, // FILL ACCNT
+        currentBalance: numericLimit,
         status: "active",
         network: "Visa",
         createdAt: new Date().toISOString(),
         tapIdEnabled: true,
         payIdEnabled: true,
         oskoEnabled: true
-      });
+      };
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        await addDoc(collection(db, "funding_sources"), { ...bsbCardObj, userId: cloudUid });
+      } else {
+        setBsbLinkedCards(prev => [bsbCardObj, ...prev]);
+        setSelectedBsbCard(bsbCardObj);
+      }
 
       toast.success("Worldwide BSB & SWIFT-linked digital card generated & integrated!");
       setNewBsb("");
@@ -1052,33 +1096,44 @@ export function RapidPay({ user }: { user: any }) {
         };
         setUberVouchers(prev => [newVoucher, ...prev]);
 
-        if (user?.uid) {
-           await addDoc(collection(db, "transactions"), {
-             userId: user.uid,
-             type: "Uber Voucher Generation",
-             amount: -amountNum,
-             currency: "AUD",
-             recipient: "Uber Global / Eats",
-             date: new Date().toISOString(),
-             status: "completed",
-             method: "Valourian Treasury",
-           });
+        // Also register in shared Benefit Voucher Pool for immediate Uber/UberEats checkout
+        try {
+          const existingV = JSON.parse(window.localStorage.getItem(BENEFIT_VOUCHERS_KEY) || "[]");
+          const sharedEntry = {
+            code: newVoucher.code,
+            title: `Uber & Eats Enterprise Voucher ($${amountNum.toFixed(0)} AUD)`,
+            amountAUD: amountNum,
+            storeScope: "Uber + UberEats Universal",
+            issuedAt: newVoucher.date,
+            claimed: false,
+          };
+          window.localStorage.setItem(BENEFIT_VOUCHERS_KEY, JSON.stringify([sharedEntry, ...(Array.isArray(existingV) ? existingV : [])]));
+          window.dispatchEvent(new CustomEvent("valourian_vouchers_updated", { detail: { voucher: sharedEntry } }));
+        } catch {}
 
-           const userRef = doc(db, "users", user.uid);
-           const snap = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-           if (!snap.empty) {
-             const b = snap.docs[0].data().balances || {};
-             await setDoc(userRef, { balances: { ...b, AUD: (b.AUD || 0) - amountNum } }, { merge: true });
-           }
-        }
-        toast.success(`Successfully generated Uber voucher for $${amountNum.toFixed(2)} AUD.`);
+        await recordUnifiedTransaction({
+          type: "Uber Voucher Generation",
+          amount: -amountNum,
+          currency: "AUD",
+          recipient: "Uber Global / Eats",
+          status: "completed",
+          method: "Valourian Treasury",
+        });
+
+        const synced = loadSyncedBalances();
+        await safeUpdateUserBalances({
+          ...synced,
+          AUD: Math.max(0, (synced.AUD || 0) - amountNum),
+        });
+
+        toast.success(`Successfully generated Uber voucher ${newVoucher.code} for $${amountNum.toFixed(2)} AUD.`);
         setUberVoucherAmount("");
       } catch (err) {
         toast.error("Failed to generate voucher.");
       } finally {
         setIsGeneratingUberVoucher(false);
       }
-    }, 2000);
+    }, 800);
   };
 
   // Live simulation processing worldwide orders with tapID, PayID, Osko
@@ -1140,33 +1195,33 @@ export function RapidPay({ user }: { user: any }) {
       await delayLog(`[Osko] Foreign exchange processed: ${foreignAmt} ${simCurrency} converted to $${convertedAud.toFixed(2)} AUD (Rate: 1 ${simCurrency} = ${rate} AUD).`, 900);
       await delayLog(`[Sovereign] Authorizing real-time debit of $${convertedAud.toFixed(2)} AUD...`, 800);
 
-      // Update balance
-      try {
-        const cardRef = doc(db, "funding_sources", selectedBsbCard.id);
-        await updateDoc(cardRef, {
-          currentBalance: currentBal + convertedAud
-        });
-      } catch(e) {
-        // If it's a local storage card, update local storage instead
-        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
-        if (saved) {
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid) {
+        try {
+          const cardRef = doc(db, "funding_sources", selectedBsbCard.id);
+          await updateDoc(cardRef, {
+            currentBalance: currentBal + convertedAud
+          });
+        } catch {}
+      }
+      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+      if (saved) {
+        try {
           let localCards = JSON.parse(saved);
-          const cIndex = localCards.findIndex(c => c.id === selectedBsbCard.id);
+          const cIndex = localCards.findIndex((c: any) => c.id === selectedBsbCard.id);
           if (cIndex > -1) {
             localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) + convertedAud;
             window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
           }
-        }
+        } catch {}
       }
 
-      // Log transaction to database
-      await addDoc(collection(db, "transactions"), {
-        userId: user.uid,
+      await recordUnifiedTransaction({
         recipient: `${simMerchant} (${simCurrency} ${foreignAmt})`,
         type: `Digital BSB Card (${simProtocol})`,
         amount: -convertedAud,
-        date: new Date().toISOString(),
-        status: "success",
+        currency: "AUD",
+        status: "completed",
         note: `Processed globally via secure tapID, PayID alias, and instant Osko NPP clearance.`
       });
 
@@ -1183,7 +1238,7 @@ export function RapidPay({ user }: { user: any }) {
   // Pay someone using the selected card
   const handlePaySomeoneFromCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid || !payingCard) return;
+    if (!payingCard) return;
 
     const payAmt = parseFloat(paymentAmount);
     if (isNaN(payAmt) || payAmt <= 0) {
@@ -1208,6 +1263,7 @@ export function RapidPay({ user }: { user: any }) {
     }
 
     setStatus("processing");
+    const cloudUid = getVerifiedCloudUid();
     try {
       if (payingType === "bpay") {
         const cleanCode = payingBpayBiller.trim().replace(/\D/g, "");
@@ -1230,7 +1286,7 @@ export function RapidPay({ user }: { user: any }) {
             currency: "AUD",
             accountHolder: user?.displayName || "ASIM ARYAL"
           },
-          senderUserId: user?.uid,
+          senderUserId: cloudUid || "sovereign-founder",
           senderName: user?.displayName || "ASIM ARYAL",
           note: `BPAY payment to ${billerName} (CRN: ${cleanCrn}) from ${payingCard.name}`
         });
@@ -1269,9 +1325,8 @@ export function RapidPay({ user }: { user: any }) {
         const payeeName = payingPayIdResolved?.registeredName || (cleanPayId.includes("@") ? "AUTHENTICATED PAYEE" : "ASIM ARYAL");
         const bankName = payingPayIdResolved?.institution || "Commonwealth Bank of Australia";
 
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          amount: payAmt,
+        await recordUnifiedTransaction({
+          amount: -payAmt,
           currency: "AUD",
           type: "payid_fast_payment",
           status: "completed",
@@ -1280,7 +1335,6 @@ export function RapidPay({ user }: { user: any }) {
           destinationBank: bankName,
           sourceCard: payingCard.name,
           settlementRail: "Osko® by BPAY • Fast Payment NPP 24/7",
-          date: new Date().toISOString(),
           receiptNumber: "PAYID-" + Math.random().toString(36).substring(2, 10).toUpperCase()
         });
 
@@ -1292,17 +1346,27 @@ export function RapidPay({ user }: { user: any }) {
           { duration: 6000 }
         );
       } else {
-        // Record transaction on the card
         const target = `Transfer to ${payingRecipient} (${payingBsb} ${payingAccount})`;
-        await addDoc(collection(db, "ledger"), {
-          userId: user.uid,
-          type: "expense",
-          amount: payAmt,
+        await recordUnifiedTransaction({
+          amount: -payAmt,
           currency: "AUD",
-          description: target,
-          date: new Date().toISOString(),
-          status: "completed"
+          type: "card_funds_transfer",
+          recipient: target,
+          sourceCard: payingCard.name,
+          status: "completed",
         });
+
+        if (cloudUid && isAsimCloudSession()) {
+          await addDoc(collection(db, "ledger"), {
+            userId: cloudUid,
+            type: "expense",
+            amount: payAmt,
+            currency: "AUD",
+            description: target,
+            date: new Date().toISOString(),
+            status: "completed"
+          });
+        }
 
         toast.success(`Successfully sent ${payAmt.toLocaleString()} via Funds Transfer!`);
       }
@@ -1499,32 +1563,28 @@ export function RapidPay({ user }: { user: any }) {
     }
 
     try {
-      if (user?.uid) {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          type: `crypto_transfer_${cryptoAsset.toLowerCase()}`,
-          amount: numAmount,
-          currency: cryptoAsset,
-          recipient: cryptoAddress,
-          date: new Date().toISOString(),
-          status: "completed",
-          method: "Valourian Treasury",
-          txHash: `0x${Math.random().toString(16).slice(2, 40).padEnd(40, '0')}`
-        });
+      const txHash = `0x${Math.random().toString(16).slice(2, 40).padEnd(40, '0')}`;
+      await recordUnifiedTransaction({
+        type: `crypto_transfer_${cryptoAsset.toLowerCase()}`,
+        amount: -numAmount,
+        currency: cryptoAsset,
+        recipient: cryptoAddress,
+        status: "completed",
+        method: "Valourian Treasury",
+        txHash
+      });
 
-        // Also add to local crypto history for immediate display
-        const newTx = {
-          id: Date.now().toString(),
-          type: "send",
-          asset: cryptoAsset,
-          amount: numAmount,
-          address: cryptoAddress,
-          date: new Date().toISOString(),
-          status: "confirmed",
-          hash: `0x${Math.random().toString(16).slice(2, 40).padEnd(40, '0')}`
-        };
-        setCryptoHistory(prev => [newTx, ...prev]);
-      }
+      const newTx = {
+        id: Date.now().toString(),
+        type: "send",
+        asset: cryptoAsset,
+        amount: numAmount,
+        address: cryptoAddress,
+        date: new Date().toISOString(),
+        status: "confirmed",
+        hash: txHash
+      };
+      setCryptoHistory(prev => [newTx, ...prev]);
 
       setTimeout(() => {
         setStatus("success");
@@ -1566,6 +1626,7 @@ export function RapidPay({ user }: { user: any }) {
       return;
     }
 
+    const cloudUid = getVerifiedCloudUid();
     try {
       if (selectedFundingSource === "balance") {
         const currentAud = userData?.balances?.AUD || 0;
@@ -1575,33 +1636,40 @@ export function RapidPay({ user }: { user: any }) {
           return;
         }
 
-        if (user?.uid) {
-          const userRef = doc(db, "users", user.uid);
-          await updateDoc(userRef, {
-            "balances.AUD": currentAud - amtNum
-          });
-        }
-        
-        // Find recipient in users collection if transferType is standard or payid
+        const synced = loadSyncedBalances();
+        await safeUpdateUserBalances({
+          ...synced,
+          AUD: Math.max(0, currentAud - amtNum),
+        });
+
         if (transferType === "standard" || transferType === "payid") {
           const lookupValue = transferType === "payid" ? payIdValue.trim() : transferTo.trim();
-          const q = query(collection(db, "users"), where("email", "==", lookupValue));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-             const recipientDoc = querySnapshot.docs[0];
-             const recipientData = recipientDoc.data();
-             const recipientRef = doc(db, "users", recipientDoc.id);
-             await updateDoc(recipientRef, {
-                "balances.AUD": (recipientData.balances?.AUD || 0) + amtNum
-             });
-             toast.success(
-             <div className="flex flex-col gap-2">
-               <span>Successfully delivered ${amtNum} AUD to ${lookupValue}!</span>
-               <button onClick={() => generatePDFReceipt(Math.random().toString(36).substr(2, 9).toUpperCase(), lookupValue, amtNum.toFixed(2), "Internal Network")} className="text-xs bg-white text-slate-800 font-bold px-2 py-1 rounded w-fit border border-slate-200">Download PDF Receipt</button>
-             </div>
-           );
-          } else {
-             toast.info(`Recipient ${lookupValue} not found in Valourian network. Routing to external clearing house...`);
+          let matchedInternal = false;
+          if (isAsimCloudSession()) {
+            try {
+              const q = query(collection(db, "users"), where("email", "==", lookupValue));
+              const querySnapshot = await getDocs(q);
+              if (!querySnapshot.empty) {
+                matchedInternal = true;
+                const recipientDoc = querySnapshot.docs[0];
+                const recipientData = recipientDoc.data();
+                const recipientRef = doc(db, "users", recipientDoc.id);
+                await updateDoc(recipientRef, {
+                  "balances.AUD": (recipientData.balances?.AUD || 0) + amtNum
+                });
+                toast.success(
+                  <div className="flex flex-col gap-2">
+                    <span>Successfully delivered ${amtNum} AUD to ${lookupValue}!</span>
+                    <button onClick={() => generatePDFReceipt(Math.random().toString(36).substr(2, 9).toUpperCase(), lookupValue, amtNum.toFixed(2), "Internal Network")} className="text-xs bg-white text-slate-800 font-bold px-2 py-1 rounded w-fit border border-slate-200">Download PDF Receipt</button>
+                  </div>
+                );
+              }
+            } catch (dirErr) {
+              handleFirestoreError(dirErr, OperationType.LIST, "users");
+            }
+          }
+          if (!matchedInternal) {
+            toast.info(`Recipient ${lookupValue} routing via external Fast Payment clearing house...`);
           }
         }
 
@@ -1626,93 +1694,90 @@ export function RapidPay({ user }: { user: any }) {
           return;
         }
 
-        try {
-          const cardRef = doc(db, "funding_sources", card.id);
-          await updateDoc(cardRef, {
-            currentBalance: (card.currentBalance || 0) + amtNum
-          });
-        } catch (e) {
-          const saved = window.localStorage.getItem('valourian_digital_cards_v8');
-          if (saved) {
+        if (cloudUid) {
+          try {
+            const cardRef = doc(db, "funding_sources", card.id);
+            await updateDoc(cardRef, {
+              currentBalance: (card.currentBalance || 0) + amtNum
+            });
+          } catch {}
+        }
+        const saved = window.localStorage.getItem('valourian_digital_cards_v8');
+        if (saved) {
+          try {
             let localCards = JSON.parse(saved);
-            const cIndex = localCards.findIndex(c => c.id === card.id);
+            const cIndex = localCards.findIndex((c: any) => c.id === card.id);
             if (cIndex > -1) {
               localCards[cIndex].currentBalance = (localCards[cIndex].currentBalance || 0) + amtNum;
               window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(localCards));
             }
-          }
+          } catch {}
         }
       }
 
-      if (user?.uid) {
-        const sourceLabel = selectedFundingSource === "balance"
-          ? "Cash Balance"
-          : `Card (${creditCards.find((c) => c.id === selectedFundingSource)?.network} ••••${creditCards.find((c) => c.id === selectedFundingSource)?.details})`;
+      const sourceLabel = selectedFundingSource === "balance"
+        ? "Cash Balance"
+        : `Card (${creditCards.find((c) => c.id === selectedFundingSource)?.network} ••••${creditCards.find((c) => c.id === selectedFundingSource)?.details})`;
 
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          recipient: transferTo,
-          type: `${typeLabel} (${sourceLabel})`,
-          amount: -amtNum,
-          date: new Date().toISOString(),
+      await recordUnifiedTransaction({
+        recipient: transferTo,
+        type: `${typeLabel} (${sourceLabel})`,
+        amount: -amtNum,
+        currency: "AUD",
+        status: "completed",
+        deliveryStatus: "accepted_and_received",
+        bankAccepted: true,
+        acceptedByRecipient: true,
+      });
+
+      const cleanAcc = (accountNumber || transferTo || "").replace(/[^0-9]/g, "");
+      const cleanName = (accountName || transferTo || "").toLowerCase();
+      let matchedCba = COMMBANK_LINKED_ACCOUNTS.find(
+        (a) =>
+          (cleanAcc.length >= 6 && (a.accountNumber.includes(cleanAcc) || cleanAcc.includes(a.accountNumber))) ||
+          (cleanName && cleanName.includes(a.name.toLowerCase())) ||
+          cleanName.includes("smart access") ||
+          cleanName.includes("goalsaver") ||
+          cleanName.includes("cdia") ||
+          cleanName.includes("netbank") ||
+          cleanName.includes("business trans") ||
+          cleanName.includes("business fca") ||
+          cleanName.includes("sovereign vault") ||
+          cleanName.includes("nab") ||
+          cleanName.includes("christopher")
+      );
+
+      if (!matchedCba) {
+        if (cleanName.includes("asim") || cleanName.includes("aryal") || cleanAcc === "0400123456" || cleanAcc === "61400123456") {
+          matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_smart_access");
+        } else if (cleanName.includes("scott") || cleanAcc === "0400286693" || cleanAcc.endsWith("400286693")) {
+          matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_cba_christopher_scott") || COMMBANK_LINKED_ACCOUNTS[0];
+        } else if (cleanName.includes("cba") || cleanName.includes("commonwealth") || transferType === "payid") {
+          matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_smart_access");
+        }
+      }
+
+      if (matchedCba) {
+        await updateCbaAccountBalance(cloudUid || "sovereign-founder", matchedCba.id, amtNum);
+        await recordUnifiedTransaction({
+          accountId: matchedCba.id,
+          accountName: matchedCba.name,
+          recipient: `${matchedCba.name} (Credited & Received)`,
+          recipientName: matchedCba.name,
+          recipientLegalName: matchedCba.accountHolder,
+          destinationBank: matchedCba.bankName,
+          sourceBank: sourceLabel,
+          amount: amtNum,
+          currency: "AUD",
+          type: "fast_payment_received",
           status: "completed",
           deliveryStatus: "accepted_and_received",
+          settlementRail: "Fast payment (Osko® • NPP 24/7)",
           bankAccepted: true,
           acceptedByRecipient: true,
+          clearedAt: new Date().toISOString(),
+          speedNote: `Received immediately into ${matchedCba.name}. Cleared & available to spend.`,
         });
-
-        // Credit recipient CBA account immediately if it's one of the linked receiver accounts
-        const cleanAcc = (accountNumber || transferTo || "").replace(/[^0-9]/g, "");
-        const cleanName = (accountName || transferTo || "").toLowerCase();
-        let matchedCba = COMMBANK_LINKED_ACCOUNTS.find(
-          (a) =>
-            (cleanAcc.length >= 6 && (a.accountNumber.includes(cleanAcc) || cleanAcc.includes(a.accountNumber))) ||
-            (cleanName && cleanName.includes(a.name.toLowerCase())) ||
-            cleanName.includes("smart access") ||
-            cleanName.includes("goalsaver") ||
-            cleanName.includes("cdia") ||
-            cleanName.includes("netbank") ||
-            cleanName.includes("business trans") ||
-            cleanName.includes("business fca") ||
-            cleanName.includes("sovereign vault") ||
-            cleanName.includes("nab") ||
-            cleanName.includes("christopher")
-        );
-
-        if (!matchedCba) {
-          if (cleanName.includes("asim") || cleanName.includes("aryal") || cleanAcc === "0400123456" || cleanAcc === "61400123456") {
-            matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_smart_access");
-          } else if (cleanName.includes("scott") || cleanAcc === "0400286693" || cleanAcc.endsWith("400286693")) {
-            matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_cba_christopher_scott") || COMMBANK_LINKED_ACCOUNTS[0];
-          } else if (cleanName.includes("cba") || cleanName.includes("commonwealth") || transferType === "payid") {
-            matchedCba = COMMBANK_LINKED_ACCOUNTS.find(a => a.id === "acc_smart_access");
-          }
-        }
-
-        if (matchedCba) {
-          await updateCbaAccountBalance(user.uid, matchedCba.id, amtNum);
-          await addDoc(collection(db, "transactions"), {
-            userId: user.uid,
-            accountId: matchedCba.id,
-            accountName: matchedCba.name,
-            recipient: `${matchedCba.name} (Credited & Received)`,
-            recipientName: matchedCba.name,
-            recipientLegalName: matchedCba.accountHolder,
-            destinationBank: matchedCba.bankName,
-            sourceBank: sourceLabel,
-            amount: amtNum, // positive incoming credit
-            currency: "AUD",
-            type: "fast_payment_received",
-            status: "completed",
-            deliveryStatus: "accepted_and_received",
-            settlementRail: "Fast payment (Osko® • NPP 24/7)",
-            bankAccepted: true,
-            acceptedByRecipient: true,
-            date: new Date().toISOString(),
-            clearedAt: new Date().toISOString(),
-            speedNote: `Received immediately into ${matchedCba.name}. Cleared & available to spend.`,
-          });
-        }
       }
 
       setStatus("success");
@@ -1777,21 +1842,30 @@ export function RapidPay({ user }: { user: any }) {
           if (newBalance < 0) newBalance = 0;
         }
 
-        // Determine which collection it belongs to
-        const colName = tappedCard.bsb ? "digital_bsb_cards" : "funding_sources";
-        const docRef = doc(db, colName, tappedCard.id);
-        
-        await updateDoc(docRef, { currentBalance: newBalance });
+        const cloudUid = getVerifiedCloudUid();
+        if (cloudUid) {
+          const colName = tappedCard.bsb ? "digital_bsb_cards" : "funding_sources";
+          const docRef = doc(db, colName, tappedCard.id);
+          await updateDoc(docRef, { currentBalance: newBalance }).catch(() => {});
+          if (isAsimCloudSession()) {
+            await addDoc(collection(db, "ledger"), {
+              userId: cloudUid,
+              type: "expense",
+              amount: tapMode === "pay" ? amt : -amt,
+              currency: "AUD",
+              description: tapMode === "pay" ? `Tap & Pay (${tappedCard.name})` : `Tap Refund (${tappedCard.name})`,
+              date: new Date().toISOString(),
+              status: "completed"
+            }).catch(() => {});
+          }
+        }
 
-        // Add to standard ledger too
-        await addDoc(collection(db, "ledger"), {
-          userId: user.uid,
-          type: "expense",
-          amount: tapMode === "pay" ? amt : -amt,
+        await recordUnifiedTransaction({
+          type: tapMode === "pay" ? "nfc_tap_pay" : "nfc_tap_refund",
+          amount: tapMode === "pay" ? -amt : amt,
           currency: "AUD",
-          description: tapMode === "pay" ? `Tap & Pay (${tappedCard.name})` : `Tap Refund (${tappedCard.name})`,
-          date: new Date().toISOString(),
-          status: "completed"
+          recipient: tapMode === "pay" ? `Tap & Pay (${tappedCard.name})` : `Tap Refund (${tappedCard.name})`,
+          status: "completed",
         });
 
         toast.success(`SMS Verification Code Authorized. Successfully ${tapMode === "pay" ? "paid" : "refunded"} ${amt.toFixed(2)} via Tap & ${tapMode === "pay" ? "Pay" : "Refund"} to merchant!`);
@@ -1922,37 +1996,31 @@ export function RapidPay({ user }: { user: any }) {
         isOpen={isNfcModalOpen} 
         onClose={() => setIsNfcModalOpen(false)} 
         cards={bsbLinkedCards} 
-        onPaymentComplete={(amt, merch, cardId) => {
+        onPaymentComplete={async (amt, merch, cardId) => {
           toast.success(`RapidPay NFC completed: ${amt} to ${merch}`);
-          
-          if (user) {
-            const card = bsbLinkedCards.find(c => c.id === cardId);
-            const cardCurrency = card?.currency || "AUD";
-            let backingLabel = "RBA Bonds";
-            if (cardCurrency === "USD") backingLabel = "US Treasury Bonds";
-            if (cardCurrency === "GBP") backingLabel = "Bank of England Gilts";
-            if (cardCurrency === "EUR") backingLabel = "ECB Reserve Bonds";
 
-            const newTx = {
-              id: `NFC-RP-${Math.floor(Math.random() * 90000 + 10000)}`,
-              date: new Date().toISOString().split("T")[0],
-              amount: -amt,
-              currency: cardCurrency,
-              recipient: merch || "Retail Merchant",
-              type: "Contactless NFC Tap",
-              status: "completed",
-              note: `RapidPay NFC cleared via secure mobile element. Fully backed by 1:1 ${backingLabel}.`
-            };
+          const card = bsbLinkedCards.find(c => c.id === cardId);
+          const cardCurrency = card?.currency || "AUD";
+          let backingLabel = "RBA Bonds";
+          if (cardCurrency === "USD") backingLabel = "US Treasury Bonds";
+          if (cardCurrency === "GBP") backingLabel = "Bank of England Gilts";
+          if (cardCurrency === "EUR") backingLabel = "ECB Reserve Bonds";
 
-            addDoc(collection(db, "transactions"), { ...newTx, userId: user.uid }).catch(console.error);
-            const userRef = doc(db, "users", user.uid);
-            getDocs(query(collection(db, "users"), where("uid", "==", user.uid))).then(snap => {
-              if (!snap.empty) {
-                const b = snap.docs[0].data().balances || {};
-                setDoc(userRef, { balances: { ...b, [cardCurrency]: (b[cardCurrency] || 0) - amt } }, { merge: true });
-              }
-            });
-          }
+          await recordUnifiedTransaction({
+            id: `NFC-RP-${Math.floor(Math.random() * 90000 + 10000)}`,
+            amount: -amt,
+            currency: cardCurrency,
+            recipient: merch || "Retail Merchant",
+            type: "Contactless NFC Tap",
+            status: "completed",
+            note: `RapidPay NFC cleared via secure mobile element. Fully backed by 1:1 ${backingLabel}.`
+          });
+
+          const synced = loadSyncedBalances();
+          await safeUpdateUserBalances({
+            ...synced,
+            [cardCurrency]: Math.max(0, (synced[cardCurrency] || 0) - amt),
+          });
         }}
       />
       <div className="max-w-6xl mx-auto flex flex-col gap-8">
@@ -3090,20 +3158,76 @@ export function RapidPay({ user }: { user: any }) {
           {/* Card Carousel & Linked Cards List (Span 2) */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-              <div className="flex justify-between items-center mb-6">
+              {/* CreChargeFacilities Live Line Strip */}
+              <div className="mb-6 bg-slate-900 rounded-2xl p-4 sm:p-5 border border-amber-500/30 text-white shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                      CreChargeFacilities • Active Across All Stores & Apps
+                    </span>
+                    <h4 className="text-sm sm:text-base font-black text-white mt-0.5">
+                      Institutional Charge & Revolving Credit Lines
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent("navigate-tab", { detail: { tab: "loans" } }));
+                      toast.info("Opening CreChargeFacilities Hub...");
+                    }}
+                    className="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0"
+                  >
+                    Manage All Facilities
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {creFacilities.slice(0, 3).map((fac) => {
+                    const isActive = fac.id === activeCreId;
+                    return (
+                      <button
+                        key={fac.id}
+                        type="button"
+                        onClick={() => {
+                          creChargeFacilitiesService.setActiveFacilityId(fac.id);
+                          setActiveCreId(fac.id);
+                          toast.success(`${fac.facilityName} set as active CreCharge rail!`);
+                        }}
+                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer min-h-[44px] ${
+                          isActive
+                            ? "bg-amber-500/15 border-amber-400 text-white"
+                            : "bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-mono">
+                          <span className="text-amber-400 font-bold">{fac.facilityCode}</span>
+                          <span className={fac.status === "active" ? "text-emerald-400" : "text-amber-400"}>
+                            {fac.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-xs font-extrabold truncate mt-0.5">{fac.facilityName}</div>
+                        <div className="text-[11px] font-mono text-emerald-400 font-bold mt-1 tabular-nums">
+                          ${(fac.availableCreditAUD / 1_000_000).toFixed(1)}M AUD Avail
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
                 <div>
                   <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
                     <CreditCard className="w-5 h-5 text-yellow-500" />
                     Linked Institutional Credit Cards
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Manage active credit channels, freeze cards, or pay down current statement balances.
+                    Zero-Decline • Luhn Mod-10 Verified • Active everywhere alongside CreChargeFacilities.
                   </p>
                 </div>
                 {!isAddingCard && (
                   <button
                     onClick={() => setIsAddingCard(true)}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                    className="min-h-[44px] px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                   >
                     <Plus className="w-4 h-4" /> Link Custom Card
                   </button>
@@ -3305,14 +3429,14 @@ export function RapidPay({ user }: { user: any }) {
                         </div>
 
                         {/* Interactive Card Action Controls */}
-                        <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-200">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-200">
                           <button
                             onClick={() => {
                               setPayingCard(card);
                               setPaymentAmount("");
                             }}
                             disabled={isFrozen}
-                            className="py-2 bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="min-h-[44px] py-2 bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             title="Pay someone from this card"
                           >
                             <Send className="w-3 h-3" /> Pay Someone
@@ -3320,14 +3444,14 @@ export function RapidPay({ user }: { user: any }) {
                           <button
                             onClick={() => setTappedCard(card)}
                             disabled={isFrozen}
-                            className="py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="min-h-[44px] py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             title="Tap & Pay / Refund via NFC"
                           >
                             <Wifi className="w-3 h-3" /> Tap
                           </button>
                           <button
                             onClick={() => handleToggleFreezeCard(card)}
-                            className={`py-2 border rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 ${
+                            className={`min-h-[44px] py-2 border rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                               isFrozen
                                 ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                                 : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700"
@@ -3345,7 +3469,7 @@ export function RapidPay({ user }: { user: any }) {
                           </button>
                           <button
                             onClick={() => handleRemoveCard(card.id)}
-                            className="py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1"
+                            className="min-h-[44px] py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
                           >
                             <Trash2 className="w-3 h-3" /> Remove
                           </button>

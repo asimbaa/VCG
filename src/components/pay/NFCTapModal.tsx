@@ -118,6 +118,7 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
   const [paymentAmount, setPaymentAmount] = useState<number>(64.50);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [merchantName, setMerchantName] = useState<string>('Woolworths Metro Barangaroo');
+  const dragStageRef = useRef<HTMLDivElement>(null);
   const [merchantCategory, setMerchantCategory] = useState<string>('Supermarket & Retail POS');
   const [cardTapped, setCardTapped] = useState(false);
   const [isHapticVibrating, setIsHapticVibrating] = useState(false);
@@ -558,16 +559,16 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
             }}
             exit={{ opacity: 0, scale: 0.94, y: 20 }}
             transition={{ duration: 0.25 }}
-            className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden relative text-white my-auto max-h-[92vh] flex flex-col"
+            className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden relative text-white my-auto max-h-[92dvh] flex flex-col"
           >
             {/* Header with Sound & Web NFC Toggles */}
-            <div className="p-5 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10">
-                  <SmartphoneNfc className="w-5 h-5 animate-pulse" />
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10 shrink-0">
+                  <SmartphoneNfc className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center flex-wrap gap-2">
                     <h3 className="text-base font-black tracking-tight text-white">Virtual NFC Tapping Terminal</h3>
                     <SectionWisdomTooltip 
                       title="NFC Contactless & EMV Cryptogram"
@@ -580,42 +581,44 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
                       regulatory="APCA eftpos Level-2 & EMVCo Contactless Spec"
                       actionTip="Click 'Phone Balance Reader' to inspect exact cash balance or inject immediate funds."
                     />
-                    <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                       EMV L2 POS
                     </span>
                     {hasWebNfcHardware && (
-                      <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1">
                         <Radio className="w-2.5 h-2.5" /> Web NFC
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 truncate">
                     Host Card Emulation • Contactless ISO/IEC 14443 • Drag or Tap Gesture
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* Switch to Smartphone NFC Reader & Immense Funding Mode */}
                 <button
                   type="button"
                   onClick={() => setShowSmartphoneReaderModal(true)}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="px-3 min-h-[44px] rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                   title="Open Smartphone NFC Balance Reader & Immense Funding Terminal"
                 >
-                  <Smartphone className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                  <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
                   <span className="hidden sm:inline">Phone Balance Reader</span>
                 </button>
 
                 {/* Audio Sound Toggle */}
                 <button
+                  type="button"
                   onClick={() => {
                     const next = !soundEnabled;
                     setSoundEnabled(next);
                     toast.info(next ? "POS Terminal audio chime enabled" : "POS Terminal sound muted");
                     if (next) triggerHapticAndAudio('proximity');
                   }}
-                  className={`p-2 rounded-xl transition-colors cursor-pointer border ${
+                  aria-label={soundEnabled ? "Mute POS terminal audio" : "Enable POS terminal audio"}
+                  className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-colors cursor-pointer border ${
                     soundEnabled 
                       ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border-slate-700' 
                       : 'bg-slate-900 text-slate-500 border-slate-800'
@@ -626,8 +629,10 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
                 </button>
 
                 <button 
-                  onClick={onClose} 
-                  className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close NFC terminal modal"
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -796,7 +801,7 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
               {/* ========================================================== */}
               {/* THE MOCKED POS NFC TERMINAL & DRAG/TAP CARD INTERFACE */}
               {/* ========================================================== */}
-              <div className="relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center overflow-hidden">
+              <div ref={dragStageRef} className="relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col items-center overflow-visible">
                 
                 {/* 4 Glowing Contactless LED Indicators on Terminal Bezel */}
                 <div className="flex items-center gap-3.5 mb-4">
@@ -1034,11 +1039,13 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
 
                   {/* Primary 3D Bank Card Component */}
                   <motion.div
-                    drag={terminalState === 'ready' ? "y" : false}
-                    dragConstraints={{ top: -120, bottom: 0 }}
-                    dragElastic={0.2}
-                    onDragEnd={(e, info) => {
-                      if (info.offset.y < -40 || info.point.y < 350) {
+                    drag={terminalState === 'ready'}
+                    dragConstraints={{ top: -180, bottom: 48, left: -56, right: 56 }}
+                    dragElastic={0.25}
+                    dragMomentum={false}
+                    dragSnapToOrigin
+                    onDragEnd={(_, info) => {
+                      if (info.offset.y < -35) {
                         executeVirtualTap();
                       }
                     }}
@@ -1102,7 +1109,7 @@ export function NFCTapModal({ isOpen, onClose, cards: propCards, user, onPayment
                     }
                     whileHover={terminalState === 'ready' ? { scale: 1.02, y: -4 } : {}}
                     onClick={executeVirtualTap}
-                    className={`rounded-2xl p-5 border cursor-grab active:cursor-grabbing select-none transition-all shadow-xl relative overflow-hidden z-20 ${
+                    className={`rounded-2xl p-5 border cursor-grab active:cursor-grabbing select-none drag-stage touch-none transition-all shadow-xl relative overflow-hidden z-20 ${
                       isFrozen
                         ? "bg-slate-950 border-red-500/40"
                         : network === 'AMEX'

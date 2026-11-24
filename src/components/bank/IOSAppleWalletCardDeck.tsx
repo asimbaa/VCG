@@ -4,11 +4,12 @@ import {
   CreditCard, Wifi, ShieldCheck, Zap, Copy, Eye, EyeOff, 
   Send, Sparkles, RefreshCw, ShoppingBag, ArrowUpRight, Check,
   ExternalLink, Layers, LayoutGrid, Leaf, Award, MapPin, User,
-  Calendar, Lock, CheckCircle2, ChevronDown, ChevronUp, Share2, Plus
+  Calendar, Lock, CheckCircle2, ChevronDown, ChevronUp, Share2, Plus, Cloud
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { BankCard } from './VBankVirtualCreditCards';
 import { AU_DEFAULT_BILLING, numpyCardSuperService } from '../../services/numpyCardSuperService';
+import { unifiedBankCardSync } from '../../services/unifiedBankCardSync';
 
 interface IOSAppleWalletCardDeckProps {
   cards: BankCard[];
@@ -39,6 +40,35 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
   const [showMerchantStrip, setShowMerchantStrip] = useState<boolean>(true);
   const [isTestingAutofill, setIsTestingAutofill] = useState<boolean>(false);
   const [autofillTestPassed, setAutofillTestPassed] = useState<boolean>(false);
+  const [isHealingDeck, setIsHealingDeck] = useState<boolean>(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+
+  const handleVerifyAndHealAll = () => {
+    setIsHealingDeck(true);
+    try {
+      const audit = unifiedBankCardSync.verifyAndHealAllCards();
+      playFeedbackChime();
+      toast.success(
+        `Luhn Mod-10 Verified: ${audit.healthyCount}/${audit.totalCards} cards healthy (${audit.repairedCount} repaired, 0% FX & 5%+ cashback active).`
+      );
+    } finally {
+      setIsHealingDeck(false);
+    }
+  };
+
+  const handleCloudSync = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const count = await unifiedBankCardSync.syncVaultToFirestore();
+      if (count > 0) {
+        toast.success(`Synced ${count} cards to Cloud Firestore Vault.`);
+      } else {
+        toast.success('Local vault cached & ready (Sign in to sync across devices).');
+      }
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   const isCardDebit = (c: BankCard) =>
     c.cardCategory === 'debit' ||
@@ -195,18 +225,40 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
           </p>
         </div>
 
-        {/* Category Filter + Issue + View Mode Toggle */}
+        {/* Category Filter + Issue + Verify & Heal + Cloud Sync + View Mode Toggle */}
         <div className="flex flex-wrap items-center gap-2">
           {onOpenIssueStudio && (
             <button
               type="button"
               onClick={onOpenIssueStudio}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-500/20 whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Issue Card</span>
             </button>
           )}
+
+          <button
+            type="button"
+            disabled={isHealingDeck}
+            onClick={handleVerifyAndHealAll}
+            className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            title="Run Luhn Mod-10 check & auto-repair across all cards"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{isHealingDeck ? 'Verifying...' : 'Verify & Heal All'}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isSyncingCloud}
+            onClick={handleCloudSync}
+            className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            title="Sync all cards & guardrails to Cloud Firestore"
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>{isSyncingCloud ? 'Syncing...' : 'Cloud Sync'}</span>
+          </button>
 
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
             {([
@@ -217,7 +269,7 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
               <button
                 key={tab.id}
                 onClick={() => { setCategoryFilter(tab.id); setActiveCardIndex(0); }}
-                className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   categoryFilter === tab.id
                     ? 'bg-emerald-500 text-slate-950'
                     : 'text-slate-400 hover:text-white'
@@ -230,7 +282,7 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
 
           <button
             onClick={() => setDeckMode('stack')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               deckMode === 'stack'
                 ? 'bg-emerald-500 text-slate-950 font-black'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -241,7 +293,7 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
           </button>
           <button
             onClick={() => setDeckMode('grid')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               deckMode === 'grid'
                 ? 'bg-emerald-500 text-slate-950 font-black'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -634,17 +686,20 @@ export const IOSAppleWalletCardDeck: React.FC<IOSAppleWalletCardDeckProps> = ({
                 );
               })()}
 
-              {/* Institutional Details Ribbon */}
-              <div className="max-w-xl mx-auto bg-slate-950/80 rounded-2xl p-4 border border-slate-800 flex items-center justify-between text-xs font-mono">
-                <div>
+              {/* Institutional Details & Partnership Terms Ribbon */}
+              <div className="max-w-xl mx-auto bg-slate-950/80 rounded-2xl p-4 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                <div className="min-w-0">
                   <span className="text-slate-500">BSB: </span>
-                  <strong className="text-emerald-400">{activeCard.bsb || '021-000'}</strong>
+                  <strong className="text-emerald-400 tabular-nums">{activeCard.bsb || '021-000'}</strong>
                   <span className="text-slate-500 ml-3">ACC: </span>
-                  <strong className="text-emerald-400">{activeCard.accountNumber || '8499210045'}</strong>
+                  <strong className="text-emerald-400 tabular-nums">{activeCard.accountNumber || '8499210045'}</strong>
+                  <div className="text-[11px] text-slate-400 mt-1">
+                    Luhn Mod-10 Verified · 0% FX · 5.0%+ Cashback · 5.10% APY
+                  </div>
                 </div>
                 <button
                   onClick={() => onRefillCard(activeCard.id)}
-                  className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  className="min-h-[38px] px-2.5 text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                   title="Replenish card to unlimited maximum institutional yield"
                 >
                   <RefreshCw className="w-3 h-3" /> Refill Full

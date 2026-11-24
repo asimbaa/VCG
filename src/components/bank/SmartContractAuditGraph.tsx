@@ -9,13 +9,17 @@ export function SmartContractAuditGraph() {
   const [isVerifying, setIsVerifying] = useState(false);
   
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    // Clear any existing SVG to prevent duplicates on hot reload
-    d3.select(containerRef.current).selectAll("*").remove();
+    const el = containerRef.current;
+    if (!el) return;
 
-    const width = containerRef.current.clientWidth;
+    let currentWidth = Math.max(280, el.clientWidth || 600);
     const height = 400;
+    const pad = 28;
+
+    const clampX = (x: number) => Math.max(pad, Math.min(currentWidth - pad, x));
+    const clampY = (y: number) => Math.max(pad, Math.min(height - pad, y));
+
+    d3.select(el).selectAll('*').remove();
 
     const nodes = [
       { id: 'Valourian OS (Root)', group: 1, verified: true },
@@ -41,22 +45,22 @@ export function SmartContractAuditGraph() {
       { source: 'Compliance Matrix', target: 'Blockchain Sync Node' },
     ];
 
-    const svg = d3.select(containerRef.current)
+    const svg = d3.select(el)
       .append('svg')
-      .attr('width', width)
+      .attr('width', '100%')
       .attr('height', height)
-      .attr('viewBox', [0, 0, width, height])
-      .attr('style', 'max-width: 100%; height: auto;');
+      .attr('viewBox', `0 0 ${currentWidth} ${height}`)
+      .attr('class', 'touch-none select-none w-full block');
 
     const color = d3.scaleOrdinal(d3.schemeDark2);
 
     const simulation = d3.forceSimulation(nodes as any)
-      .force('link', d3.forceLink(links).id((d: any) => d.id).distance(100))
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2));
+      .force('link', d3.forceLink(links).id((d: any) => d.id).distance(currentWidth < 460 ? 72 : 100))
+      .force('charge', d3.forceManyBody().strength(currentWidth < 460 ? -220 : -300))
+      .force('center', d3.forceCenter(currentWidth / 2, height / 2));
 
     const link = svg.append('g')
-      .attr('stroke', '#334155') // slate-700
+      .attr('stroke', '#334155')
       .attr('stroke-opacity', 0.6)
       .selectAll('line')
       .data(links)
@@ -69,27 +73,25 @@ export function SmartContractAuditGraph() {
       .selectAll('g')
       .data(nodes)
       .join('g')
-      .on('click', (event, d: any) => {
+      .style('cursor', 'grab')
+      .on('click', (_event, d: any) => {
         setSelectedNode(d);
-        // Force update the React state to show the panel
       })
       .call(drag(simulation) as any);
 
     nodeGroup.append('circle')
-      .attr('r', 8)
+      .attr('r', 9)
       .attr('fill', (d) => color(d.group.toString()));
-      
-    // Add verification checkmark
+
     nodeGroup.append('path')
       .attr('d', 'M -3 0 L -1 2 L 3 -3')
       .attr('fill', 'none')
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
-      .attr('opacity', (d) => d.verified ? 1 : 0)
+      .attr('opacity', (d) => (d.verified ? 1 : 0))
       .attr('class', 'verify-icon');
 
-    nodeGroup.append('title')
-      .text((d) => d.id);
+    nodeGroup.append('title').text((d) => d.id);
 
     const text = svg.append('g')
       .selectAll('text')
@@ -100,49 +102,66 @@ export function SmartContractAuditGraph() {
       .text((d) => d.id)
       .style('font-family', 'monospace')
       .style('font-size', '10px')
-      .style('fill', '#94a3b8') // slate-400
+      .style('fill', '#cbd5e1')
       .style('pointer-events', 'none');
 
     simulation.on('tick', () => {
+      for (const n of nodes as any[]) {
+        n.x = clampX(n.x ?? currentWidth / 2);
+        n.y = clampY(n.y ?? height / 2);
+      }
+
       link
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
         .attr('x2', (d: any) => d.target.x)
         .attr('y2', (d: any) => d.target.y);
 
-      nodeGroup
-        .attr('transform', (d: any) => `translate(${d.x},${d.y})`);
-        
+      nodeGroup.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+
       text
-        .attr('x', (d: any) => d.x + 12)
+        .attr('x', (d: any) => (d.x > currentWidth - 135 ? d.x - 14 : d.x + 13))
+        .attr('text-anchor', (d: any) => (d.x > currentWidth - 135 ? 'end' : 'start'))
         .attr('y', (d: any) => d.y + 4);
     });
 
-    // Expose a method to update a node's verified status
     (window as any).updateNodeVerification = (nodeId: string) => {
-      const node = nodes.find(n => n.id === nodeId);
+      const node = nodes.find((n) => n.id === nodeId);
       if (node) {
         node.verified = true;
         svg.selectAll('.verify-icon')
           .filter((d: any) => d.id === nodeId)
           .transition()
-          .duration(500)
+          .duration(400)
           .attr('opacity', 1);
       }
     };
 
-    function drag(simulation: any) {
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver((entries) => {
+          const rect = entries[0]?.contentRect;
+          if (!rect || rect.width < 200) return;
+          currentWidth = Math.round(rect.width);
+          svg.attr('viewBox', `0 0 ${currentWidth} ${height}`);
+          simulation.force('center', d3.forceCenter(currentWidth / 2, height / 2));
+          simulation.alpha(0.2).restart();
+        })
+      : null;
+
+    resizeObserver?.observe(el);
+
+    function drag(sim: any) {
       function dragstarted(event: any, d: any) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
+        if (!event.active) sim.alphaTarget(0.3).restart();
+        d.fx = clampX(d.x);
+        d.fy = clampY(d.y);
       }
       function dragged(event: any, d: any) {
-        d.fx = event.x;
-        d.fy = event.y;
+        d.fx = clampX(event.x);
+        d.fy = clampY(event.y);
       }
       function dragended(event: any, d: any) {
-        if (!event.active) simulation.alphaTarget(0);
+        if (!event.active) sim.alphaTarget(0);
         d.fx = null;
         d.fy = null;
       }
@@ -151,75 +170,82 @@ export function SmartContractAuditGraph() {
         .on('drag', dragged)
         .on('end', dragended);
     }
-    
+
     return () => {
-        simulation.stop();
-        delete (window as any).updateNodeVerification;
+      resizeObserver?.disconnect();
+      simStop();
+      delete (window as any).updateNodeVerification;
     };
+
+    function simStop() {
+      simulation.stop();
+    }
   }, []);
 
   const handleVerifyToggle = () => {
     if (!selectedNode || selectedNode.verified) return;
-    
+
     setIsVerifying(true);
-    toast.info(`Auditing smart contract for ${selectedNode.id}...`, { icon: '🔍' });
-    
+    toast.info(`Auditing smart contract for ${selectedNode.id}...`);
+
     setTimeout(() => {
       setIsVerifying(false);
       setSelectedNode({ ...selectedNode, verified: true });
       if ((window as any).updateNodeVerification) {
-         (window as any).updateNodeVerification(selectedNode.id);
+        (window as any).updateNodeVerification(selectedNode.id);
       }
-      toast.success(`Smart contract verified. Payout Deed executed on-chain.`, { icon: '✅' });
-    }, 2000);
+      toast.success('Smart contract verified. Payout Deed executed on-chain.');
+    }, 1200);
   };
 
   return (
-    <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none" />
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" />
-          <div>
-            <h4 className="text-white font-black uppercase tracking-widest text-sm">Smart Ledger Audit</h4>
-            <p className="text-slate-500 font-mono text-[10px] mt-1">D3.js Smart Contract Execution Map</p>
-          </div>
+    <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 relative">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5 relative z-10">
+        <div>
+          <h4 className="text-white font-black uppercase tracking-widest text-sm">Smart Ledger Audit</h4>
+          <p className="text-slate-400 font-mono text-[11px] mt-1">
+            Interactive contract execution graph · Drag nodes within viewport
+          </p>
         </div>
-        <div className="px-3 py-1 bg-indigo-900/30 border border-indigo-500/30 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-full">
-          Live Sync
-        </div>
+        <span className="text-[11px] font-mono text-indigo-300 font-semibold">
+          Live Graph Sync
+        </span>
       </div>
-      
+
       <div className="flex flex-col lg:flex-row gap-6 relative z-10">
-        <div ref={containerRef} className="flex-1 bg-slate-950 rounded-xl border border-slate-800/50 min-h-[400px]" />
-        
+        <div
+          ref={containerRef}
+          className="flex-1 bg-slate-950 rounded-xl border border-slate-800/70 min-h-[400px] overflow-visible"
+        />
+
         {selectedNode && (
-          <div className="w-full lg:w-72 bg-slate-950 rounded-xl border border-slate-800/50 p-6 flex flex-col justify-between">
+          <div className="w-full lg:w-72 bg-slate-950 rounded-xl border border-slate-800/70 p-5 flex flex-col justify-between shrink-0">
             <div>
               <h5 className="text-white font-black text-sm uppercase tracking-widest mb-1">{selectedNode.id}</h5>
-              <div className="flex items-center gap-2 mb-6">
-                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${selectedNode.verified ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+              <div className="flex items-center gap-2 mb-5 text-[11px] font-mono">
+                <span className={selectedNode.verified ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
                   {selectedNode.verified ? 'Verified' : 'Pending Audit'}
                 </span>
-                <span className="text-slate-500 text-[9px] font-mono">GROUP {selectedNode.group}</span>
+                <span aria-hidden="true" className="text-slate-600">·</span>
+                <span className="text-slate-400">Group {selectedNode.group}</span>
               </div>
-              
-              <div className="space-y-4 text-xs font-mono">
+
+              <div className="space-y-4 text-xs font-mono tabular-nums">
                 <div>
                   <span className="text-slate-500 block mb-1">Hash</span>
-                  <span className="text-slate-300">0x{(Math.random() * 1e16).toString(16).substring(0, 12)}...</span>
+                  <span className="text-slate-200">0x{(Math.random() * 1e16).toString(16).substring(0, 12)}...</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block mb-1">Block</span>
-                  <span className="text-slate-300">{Math.floor(Math.random() * 1000000) + 15000000}</span>
+                  <span className="text-slate-200">{Math.floor(Math.random() * 1000000) + 15000000}</span>
                 </div>
               </div>
             </div>
-            
-            <button 
+
+            <button
               onClick={handleVerifyToggle}
               disabled={selectedNode.verified || isVerifying}
-              className={`mt-6 w-full py-3 rounded-lg font-black uppercase tracking-widest text-[10px] transition-all flex items-center justify-center gap-2 ${selectedNode.verified ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)]'}`}
+              className={`mt-6 w-full min-h-[44px] py-3 rounded-lg font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-2 cursor-pointer ${selectedNode.verified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
             >
               {isVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               {selectedNode.verified ? 'Audit Passed' : 'Verify Contract'}

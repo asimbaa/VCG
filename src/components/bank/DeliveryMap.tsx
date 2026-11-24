@@ -4,8 +4,8 @@ import { Compass, Shield, Gauge, Landmark, MapPin, Navigation, Activity, ZoomIn,
 import { motion, AnimatePresence, animate } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, Marker, TrafficLayer, Polyline, HeatmapLayer, OverlayViewF, OverlayView, Polygon, InfoWindow } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
-import { db } from '../../firebase';
-import { collection, getDocs, query } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 interface DeliveryMapProps {
   restaurantName?: string;
@@ -254,22 +254,25 @@ function DeliveryMapInner({ restaurantName, storeName, driverName, originName, d
     if (heatmapData.length > 0) return;
     setFetchingHeatmap(true);
     try {
-      const q = query(collection(db, "transactions"));
-      const snapshot = await getDocs(q);
+      const uid = auth.currentUser?.uid;
       const points: google.maps.LatLng[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.recipient && data.recipient.includes("Uber Eats")) {
-          const originLabelMatch = Object.keys(RESTAURANT_LOCATIONS).find(name => data.recipient.includes(name));
-          const baseLoc = originLabelMatch ? RESTAURANT_LOCATIONS[originLabelMatch] : DESTINATION_COORD;
-          const randomLat = baseLoc.lat + (Math.random() - 0.5) * 0.04;
-          const randomLng = baseLoc.lng + (Math.random() - 0.5) * 0.04;
-          if (window.google) {
-            points.push(new window.google.maps.LatLng(randomLat, randomLng));
+      if (uid) {
+        const q = query(collection(db, "transactions"), where("userId", "==", uid));
+        const snapshot = await getDocs(q);
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          if (data.recipient && data.recipient.includes("Uber Eats")) {
+            const originLabelMatch = Object.keys(RESTAURANT_LOCATIONS).find(name => data.recipient.includes(name));
+            const baseLoc = originLabelMatch ? RESTAURANT_LOCATIONS[originLabelMatch] : DESTINATION_COORD;
+            const randomLat = baseLoc.lat + (Math.random() - 0.5) * 0.04;
+            const randomLng = baseLoc.lng + (Math.random() - 0.5) * 0.04;
+            if (window.google) {
+              points.push(new window.google.maps.LatLng(randomLat, randomLng));
+            }
           }
-        }
-      });
-      // Fallback dummy points if no real transactions found
+        });
+      }
+      // Fallback points if unauthenticated or no transactions found
       if (points.length === 0 && window.google) {
         for (let i = 0; i < 50; i++) {
            points.push(new window.google.maps.LatLng(DESTINATION_COORD.lat + (Math.random() - 0.5) * 0.05, DESTINATION_COORD.lng + (Math.random() - 0.5) * 0.05));

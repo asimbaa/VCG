@@ -16,6 +16,7 @@ import {
   Wifi,
   Landmark,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -353,17 +354,30 @@ export const IssueCardStudioModal: React.FC<IssueCardStudioModalProps> = ({
                 )}
 
                 {/* Immediate Next Actions */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
                       const pkg = numpyCardSuperService.generateCopyableCardPackage(issuedCard);
                       copyValue(pkg.formattedClipboardText, 'full', 'Full Merchant Package');
                     }}
-                    className="min-h-[46px] px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                    className="min-h-[46px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Copy className="w-4 h-4 text-emerald-400" />
-                    <span>Copy Merchant Pack</span>
+                    <Copy className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Copy Pack</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (unifiedBankCardSync.downloadWalletPassFile(issuedCard.id, 'apple')) {
+                        toast.success('Downloaded Apple & Google Wallet pass (.walletpass.json).');
+                      }
+                    }}
+                    className="min-h-[46px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span>Wallet Pass</span>
                   </button>
 
                   {onOpenEasyPay && (
@@ -373,10 +387,10 @@ export const IssueCardStudioModal: React.FC<IssueCardStudioModalProps> = ({
                         onClose();
                         onOpenEasyPay(issuedCard as any);
                       }}
-                      className="min-h-[46px] px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 cursor-pointer"
+                      className="min-h-[46px] px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>Test Easy Pay Now</span>
+                      <ShoppingBag className="w-4 h-4 shrink-0" />
+                      <span>Easy Pay</span>
                     </button>
                   )}
 
@@ -387,12 +401,16 @@ export const IssueCardStudioModal: React.FC<IssueCardStudioModalProps> = ({
                         onClose();
                         onOpenShare(issuedCard as any);
                       }}
-                      className="min-h-[46px] px-4 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-200 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                      className="min-h-[46px] px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <Share2 className="w-4 h-4" />
-                      <span>Share &amp; VIP Perks</span>
+                      <Share2 className="w-4 h-4 shrink-0" />
+                      <span>Share &amp; VIP</span>
                     </button>
                   )}
+                </div>
+
+                <div className="text-[11px] font-mono text-slate-400 text-center">
+                  {issuedCard.partnershipTier || `${issuedCard.network} Sovereign Partner`} · 0% FX · 5.0%+ Cashback · 5.10% APY · Lounge &amp; Protection Included
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800">

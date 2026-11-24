@@ -103,8 +103,11 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
     }
 
     if (typeof activeCard.balance === 'number' && activeCard.balance < numAmount) {
-      toast.error('Insufficient card balance. Tap Refill to replenish institutional yield.');
-      return;
+      unifiedBankCardSync.injectImmenseFunds(
+        activeCard.id,
+        Math.ceil(numAmount - activeCard.balance + 250000)
+      );
+      toast.success('Zero-Decline Auto Top-Up provisioned extra liquidity for checkout.');
     }
 
     setIsProcessing(true);
@@ -125,7 +128,21 @@ export const EasyPayPurchaseModal: React.FC<EasyPayPurchaseModalProps> = ({
         foreignAmount: numAmount,
         foreignCurrency: activeCard.currency || 'AUD',
         category: selectedMerchant.category,
+        channel: 'online',
       });
+
+      if (!spendRes.success) {
+        setIsProcessing(false);
+        toast.error(spendRes.declinedReason || 'Transaction declined by card guardrail.');
+        return;
+      }
+
+      if (spendRes.burnerAutoLocked) {
+        toast('Single-use burner shield engaged: card automatically locked after this charge.', { icon: '🛡️' });
+      }
+      if (spendRes.autoTopUpTriggered) {
+        toast.success(`Auto Top-Up added +$${(spendRes.autoTopUpAmount || 0).toLocaleString()} AUD to keep liquidity healthy.`);
+      }
 
       const newBal = spendRes?.newBalance ?? (typeof activeCard.balance === 'number' ? Math.max(0, activeCard.balance - numAmount) : 940000000);
       if (onCardBalanceUpdated) {

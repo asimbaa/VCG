@@ -30,20 +30,24 @@ export function RealityBridge({ balances, onComplete }: { balances: any, onCompl
             setLogs(l => [...l, 'SYSTEM LIVE. Welcome to Reality.']);
             toast.success("Simulation deployed to reality successfully.", { icon: "🌍" });
             
-            // Actually hit the DB to stamp reality state
+            // Actually stamp reality state cleanly to localStorage & verified user profile
             try {
-              const { auth, db } = await import('../../firebase');
-              const { doc, setDoc } = await import('firebase/firestore');
-              if (auth.currentUser) {
-                await setDoc(doc(db, 'deployments', auth.currentUser.uid), {
-                  status: 'REALITY_DEPLOYED',
-                  timestamp: new Date().toISOString(),
-                  totalValueMapped: totalValue,
-                  infrastructure: 'AWS_QUANTUM_CORE'
-                }, { merge: true });
+              const payload = {
+                status: 'REALITY_DEPLOYED',
+                timestamp: new Date().toISOString(),
+                totalValueMapped: totalValue,
+                infrastructure: 'AWS_QUANTUM_CORE'
+              };
+              window.localStorage.setItem('valourian_reality_bridge_state', JSON.stringify(payload));
+              const { getVerifiedCloudUid } = await import('../../services/cloudSessionGuard');
+              const cloudUid = getVerifiedCloudUid();
+              if (cloudUid) {
+                const { db } = await import('../../firebase');
+                const { doc, setDoc } = await import('firebase/firestore');
+                await setDoc(doc(db, 'users', cloudUid), { realityBridge: payload }, { merge: true });
               }
             } catch(e) {
-              console.error(e);
+              console.warn('[RealityBridge] Cloud state sync deferred:', e);
             }
           }, 2000);
         }, 3000);

@@ -203,7 +203,7 @@ class SmsEmailDispatchService {
   }): Promise<DispatchResult> {
     const timestamp = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney" });
     const cardTitle = card.name || "Valourian Sovereign Card";
-    const rawNum = String(card.fullNumber || card.number || "5353882910484829").replace(/\s+/g, "");
+    const rawNum = String(card.fullNumber || card.number || "5353882910484826").replace(/\s+/g, "");
     const formattedNum = card.number || rawNum.replace(/(\d{4})/g, "$1 ").trim();
     const cvv = card.dynamicCvv || card.cvv || "782";
     const pin = card.pin || "4912";

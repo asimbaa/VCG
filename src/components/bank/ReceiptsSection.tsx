@@ -575,7 +575,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
                   </div>
                 </div>
 
-                <div className="relative z-10 grid grid-cols-3 gap-4 mt-8 border-t border-slate-150 pt-6">
+                <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-8 border-t border-slate-200 pt-6">
                   <button 
                     disabled={isEmailing} 
                     onClick={handleEmailReceipt} 
@@ -622,7 +622,7 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
               </div>
               <button 
                 onClick={() => setIsExpanded(false)}
-                className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-450 hover:text-white"
+                className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
                 title="Close overlay"
               >
                 <X className="w-6 h-6" />
@@ -735,8 +735,9 @@ export function ReceiptsSection({ transactions }: { transactions: any[] }) {
                   <Download className="w-4 h-4" /> Download PDF Receipt
                 </button>
                 <button 
+                  type="button"
                   onClick={() => setIsExpanded(false)}
-                  className="flex-1 sm:flex-none border border-slate-200 bg-white hover:bg-slate-50 text-slate-705 p-3 px-6 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all"
+                  className="flex-1 sm:flex-none border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 min-h-[44px] p-3 px-6 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all"
                 >
                   Close Screen
                 </button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { SafeResponsiveContainer } from '../shared/SafeResponsiveContainer';
 
 import { Network, Activity, Globe, Zap, ArrowRight, ShieldCheck, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
@@ -98,7 +99,7 @@ export function ReserveArbitrageWidget() {
 
 
         <div className="h-48 w-full min-w-0 mb-8">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
+          <SafeResponsiveContainer minHeight={160}>
             <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
               <XAxis dataKey="time" stroke="#475569" fontSize={10} tickMargin={8} />
@@ -112,7 +113,7 @@ export function ReserveArbitrageWidget() {
               <Line type="monotone" dataKey="US" name="US Treasuries" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               <Line type="monotone" dataKey="UK" name="UK Gilts" stroke="#d946ef" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             </LineChart>
-          </ResponsiveContainer>
+          </SafeResponsiveContainer>
         </div>
         
         <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800">

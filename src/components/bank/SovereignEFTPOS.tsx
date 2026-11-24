@@ -12,8 +12,7 @@ import {
   DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
-import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
-import { db } from "../../firebase";
+import { safeUpdateUserBalances, recordUnifiedTransaction } from "../../services/cloudSessionGuard";
 
 interface SovereignEFTPOSProps {
   user?: any;
@@ -46,26 +45,21 @@ export function SovereignEFTPOS({ user, balances = {}, setBalances }: SovereignE
       try {
         const currentAud = balances.AUD || 0;
         const updatedBalance = currentAud + amt;
+        const nextBalances = { ...balances, AUD: updatedBalance };
+        const authCode = `AUTH-EMV-${Math.floor(100000 + Math.random() * 900000)}`;
 
-        if (user?.uid) {
-          const userRef = doc(db, "users", user.uid);
-          await updateDoc(userRef, {
-            "balances.AUD": updatedBalance,
-          });
-
-          await addDoc(collection(db, "transactions"), {
-            userId: user.uid,
-            date: new Date().toISOString(),
-            amount: amt,
-            currency: "AUD",
-            recipient: "In-Store POS Merchant Settlement",
-            type: "pos_eftpos",
-            cardUsed: cardType,
-            authCode: `AUTH-EMV-${Math.floor(100000 + Math.random() * 900000)}`,
-            status: "completed",
-            description: `Host Card Emulation Direct Tap: $${amt.toFixed(2)} AUD received via Tyro/EFTPOS Terminal.`
-          });
-        }
+        await safeUpdateUserBalances(nextBalances);
+        await recordUnifiedTransaction({
+          date: new Date().toISOString(),
+          amount: amt,
+          currency: "AUD",
+          recipient: "In-Store POS Merchant Settlement",
+          type: "pos_eftpos",
+          cardUsed: cardType,
+          authCode,
+          status: "completed",
+          description: `Host Card Emulation Direct Tap: $${amt.toFixed(2)} AUD received via Tyro/EFTPOS Terminal.`
+        });
 
         if (setBalances) {
           setBalances(prev => ({

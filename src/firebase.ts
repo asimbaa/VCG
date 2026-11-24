@@ -223,6 +223,15 @@ export const withRetry = async <T>(operation: () => Promise<T>, maxRetries = 3, 
     try {
       return await operation();
     } catch (err: any) {
+      const msg = String(err?.message || err || '').toLowerCase();
+      const code = String(err?.code || '').toLowerCase();
+      if (
+        code === 'permission-denied' ||
+        code === 'unauthenticated' ||
+        msg.includes('missing or insufficient permissions')
+      ) {
+        throw err;
+      }
       retries--;
       if (retries === 0) {
         throw err;

@@ -13,6 +13,8 @@ import {
   Truck,
   Wifi,
   ArrowLeft,
+  PauseCircle,
+  Wallet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cardShareService, SharedCardInvite } from '../../services/cardShareService';
@@ -61,6 +63,41 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
     setCopiedKey(label);
     toast.success(`Copied ${label} to clipboard.`);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleDownloadWalletPassJson = (inv: SharedCardInvite) => {
+    try {
+      const payload = {
+        format: 'valourian.walletpass.v1',
+        organizationName: 'Valourian Capital Management',
+        inviteId: inv.inviteId,
+        cardName: inv.cardName,
+        cardCategory: inv.cardCategory,
+        network: inv.network,
+        cardholder: (inv.claimedByName || fullName || 'VALOURIAN VIP').toUpperCase(),
+        maskedPan: `•••• •••• •••• ${inv.maskedLast4}`,
+        expiry: inv.expiry,
+        grantedLimitAUD: inv.grantedLimitAUD,
+        bsb: inv.bsb,
+        accountNumber: inv.accountNumber,
+        payId: inv.payId,
+        vipBenefits: inv.vipBenefits,
+        shareUrl: inv.shareUrl,
+        issuedAt: inv.createdAt,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `valourian-shared-pass-${inv.maskedLast4}.walletpass.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded Apple / Google Wallet pass file (.walletpass.json).');
+    } catch {
+      toast.error('Unable to download Wallet pass file.');
+    }
   };
 
   const handleDownloadPass = (passText: string, fileSlug: string) => {
@@ -151,6 +188,7 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
     invite.grantedLimitAUD === 'unlimited'
       ? 'Unlimited VIP Facility'
       : `$${Number(invite.grantedLimitAUD).toLocaleString('en-AU', { minimumFractionDigits: 2 })} AUD`;
+  const isPaused = invite.status === 'paused';
   const isClaimed = invite.status === 'claimed';
   const isPreAddressed = Boolean(invite.recipientEmail && invite.recipientName);
   const fullPackage = [
@@ -206,13 +244,13 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-lg sm:text-2xl font-bold tracking-widest tabular-nums text-white">
-                {isClaimed
+                {isClaimed && !isPaused
                   ? revealed
                     ? invite.formattedNumber
                     : `•••• •••• •••• ${invite.maskedLast4}`
                   : `•••• •••• •••• ${invite.maskedLast4}`}
               </span>
-              {isClaimed && (
+              {isClaimed && !isPaused && (
                 <button
                   type="button"
                   onClick={() => setRevealed(!revealed)}
@@ -224,7 +262,11 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
               )}
             </div>
             <div className="text-xs text-slate-300 font-mono">
-              {invite.allowPhysicalCard ? 'Virtual + Physical Card Ready' : 'Instant Virtual Access'}
+              {isPaused
+                ? 'Temporarily Paused by Cardholder'
+                : invite.allowPhysicalCard
+                ? 'Virtual + Physical Card Ready'
+                : 'Instant Virtual Access'}
             </div>
           </div>
 
@@ -235,7 +277,7 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
                 {invite.claimedByName || fullName || 'INSTANT GUEST VIP'}
               </div>
             </div>
-            {isClaimed && (
+            {isClaimed && !isPaused && (
               <>
                 <div>
                   <div className="text-[10px] text-slate-400 uppercase">Expires</div>
@@ -254,8 +296,18 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
           </div>
         </div>
 
-        {/* Claim Step OR Unlocked Merchant Copy Panel */}
-        {!isClaimed ? (
+        {/* Paused Banner OR Claim Step OR Unlocked Merchant Copy Panel */}
+        {isPaused ? (
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-5 sm:p-6 space-y-2 shadow-xl">
+            <div className="flex items-center gap-2 text-amber-300 font-bold text-sm">
+              <PauseCircle className="w-5 h-5 shrink-0" />
+              <span>Shared Card Temporarily Paused</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              The primary cardholder has momentarily paused this shared facility. Full card numbers and checkout authorization will automatically restore once resumed in the Share Control Hub.
+            </p>
+          </div>
+        ) : !isClaimed ? (
           <form
             onSubmit={handleActivate}
             className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl"
@@ -359,18 +411,48 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
                 <span>Card Active · Ready for Immediate Checkout</span>
               </div>
               {invite.physicalDispatchStatus !== 'not_requested' && (
-                <span className="text-xs font-mono text-cyan-300">Courier Queued</span>
+                <span className="text-xs font-mono text-cyan-300 capitalize">
+                  {invite.physicalDispatchStatus.replace(/_/g, ' ')}
+                </span>
               )}
             </div>
 
-            {invite.physicalDispatchStatus !== 'not_requested' && invite.physicalShippingAddress && (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-300 flex items-center gap-2">
-                <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Physical card queued for courier dispatch to: {invite.physicalShippingAddress}</span>
+            {invite.physicalDispatchStatus !== 'not_requested' && (
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className={invite.physicalDispatchStatus === 'queued_production' || invite.physicalDispatchStatus === 'courier_dispatched' || invite.physicalDispatchStatus === 'delivered' ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                    1. Queued
+                  </span>
+                  <span className={invite.physicalDispatchStatus === 'courier_dispatched' || invite.physicalDispatchStatus === 'delivered' ? 'text-cyan-400 font-bold' : 'text-slate-500'}>
+                    2. Dispatched
+                  </span>
+                  <span className={invite.physicalDispatchStatus === 'delivered' ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                    3. Delivered
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all"
+                    style={{
+                      width:
+                        invite.physicalDispatchStatus === 'delivered'
+                          ? '100%'
+                          : invite.physicalDispatchStatus === 'courier_dispatched'
+                          ? '66%'
+                          : '33%',
+                    }}
+                  />
+                </div>
+                {invite.physicalShippingAddress && (
+                  <div className="text-xs text-slate-300 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Shipping to: {invite.physicalShippingAddress}</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Clean Copy Buttons */}
+            {/* Clean Copy & Wallet Pass Buttons */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
@@ -422,11 +504,19 @@ export const MagicClaimPortal: React.FC<MagicClaimPortalProps> = ({ inviteId, on
               </button>
               <button
                 type="button"
+                onClick={() => handleDownloadWalletPassJson(invite)}
+                className="col-span-2 sm:col-span-2 min-h-[44px] px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-cyan-500/35 text-cyan-300 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>Download Wallet Pass (.json)</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => handleDownloadPass(fullPackage, invite.maskedLast4)}
-                className="col-span-2 sm:col-span-3 min-h-[44px] px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-emerald-500/35 text-emerald-300 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="col-span-2 sm:col-span-1 min-h-[44px] px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-emerald-500/35 text-emerald-300 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Save Offline VIP Card Pass (.txt)</span>
+                <span>Offline Pass (.txt)</span>
               </button>
             </div>
           </div>

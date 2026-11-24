@@ -43,6 +43,7 @@ import {
 } from "firebase/firestore";
 import { useGlobalCurrency } from "../../contexts/CurrencyContext";
 import { convertCurrency, formatCurrency, SYMBOLS, EXCHANGE_RATES } from "../../utils/CurrencyConverter";
+import { getVerifiedCloudUid, getLocalTransactions } from "../../services/cloudSessionGuard";
 
 export interface TransactionRecord {
   id: string;
@@ -79,16 +80,20 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
   const userId = user?.uid || "asim_aryal";
   const cacheKey = `rapidpay_tx_audit_cache_${userId}`;
 
-  // 1. Instant 0ms Local Cache Initialization
+  // 1. Instant 0ms Local Cache + Unified Local Ledger Initialization
   const [transactions, setTransactions] = useState<TransactionRecord[]>(() => {
     try {
+      const localUnified = getLocalTransactions();
       const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
+      const parsed = cached ? JSON.parse(cached) : [];
+      const merged = [...localUnified, ...(Array.isArray(parsed) ? parsed : [])];
+      const uniq = new Map<string, TransactionRecord>();
+      merged.forEach((t: any) => {
+        if (t && t.id && !uniq.has(t.id)) uniq.set(t.id, t);
+      });
+      return Array.from(uniq.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     } catch {}
-    return [];
+    return getLocalTransactions();
   });
 
   const [loading, setLoading] = useState(transactions.length === 0);
@@ -101,10 +106,42 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
   const [selectedTxForAudit, setSelectedTxForAudit] = useState<TransactionRecord | null>(null);
 
-  // 2. Real-Time Indexed Firestore Retrieval
+  // 2. Real-Time Indexed Firestore Retrieval + Local Ledger Merge
+  const mergeWithLocalTransactions = useCallback((cloudRecords: TransactionRecord[]) => {
+    const localRecords = getLocalTransactions();
+    const map = new Map<string, TransactionRecord>();
+    cloudRecords.forEach((r) => {
+      if (r?.id) map.set(r.id, r);
+    });
+    localRecords.forEach((lr: any) => {
+      if (lr?.id && !map.has(lr.id)) {
+        map.set(lr.id, {
+          id: lr.id,
+          userId: lr.userId || userId,
+          date: lr.date || lr.timestamp || new Date().toISOString(),
+          amount: typeof lr.amount === "number" ? lr.amount : Number(lr.amount || 0),
+          currency: lr.currency || "AUD",
+          recipient: lr.recipient || lr.merchant || "Settled Beneficiary",
+          type: lr.type || "standard",
+          category: lr.category || "Transfer",
+          status: lr.status || "completed",
+          reference: lr.reference || lr.ref || `TX-${String(lr.id).slice(0, 8).toUpperCase()}`,
+          traceId: lr.traceId || `VAL-${String(lr.id).slice(0, 10).toUpperCase()}`,
+          endToEndId: lr.endToEndId || `NPP-E2E-${Date.now().toString(36)}`,
+          settlementRail: lr.settlementRail || "Valourian Unified Clearing",
+          sourceVault: lr.sourceVault || "Valourian Sovereign Treasury",
+          destinationBank: lr.destinationBank || "Reserve Bank Direct ADI",
+          ...lr,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [userId]);
+
   const setupFirestoreSubscription = useCallback(() => {
-    const uid = auth.currentUser?.uid;
+    const uid = getVerifiedCloudUid();
     if (!db || !uid) {
+      setTransactions((prev) => mergeWithLocalTransactions(prev));
       setLoading(false);
       setIsRefreshing(false);
       return () => {};
@@ -143,13 +180,13 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
         };
       });
 
-      // Update state and refresh persistent cache
-      setTransactions(records);
+      const merged = mergeWithLocalTransactions(records);
+      setTransactions(merged);
       setLoading(false);
       setIsRefreshing(false);
       setLastRefreshed(new Date());
       try {
-        localStorage.setItem(cacheKey, JSON.stringify(records));
+        localStorage.setItem(cacheKey, JSON.stringify(merged));
       } catch {}
     };
 
@@ -170,13 +207,14 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
     );
 
     return unsubscribe;
-  }, [userId, cacheKey]);
+  }, [userId, cacheKey, mergeWithLocalTransactions]);
 
   useEffect(() => {
     const unsub = setupFirestoreSubscription();
 
     // Instant 0ms refresh on NFC contactless tap or card settlement
     const handleSettledEvent = () => {
+      setTransactions((prev) => mergeWithLocalTransactions(prev));
       handleManualRefresh();
     };
     window.addEventListener("valourian_payment_settled", handleSettledEvent);
@@ -185,16 +223,16 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
       unsub();
       window.removeEventListener("valourian_payment_settled", handleSettledEvent);
     };
-  }, [setupFirestoreSubscription]);
+  }, [setupFirestoreSubscription, mergeWithLocalTransactions]);
 
   // 3. Fast Manual Refresh Trigger
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getVerifiedCloudUid();
       if (!db || !uid) {
+        setTransactions((prev) => mergeWithLocalTransactions(prev));
         setLastRefreshed(new Date());
-        toast.info("Synced with local ledger records.");
         return;
       }
       const q = query(
@@ -203,21 +241,17 @@ export const PaymentHistoryAuditTab: React.FC<PaymentHistoryAuditTabProps> = ({
         limit(100)
       );
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        const records: TransactionRecord[] = snap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        })) as any[];
-        // Sort in memory by date desc
-        records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setTransactions(records);
-        localStorage.setItem(cacheKey, JSON.stringify(records));
-      }
+      const records: TransactionRecord[] = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      })) as any[];
+      const merged = mergeWithLocalTransactions(records);
+      setTransactions(merged);
+      localStorage.setItem(cacheKey, JSON.stringify(merged));
       setLastRefreshed(new Date());
-      toast.success("Transaction Ledger Synchronized 100% with Firestore Database.");
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, "transactions");
-      toast.info("Refreshed with cached memory records.");
+      setTransactions((prev) => mergeWithLocalTransactions(prev));
     } finally {
       setIsRefreshing(false);
     }

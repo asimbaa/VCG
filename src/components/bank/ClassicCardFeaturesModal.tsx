@@ -173,6 +173,27 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
   const [isCardNfcActive, setIsCardNfcActive] = useState(false);
   const [cardNfcSuccess, setCardNfcSuccess] = useState(false);
 
+  // Card-to-Card Transfer, Auto Top-Up & Merchant Locks State
+  const [transferDestCardId, setTransferDestCardId] = useState<string>("");
+  const [transferAmountAUD, setTransferAmountAUD] = useState<string>("50000");
+  const [autoTopUpEnabled, setAutoTopUpEnabled] = useState<boolean>(Boolean(card?.autoTopUp?.enabled));
+  const [autoTopUpThreshold, setAutoTopUpThreshold] = useState<string>(String(card?.autoTopUp?.thresholdAUD ?? 25000));
+  const [autoTopUpAmount, setAutoTopUpAmount] = useState<string>(String(card?.autoTopUp?.topUpAmountAUD ?? 100000));
+  const [autoTopUpSourceId, setAutoTopUpSourceId] = useState<string>(card?.autoTopUp?.sourceCardId || "");
+  const [merchantLockMode, setMerchantLockMode] = useState<"off" | "allowlist" | "blocklist">(card?.merchantLockMode || "off");
+  const [merchantLocksInput, setMerchantLocksInput] = useState<string>((card?.merchantLocks || []).join(", "));
+
+  useEffect(() => {
+    if (card) {
+      setAutoTopUpEnabled(Boolean(card.autoTopUp?.enabled));
+      setAutoTopUpThreshold(String(card.autoTopUp?.thresholdAUD ?? 25000));
+      setAutoTopUpAmount(String(card.autoTopUp?.topUpAmountAUD ?? 100000));
+      setAutoTopUpSourceId(card.autoTopUp?.sourceCardId || "");
+      setMerchantLockMode(card.merchantLockMode || "off");
+      setMerchantLocksInput((card.merchantLocks || []).join(", "));
+    }
+  }, [card]);
+
   if (!isOpen || !card) return null;
 
   const isFrozen = card.status === "frozen";
@@ -658,23 +679,14 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
               <CreditCard className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-bold text-white tracking-tight">{card.name}</h3>
-                <span
-                  className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                    isFrozen
-                      ? "bg-red-500/20 text-red-400 border-red-500/30"
-                      : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                  }`}
-                >
-                  {isFrozen ? "FROZEN" : "ACTIVE 100%"}
-                </span>
-                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold px-2 py-0.5 rounded-full uppercase">
-                  {card.network}
+                <span className={`text-xs font-mono font-semibold ${isFrozen ? "text-red-400" : "text-emerald-400"}`}>
+                  · {isFrozen ? "Frozen" : "Active 100%"} · {card.network} · Luhn Mod-10
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Classic Bank Card Security, Controls & High-Yield Value Suite
+                {card.partnershipTier || `${card.network} Sovereign Partner`} · 0% FX · 5.0%+ Cashback · {(card.apyInterestRate * 100).toFixed(2)}% APY
               </p>
             </div>
           </div>
@@ -1039,17 +1051,67 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
                   <p className="text-[10px] text-slate-400 mt-1">Generate new 16-digit PAN while keeping balance</p>
                 </button>
 
-                {/* Apple Wallet / Google Pay */}
-                <button
-                  onClick={() => toast.success("Card token pushed to Apple Wallet & Google Pay")}
-                  className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-left transition-all cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-2">
+                {/* Apple Wallet / Google Pay + Wallet Pass File */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2">
+                  <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Digital Wallet</span>
                     <Smartphone className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <div className="text-sm font-bold text-white">Apple & Google Pay</div>
-                  <p className="text-[10px] text-slate-400 mt-1">Instant NFC contactless provisioning</p>
+                  <div className="text-sm font-bold text-white">Apple &amp; Google Pay</div>
+                  <div className="flex gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        unifiedBankCardSync.provisionWalletPass(card.id);
+                        toast.success("Card token pushed to Apple Wallet & Google Pay");
+                      }}
+                      className="flex-1 min-h-[34px] px-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-emerald-300 cursor-pointer"
+                    >
+                      Provision
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (unifiedBankCardSync.downloadWalletPassFile(card.id, "apple")) {
+                          toast.success("Downloaded .walletpass.json credential file");
+                        }
+                      }}
+                      className="min-h-[34px] px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-cyan-300 cursor-pointer flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>.json</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Single-Use Disposable Burner Shield */}
+                <button
+                  onClick={() => {
+                    const nextBurner = unifiedBankCardSync.toggleBurnerMode(card.id);
+                    const updated = { ...card, burnerMode: nextBurner };
+                    onCardUpdated?.(updated);
+                    toast.success(
+                      nextBurner
+                        ? "Single-Use Burner Shield ON: Card auto-locks immediately after next payment."
+                        : "Single-Use Burner Shield OFF: Continuous multi-purchase mode restored."
+                    );
+                  }}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer sm:col-span-2 ${
+                    card.burnerMode
+                      ? "bg-rose-500/15 border-rose-500/40 text-rose-200"
+                      : "bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Disposable Virtual Shield</span>
+                    <Flame className={`w-4 h-4 ${card.burnerMode ? "text-rose-400" : "text-slate-400"}`} />
+                  </div>
+                  <div className="text-sm font-bold text-white">
+                    {card.burnerMode ? "Single-Use Burner Armed (Auto-Locks on Spend)" : "Enable Single-Use Burner Shield"}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Protects single online checkouts by automatically freezing the card right after 1 authorization.
+                  </p>
                 </button>
 
                 {/* Virtual NFC Tap on Mocked Terminal */}
@@ -1059,16 +1121,16 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Virtual NFC Contactless Engine</span>
-                    <SmartphoneNfc className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    <SmartphoneNfc className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div className="text-sm font-bold text-white flex items-center gap-2">
                     <span>Tap on Mocked Terminal</span>
-                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      3D HAPTIC
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                      · 3D Haptic
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Test contactless card tap with 3D animation, glowing border & instant cashback.
+                    Test contactless card tap with 3D animation, glowing border &amp; instant cashback.
                   </p>
                 </button>
 
@@ -1083,14 +1145,73 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
                   </div>
                   <div className="text-sm font-bold text-white flex items-center gap-2">
                     <span>Send PayID Transfer</span>
-                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold">
-                      +{((card.cashbackRate || 0.035) * 100).toFixed(1)}% YIELD
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                      · +{((card.cashbackRate || 0.05) * 100).toFixed(1)}% Yield
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Execute real-time Osko & PayID transfers directly from this card with bilateral clearance.
+                    Execute real-time Osko &amp; PayID transfers directly from this card with bilateral clearance.
                   </p>
                 </button>
+              </div>
+
+              {/* Card-to-Card Instant Liquidity Transfer */}
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-cyan-400">
+                    Card-to-Card Instant Liquidity Transfer
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400 tabular-nums">
+                    Source Balance: ${card.balance.toLocaleString("en-AU")} AUD
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <select
+                    value={transferDestCardId}
+                    onChange={(e) => setTransferDestCardId(e.target.value)}
+                    className="sm:col-span-2 min-h-[42px] bg-slate-900 border border-slate-800 rounded-xl px-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Select destination card...</option>
+                    {unifiedBankCardSync
+                      .getCards()
+                      .filter((c) => c.id !== card.id)
+                      .map((dest) => (
+                        <option key={dest.id} value={dest.id}>
+                          {dest.name} (•••• {dest.last4}) · ${Number(dest.balance || 0).toLocaleString()} AUD
+                        </option>
+                      ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={transferAmountAUD}
+                      onChange={(e) => setTransferAmountAUD(e.target.value)}
+                      placeholder="Amount AUD"
+                      className="w-full min-h-[42px] bg-slate-900 border border-slate-800 rounded-xl px-3 text-xs font-mono text-white tabular-nums focus:outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!transferDestCardId) {
+                          toast.error("Please select a destination card.");
+                          return;
+                        }
+                        const amt = Number(transferAmountAUD);
+                        const res = unifiedBankCardSync.transferBetweenCards(card.id, transferDestCardId, amt);
+                        if (!res.success) {
+                          toast.error(res.error || "Transfer failed.");
+                          return;
+                        }
+                        if (res.fromCard) onCardUpdated?.(res.fromCard);
+                        toast.success(`Transferred $${amt.toLocaleString("en-AU")} AUD instantly between cards!`);
+                      }}
+                      className="min-h-[42px] px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs whitespace-nowrap cursor-pointer shrink-0"
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Quick Details Copy */}
@@ -1993,7 +2114,7 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800">
                     <div>
                       <div className="text-xs font-bold text-white">Contactless NFC Tap-to-Pay</div>
-                      <div className="text-[10px] text-slate-400">Allow contactless transactions on physical POS terminals & transit</div>
+                      <div className="text-[10px] text-slate-400">Allow contactless transactions on physical POS terminals &amp; transit</div>
                     </div>
                     <button
                       onClick={handleToggleContactless}
@@ -2008,6 +2129,129 @@ export const ClassicCardFeaturesModal: React.FC<ClassicCardFeaturesModalProps> =
                       />
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Auto Top-Up Shield & Merchant Locks */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Auto Top-Up Threshold Rules */}
+                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">Auto Top-Up Liquidity Shield</div>
+                      <div className="text-[10px] text-slate-400">Automatically replenish when balance dips below threshold</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAutoTopUpEnabled(!autoTopUpEnabled)}
+                      className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                        autoTopUpEnabled ? "bg-emerald-500" : "bg-slate-800"
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                          autoTopUpEnabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Trigger Below (AUD)</label>
+                      <input
+                        type="number"
+                        value={autoTopUpThreshold}
+                        onChange={(e) => setAutoTopUpThreshold(e.target.value)}
+                        className="w-full min-h-[38px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 font-mono text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Top-Up Amount (AUD)</label>
+                      <input
+                        type="number"
+                        value={autoTopUpAmount}
+                        onChange={(e) => setAutoTopUpAmount(e.target.value)}
+                        className="w-full min-h-[38px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 font-mono text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <select
+                    value={autoTopUpSourceId}
+                    onChange={(e) => setAutoTopUpSourceId(e.target.value)}
+                    className="w-full min-h-[38px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 text-xs text-white"
+                  >
+                    <option value="">Source: Sovereign Treasury Reserve</option>
+                    {unifiedBankCardSync
+                      .getCards()
+                      .filter((c) => c.id !== card.id)
+                      .map((src) => (
+                        <option key={src.id} value={src.id}>
+                          From: {src.name} (•••• {src.last4})
+                        </option>
+                      ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = unifiedBankCardSync.updateAutoTopUp(card.id, {
+                        enabled: autoTopUpEnabled,
+                        thresholdAUD: Number(autoTopUpThreshold) || 25000,
+                        topUpAmountAUD: Number(autoTopUpAmount) || 100000,
+                        sourceCardId: autoTopUpSourceId || undefined,
+                      });
+                      if (updated) onCardUpdated?.(updated);
+                      toast.success("Auto Top-Up Liquidity Shield saved.");
+                    }}
+                    className="w-full min-h-[40px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer"
+                  >
+                    Save Auto Top-Up Rule
+                  </button>
+                </div>
+
+                {/* Merchant Allowlist / Blocklist Locks */}
+                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
+                  <div>
+                    <div className="text-xs font-bold text-white">Merchant Locks (Allowlist / Blocklist)</div>
+                    <div className="text-[10px] text-slate-400">Enforce pre-auth rules at checkout (e.g. Amazon, Emirates, Gambling)</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(["off", "allowlist", "blocklist"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setMerchantLockMode(mode)}
+                        className={`min-h-[36px] rounded-lg text-xs font-bold capitalize cursor-pointer border ${
+                          merchantLockMode === mode
+                            ? "bg-cyan-500 text-slate-950 border-cyan-400"
+                            : "bg-slate-900 text-slate-300 border-slate-800"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={merchantLocksInput}
+                    onChange={(e) => setMerchantLocksInput(e.target.value)}
+                    placeholder="Comma-separated merchants or categories..."
+                    className="w-full min-h-[38px] bg-slate-900 border border-slate-800 rounded-lg px-2.5 text-xs text-white placeholder:text-slate-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rules = merchantLocksInput.split(",").map((s) => s.trim()).filter(Boolean);
+                      const updated = unifiedBankCardSync.updateMerchantLocks(card.id, merchantLockMode, rules);
+                      if (updated) onCardUpdated?.(updated);
+                      toast.success(`Merchant Lock policy (${merchantLockMode}) saved.`);
+                    }}
+                    className="w-full min-h-[40px] rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs cursor-pointer"
+                  >
+                    Save Merchant Lock Policy
+                  </button>
                 </div>
               </div>
             </div>

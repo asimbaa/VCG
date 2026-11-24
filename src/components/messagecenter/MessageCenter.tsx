@@ -3,20 +3,35 @@ import { motion } from 'framer-motion';
 import { Mail, FileText, Key, Map as MapIcon, ChevronRight, Download, ExternalLink, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { collection, query, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
+import { getVerifiedCloudUid, getLocalWorkspaceEmails } from '../../services/cloudSessionGuard';
 import { VoiceInputButton } from '../shared/VoiceInputButton';
 
 export function MessageCenter({ user }: { user: any }) {
   const [activeCategory, setActiveCategory] = useState<'all' | 'login' | 'invoices' | 'maps'>('all');
   const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
-  const [dbMessages, setDbMessages] = useState<any[]>([]);
+  const [dbMessages, setDbMessages] = useState<any[]>(() => getLocalWorkspaceEmails());
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchListening, setIsSearchListening] = useState(false);
   
   useEffect(() => {
-    if (!user?.uid || !auth.currentUser) return;
+    const syncLocal = () => {
+      const locals = getLocalWorkspaceEmails();
+      setDbMessages(prev => {
+        const map = new Map<string, any>();
+        prev.forEach(m => map.set(String(m.id || m.docIdField), m));
+        locals.forEach(m => map.set(String(m.id), m));
+        return Array.from(map.values());
+      });
+    };
+    window.addEventListener("valourian_emails_updated", syncLocal);
+
+    const cloudUid = getVerifiedCloudUid();
+    if (!cloudUid) {
+      return () => window.removeEventListener("valourian_emails_updated", syncLocal);
+    }
     
     const q = query(
-      collection(db, "users", auth.currentUser.uid, "emails"),
+      collection(db, "users", cloudUid, "emails"),
       orderBy("id", "desc")
     );
     
@@ -24,14 +39,21 @@ export function MessageCenter({ user }: { user: any }) {
       q,
       (snap) => {
         const msgs = snap.docs.map(d => ({ ...d.data(), docIdField: d.id }));
-        setDbMessages(msgs);
+        const locals = getLocalWorkspaceEmails();
+        const map = new Map<string, any>();
+        locals.forEach(m => map.set(String(m.id), m));
+        msgs.forEach(m => map.set(String((m as any).id || m.docIdField), m));
+        setDbMessages(Array.from(map.values()));
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, `users/${auth.currentUser?.uid}/emails`);
+        handleFirestoreError(err, OperationType.LIST, `users/${cloudUid}/emails`);
       }
     );
     
-    return () => unsub();
+    return () => {
+      window.removeEventListener("valourian_emails_updated", syncLocal);
+      unsub();
+    };
   }, [user]);
 
   const messages = useMemo(() => [
@@ -114,9 +136,10 @@ export function MessageCenter({ user }: { user: any }) {
   
   const handleMessageClick = async (msg: any) => {
     setSelectedMessage(msg);
-    if (msg.isDbMsg && !msg.read) {
+    const cloudUid = getVerifiedCloudUid();
+    if (msg.isDbMsg && msg.docIdField && !msg.read && cloudUid) {
        try {
-         await updateDoc(doc(db, "users", user.uid, "emails", msg.docIdField), {
+         await updateDoc(doc(db, "users", cloudUid, "emails", msg.docIdField), {
             read: true
          });
        } catch(e) {}
@@ -124,13 +147,13 @@ export function MessageCenter({ user }: { user: any }) {
   };
 
   return (
-    <div className="h-full bg-slate-50 flex flex-col md:flex-row rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-2xl relative z-10">
+    <div className="h-full bg-slate-50 text-slate-900 flex flex-col md:flex-row rounded-[2rem] border border-slate-200 overflow-hidden shadow-2xl relative z-10">
       
       {/* Sidebar */}
-      <div className="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 h-[300px] md:h-auto overflow-y-auto">
-        <div className="p-8 border-b border-slate-100">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center">
+      <div className="w-full md:w-80 bg-white text-slate-900 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col shrink-0 max-h-[46dvh] md:max-h-none md:h-auto overflow-y-auto">
+        <div className="p-5 sm:p-6 border-b border-slate-100">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center shrink-0">
               <Mail className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
@@ -139,93 +162,97 @@ export function MessageCenter({ user }: { user: any }) {
             </div>
           </div>
           
-          <div className="space-y-1">
+          <div className="grid grid-cols-2 md:grid-cols-1 gap-1">
             <button 
               onClick={() => setActiveCategory('all')}
-              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-3 ${activeCategory === 'all' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-2.5 whitespace-nowrap cursor-pointer ${activeCategory === 'all' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
             >
-              <Mail className="w-4 h-4" /> All Messages
+              <Mail className="w-4 h-4 shrink-0" /> All Messages
             </button>
             <button 
               onClick={() => setActiveCategory('login')}
-              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-3 ${activeCategory === 'login' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-2.5 whitespace-nowrap cursor-pointer ${activeCategory === 'login' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
             >
-              <Key className="w-4 h-4" /> Login Details
+              <Key className="w-4 h-4 shrink-0" /> Login Details
             </button>
             <button 
               onClick={() => setActiveCategory('invoices')}
-              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-3 ${activeCategory === 'invoices' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-2.5 whitespace-nowrap cursor-pointer ${activeCategory === 'invoices' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
             >
-              <FileText className="w-4 h-4" /> Invoices & Proofs
+              <FileText className="w-4 h-4 shrink-0" /> Invoices &amp; Proofs
             </button>
             <button 
               onClick={() => setActiveCategory('maps')}
-              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-3 ${activeCategory === 'maps' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-colors flex items-center gap-2.5 whitespace-nowrap cursor-pointer ${activeCategory === 'maps' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
             >
-              <MapIcon className="w-4 h-4" /> Store Maps
+              <MapIcon className="w-4 h-4 shrink-0" /> Store Maps
             </button>
           </div>
           
-          <div className="mt-6 relative">
+          <div className="mt-4 relative">
              <input 
                type="text" 
                placeholder="Search documents..." 
                value={searchQuery}
                onChange={e => setSearchQuery(e.target.value)}
-               className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-10 text-sm focus:outline-none focus:border-indigo-500"
+               className="w-full min-h-[44px] bg-slate-50 text-slate-900 placeholder:text-slate-500 border border-slate-200 rounded-lg py-2 pl-3 pr-10 text-sm focus:outline-none focus:border-indigo-500"
              />
              <VoiceInputButton 
                isListening={isSearchListening}
                setIsListening={setIsSearchListening}
                onTranscript={(text) => setSearchQuery((prev) => prev ? prev + ' ' + text : text)}
-               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
+               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
              />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {filteredMessages.map((msg, mIdx) => (
+        <div className="flex-1 overflow-y-auto bg-white">
+          {filteredMessages.length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-500 font-medium">
+              No messages match the current filter.
+            </div>
+          ) : filteredMessages.map((msg, mIdx) => (
             <div 
               key={`msg-item-${((msg as any).isDbMsg ? (msg as any).docIdField : `static-${msg.id}`)}-${mIdx}`}
               onClick={() => handleMessageClick(msg)}
-              className={`p-5 border-b border-slate-100 cursor-pointer transition-colors ${selectedMessage?.id === msg.id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'} ${!msg.read ? 'bg-white' : 'opacity-80'}`}
+              className={`p-4 sm:p-5 border-b border-slate-100 cursor-pointer transition-colors ${selectedMessage?.id === msg.id ? 'bg-indigo-50/70' : 'hover:bg-slate-50'} ${!msg.read ? 'bg-white' : 'bg-slate-50/40'}`}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">{msg.sender}</span>
-                <span className="text-[9px] font-bold text-slate-400">{msg.date}</span>
+              <div className="flex justify-between items-start mb-1 gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 truncate">{msg.sender}</span>
+                <span className="text-[9px] font-bold text-slate-500 shrink-0 tabular-nums">{msg.date}</span>
               </div>
-              <h4 className={`text-sm ${!msg.read ? 'font-black text-slate-900' : 'font-semibold text-slate-700'} line-clamp-1`}>{msg.subject}</h4>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-1">{msg.content}</p>
+              <h4 className={`text-sm ${!msg.read ? 'font-black text-slate-900' : 'font-semibold text-slate-800'} line-clamp-1`}>{msg.subject}</h4>
+              <p className="text-xs text-slate-600 mt-1 line-clamp-1">{msg.content}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 bg-white/50 backdrop-blur-sm relative h-full overflow-y-auto">
+      <div className="flex-1 bg-slate-50 text-slate-900 relative h-full overflow-y-auto">
         {selectedMessage ? (
-          <div className="max-w-3xl mx-auto p-8 md:p-12">
-            <div className="bg-white rounded-3xl p-8 md:p-10 border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-4 mb-8 pb-8 border-b border-slate-100">
+          <div className="max-w-3xl mx-auto p-4 sm:p-8 md:p-12">
+            <div className="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 md:p-10 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-4 mb-6 sm:mb-8 pb-6 border-b border-slate-100">
                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-6 h-6 text-slate-700" />
                 </div>
-                <div>
-                  <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{selectedMessage.subject}</h1>
-                  <div className="flex items-center gap-3 mt-1">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight break-words">{selectedMessage.subject}</h1>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
                     <span className="text-sm font-bold text-indigo-600">{selectedMessage.sender}</span>
-                    <span className="text-xs text-slate-400">•</span>
-                    <span className="text-xs font-semibold text-slate-500">{selectedMessage.date}</span>
+                    <span className="text-xs text-slate-400">·</span>
+                    <span className="text-xs font-semibold text-slate-500 tabular-nums">{selectedMessage.date}</span>
                   </div>
                 </div>
               </div>
               
-              <div className="prose prose-sm md:prose-base max-w-none text-slate-700 font-medium whitespace-pre-wrap">
+              <div className="prose prose-sm md:prose-base max-w-none text-slate-800 font-medium whitespace-pre-wrap break-words">
                 {selectedMessage.content}
               </div>
               
               {selectedMessage.attachments && selectedMessage.attachments.length > 0 && (
-                <div className="mt-10 pt-8 border-t border-slate-100">
+                <div className="mt-8 pt-6 border-t border-slate-100">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Attachments</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {selectedMessage.attachments.map((att: any, idx: number) => {
@@ -237,9 +264,9 @@ export function MessageCenter({ user }: { user: any }) {
                           </div>
                           <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-bold text-slate-900 truncate">{att.name}</p>
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase">{att.size}</p>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tabular-nums">{att.size}</p>
                           </div>
-                          <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
+                          <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
                         </div>
                       );
                     })}
@@ -249,9 +276,9 @@ export function MessageCenter({ user }: { user: any }) {
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <Mail className="w-16 h-16 mb-4 opacity-20" />
-            <p className="text-sm font-bold tracking-widest uppercase">Select a message to view</p>
+          <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-slate-500 p-6 text-center">
+            <Mail className="w-14 h-14 mb-4 text-slate-300" />
+            <p className="text-sm font-bold tracking-widest uppercase text-slate-600">Select a message to view</p>
           </div>
         )}
       </div>

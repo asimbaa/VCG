@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { repairLuhnPan } from '../../utils/luhn';
 import { 
   CreditCard, ShieldCheck, Zap, ArrowRight, RefreshCw, Send, CheckCircle2, 
   Smartphone, Eye, EyeOff, Copy, QrCode, Wifi, Cloud, Lock, Unlock, Globe,
@@ -360,8 +361,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'diamond_infinity', 
     type: 'virtual', 
     name: 'Valourian Sovereign Diamond Infinity Reserve', 
-    number: '5500 8821 4492 1198', 
-    fullNumber: '5500 8821 4492 1198',
+    number: '5500 8821 4492 1199', 
+    fullNumber: '5500 8821 4492 1199',
     balance: 10000000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -380,8 +381,8 @@ const INITIAL_CARDS: BankCard[] = [
     id: 'apple_card_titanium', 
     type: 'virtual', 
     name: 'Apple Card Titanium Sovereign Edition', 
-    number: '5521 7719 3019 4482', 
-    fullNumber: '5521 7719 3019 4482',
+    number: '5521 7719 3019 4480', 
+    fullNumber: '5521 7719 3019 4480',
     balance: 500000000, 
     currency: 'AUD', 
     status: 'active', 
@@ -500,16 +501,17 @@ const EXCHANGE_RATES: Record<string, number> = {
 };
 
 export const normalizeCard = (c: any): BankCard => {
-  const fullNum = String(c?.fullNumber || c?.number || '').trim();
-  const clean = fullNum.replace(/\s+/g, '');
-  const last4 = String(c?.last4 || (clean.length >= 4 ? clean.slice(-4) : '9969'));
-  const formattedNum = fullNum || (last4 ? `•••• •••• •••• ${last4}` : '5119 3988 4562 9969');
+  const rawSeed = String(c?.fullNumber || c?.number || '5119398845629968').trim();
+  const repaired = repairLuhnPan(rawSeed, c?.network);
+  const fullNum = repaired.formattedPan;
+  const last4 = repaired.last4;
+  const formattedNum = fullNum;
 
   return {
     id: String(c?.id || `card_${Math.random().toString(36).slice(2, 9)}`),
     name: String(c?.name || 'Valourian Global Virtual Card'),
     number: formattedNum,
-    fullNumber: fullNum || formattedNum,
+    fullNumber: fullNum,
     balance: typeof c?.balance === 'number' ? c.balance : 940000000,
     currency: String(c?.currency || 'AUD'),
     type: c?.type === 'physical' ? 'physical' : 'virtual',

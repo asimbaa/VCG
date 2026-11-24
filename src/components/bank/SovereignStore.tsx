@@ -32,9 +32,25 @@ import {
 , Box , Truck, History, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
 import { sendWorkspaceEmail, generateProfessionalReceipt } from '../../utils/email';
-import { db } from "../../firebase";
-import { collection, addDoc, doc, updateDoc, getDocs, query } from "firebase/firestore";
+import { auth, db } from "../../firebase";
+import { collection, addDoc, doc, updateDoc, getDocs, query, where } from "firebase/firestore";
 import { sendEmailViaService, EmailPreviewModal, EmailData } from "./EmailService";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { creChargeFacilitiesService } from "../../services/creChargeFacilitiesService";
+import {
+  UniversalPaymentRailSelector,
+  UniversalPaymentRail,
+  executeUniversalSettlement,
+} from "../shared/UniversalPaymentRailSelector";
+import {
+  getVerifiedCloudUid,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalTransactions,
+  getAvailableBenefitVouchers,
+  redeemBenefitVoucher,
+  SharedBenefitVoucher,
+} from "../../services/cloudSessionGuard";
 
 interface Product {
   id: string;
@@ -507,93 +523,49 @@ export function SovereignStore({ user, balances, setBalances }: {
 
   const [selectedBrand, setSelectedBrand] = useState<string>("All");
   const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "price-asc" | "price-desc">("name-asc");
-  const [cart, setCart] = useState<Product[]>([]);
+  const [cart, setCart] = useState<Product[]>(() => {
+    try {
+      const savedCart = window.localStorage.getItem('valourian_store_cart');
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [checkoutProcessing, setCheckoutProcessing] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'vault' | 'card'>('vault');
+  const [paymentMethod, setPaymentMethod] = useState<UniversalPaymentRail>('card');
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(() =>
+    creChargeFacilitiesService.getActiveFacilityId()
+  );
   // UI Guarantee text for checkout
-  const guaranteeText = "100000000000% Secure Transport & Immediate Fulfillment Guarantee via Valourian Infrastructure";
+  const guaranteeText = "100% Secure Transport & Immediate Fulfillment Guarantee via Valourian Infrastructure";
   const [logisticsProvider, setLogisticsProvider] = useState<string>('Amazon Logistics');
   const [authorityToLeave, setAuthorityToLeave] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState<string>('');
-  const [digitalCards, setDigitalCards] = useState<any[]>(() => {
-    try {
-      const saved = window.localStorage.getItem('valourian_digital_cards_v8');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: "visa_primary",
-        last4: "4242",
-        fullNumber: "4242 4242 4242 4242",
-        cvv: "123",
-        pin: "0000",
-        holder: "ASIM ARYAL",
-        expiry: "12/28",
-        type: "primary",
-        limit: "$10,000.00 USD",
-        region: "Global",
-        network: "Visa",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        netbankId: "43359948",
-        balance: 15000,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Standard Checking",
-          benefits: "Cashback on all purchases",
-          atm: "Global Free Withdrawal",
-        },
-      },
-      {
-        id: "mastercard_sec",
-        last4: "5100",
-        fullNumber: "5105 1051 0510 5100",
-        cvv: "456",
-        pin: "1234",
-        holder: "ASIM ARYAL",
-        expiry: "05/29",
-        type: "primary",
-        limit: "$20,000.00 USD",
-        region: "Global",
-        network: "Mastercard",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        netbankId: "88019948",
-        balance: 12500,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Premium Savings",
-          benefits: "Travel rewards and lounge access",
-          chips: "Contactless enabled",
-        },
-      },
-      {
-        id: "amex_corp",
-        last4: "0005",
-        fullNumber: "3782 822463 10005",
-        cvv: "7890",
-        pin: "4321",
-        holder: "ASIM ARYAL",
-        expiry: "04/30",
-        type: "primary",
-        limit: "No Preset Spending Limit",
-        region: "Global",
-        network: "American Express",
-        bsb: "834-472",
-        accountNumber: "242719180",
-        netbankId: "8207647128",
-        balance: 55000,
-        isFlipped: false,
-        details: {
-          access: "Corporate Account",
-          benefits: "Centurion Lounge Access",
-          atm: "Cash advance available",
-        },
+  const [selectedCardId, setSelectedCardId] = useState<string>(() =>
+    unifiedBankCardSync.getActivePaymentCardId()
+  );
+  const [digitalCards, setDigitalCards] = useState<any[]>(() => unifiedBankCardSync.getCards());
+
+  useEffect(() => {
+    const unsub = unifiedBankCardSync.subscribe((nextCards) => {
+      setDigitalCards(nextCards);
+      if (nextCards.length > 0) {
+        setSelectedCardId((prev) =>
+          prev && nextCards.some((c) => c.id === prev)
+            ? prev
+            : unifiedBankCardSync.getActivePaymentCardId() || nextCards[0].id
+        );
       }
-    ];
-  });
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('valourian_store_cart', JSON.stringify(cart));
+    } catch {}
+  }, [cart]);
   const [previewEmail, setPreviewEmail] = useState<EmailData | null>(null);
   const [activeBoardMember, setActiveBoardMember] = useState<"Asim" | "Aleks" | "Justin">("Asim");
   const [deliveryAddress, setDeliveryAddress] = useState("Asim Aryal Phone: +61-401044335 Unit 712 15 Barton Road Artarmon NSW 2064 Australia");
@@ -604,24 +576,52 @@ export function SovereignStore({ user, balances, setBalances }: {
   const [aiSourcingLogs, setAiSourcingLogs] = useState<string[]>([]);
   const [isSourcing, setIsSourcing] = useState(false);
 
+  const [appliedVoucher, setAppliedVoucher] = useState<SharedBenefitVoucher | null>(null);
+  const [availableVouchers, setAvailableVouchers] = useState<SharedBenefitVoucher[]>(() =>
+    getAvailableBenefitVouchers("store")
+  );
+
+  useEffect(() => {
+    const syncV = () => setAvailableVouchers(getAvailableBenefitVouchers("store"));
+    window.addEventListener("valourian_vouchers_updated", syncV);
+    return () => window.removeEventListener("valourian_vouchers_updated", syncV);
+  }, []);
+
   useEffect(() => {
     const loadOrderHistory = async () => {
-      if (!user || !user.uid) return;
+      const uid = getVerifiedCloudUid();
+      const localOrders = getLocalTransactions().filter(
+        (d: any) =>
+          d.amount < 0 ||
+          d.recipient?.includes("Sovereign Omni-Store") ||
+          d.recipient?.includes("Apple") ||
+          d.description?.includes("Custom AI Sourced Asset")
+      );
       setIsLoadingHistory(true);
       try {
-        const q = query(collection(db, "transactions"));
-        const querySnapshot = await getDocs(q);
-        const orders: any[] = [];
-        querySnapshot.forEach((docSnap) => {
-          const d = docSnap.data();
-          if (d.userId === user.uid && (d.amount < 0 || (d.recipient && (d.recipient.includes("Sovereign Omni-Store") || d.recipient.includes("Apple"))))) {
-            orders.push({ id: docSnap.id, ...d });
-          }
+        const cloudOrders: any[] = [];
+        if (uid && db) {
+          const q = query(collection(db, "transactions"), where("userId", "==", uid));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            if (d.amount < 0 || (d.recipient && (d.recipient.includes("Sovereign Omni-Store") || d.recipient.includes("Apple")))) {
+              cloudOrders.push({ id: docSnap.id, ...d });
+            }
+          });
+        }
+        const merged = [...localOrders, ...cloudOrders];
+        const uniq = new Map<string, any>();
+        merged.forEach((o) => {
+          if (o?.id && !uniq.has(o.id)) uniq.set(o.id, o);
         });
-        orders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const orders = Array.from(uniq.values()).sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
         setPastOrders(orders);
       } catch (error) {
-        console.error("Error loading order history", error);
+        console.warn("Order history sync notice:", error);
+        setPastOrders(localOrders);
       } finally {
         setIsLoadingHistory(false);
       }
@@ -654,7 +654,7 @@ export function SovereignStore({ user, balances, setBalances }: {
 
   const addToCart = (product: Product) => {
     setCart([...cart, product]);
-    toast.success(`Allocated ${product.name} to direct checkout cart!`, { icon: "��" });
+    toast.success(`Allocated ${product.name} to direct checkout cart!`, { icon: "🛍️" });
   };
 
   const removeFromCart = (index: number) => {
@@ -664,68 +664,74 @@ export function SovereignStore({ user, balances, setBalances }: {
   };
 
   const executeCheckout = async () => {
-    const total = cart.reduce((acc, p) => acc + p.price, 0);
+    if (cart.length === 0) return;
+    const rawTotal = cart.reduce((acc, p) => acc + p.price, 0);
+    const total = Math.max(0, rawTotal - (appliedVoucher?.amountAUD || 0));
     const audBalance = balances.AUD || 0;
-    const activeCard = digitalCards.find(c => c.id === selectedCardId);
-    
-    if (paymentMethod === 'card') {
-      if (!activeCard) return toast.error("Please select a digital card for payment.");
-      if (activeCard.balance < total) return toast.error(`Card ${activeCard.network} ****${activeCard.last4} has insufficient balance. (${activeCard.balance} AUD).`);
-    }
-
-    if (paymentMethod === 'vault' && audBalance < total) {
-      toast.error(`Insufficient Vault Reserves. Requirement: $${total.toLocaleString()} AUD. Current balance: $${audBalance.toLocaleString()} AUD.`);
-      return;
-    }
+    const assetNamesList = cart.map(c => c.name).join(", ");
 
     setCheckoutProcessing(true);
     try {
-      if (paymentMethod === 'card' && activeCard) {
-        try {
-          const savedCardsStr = window.localStorage.getItem('valourian_digital_cards_v8');
-          if (savedCardsStr) {
-            let savedCards = JSON.parse(savedCardsStr);
-            const cardIndex = savedCards.findIndex((c: any) => c.id === activeCard.id);
-            if (cardIndex !== -1) {
-              savedCards[cardIndex].balance -= total;
-              window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(savedCards));
-            }
-          }
-        } catch (e) {
-          console.error("Failed to deduct from card", e);
-        }
-      } else {
-        const updatedBalances = {
-          ...balances,
-          AUD: audBalance - total
-        };
+      let settlement = {
+        success: true,
+        labelUsed: appliedVoucher ? `Benefit Voucher (${appliedVoucher.code})` : "Valourian Card",
+        authCode: `VOUCH-${Date.now().toString(36).toUpperCase()}`,
+        reference: `SOV-${Math.floor(Math.random() * 1000000)}`,
+        error: "",
+      };
 
-        if (user && user.uid) {
-          await updateDoc(doc(db, "users", user.uid), { balances: updatedBalances });
-        }
-        setBalances(updatedBalances);
+      if (total > 0) {
+        const res = await executeUniversalSettlement({
+          rail: paymentMethod,
+          cardId: selectedCardId || digitalCards[0]?.id,
+          facilityId: selectedFacilityId,
+          amountAUD: total,
+          merchantName: `Sovereign Omni-Store (${assetNamesList.slice(0, 60)})`,
+          merchantLocation: deliveryAddress || "Sydney NSW Australia",
+          storeApp: "SovereignStore",
+          vaultBalanceAUD: audBalance,
+          onVaultDeduct: async (newBalance) => {
+            const updatedBalances = { ...balances, AUD: newBalance };
+            await safeUpdateUserBalances(updatedBalances);
+            setBalances(updatedBalances);
+          },
+        });
+        settlement = {
+          success: res.success,
+          labelUsed: res.labelUsed,
+          authCode: res.authCode,
+          reference: res.reference || settlement.reference,
+          error: res.error || "",
+        };
       }
 
-     
-      // Log transaction to Firestore
-      await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
+      if (!settlement.success) {
+        toast.error(settlement.error || "Settlement could not be completed.");
+        return;
+      }
+
+      if (appliedVoucher) {
+        await redeemBenefitVoucher(appliedVoucher.code);
+        setAppliedVoucher(null);
+      }
+
+      await recordUnifiedTransaction({
         amount: -total,
         currency: "AUD",
         recipient: "Sovereign Omni-Store Procurement Division",
-        type: "Purchase",
-        date: new Date().toISOString(),
+        type: paymentMethod === "facility" ? "crecharge_facility" : paymentMethod === "card" ? "card" : "Purchase",
         status: "completed",
-        description: `Purchased Hardware/Capital Assets: ${cart.map(c => c.name).join(", ")}`,
+        settlementRail: settlement.labelUsed,
+        description: `Purchased via ${settlement.labelUsed} (Auth ${settlement.authCode}): ${assetNamesList}`,
         deliveryAddress,
         confirmationEmail,
         logisticsProvider,
-        authorityToLeave
+        authorityToLeave,
       });
 
-      // Write permanent receipt document
-      if (user && user.uid) {
-        await addDoc(collection(db, "users", user.uid, "receipts"), {
+      const uid = getVerifiedCloudUid();
+      if (uid && db) {
+        await addDoc(collection(db, "users", uid, "receipts"), {
            amount: total,
            currency: "AUD",
            items: cart,
@@ -733,16 +739,15 @@ export function SovereignStore({ user, balances, setBalances }: {
            confirmationEmail,
            logisticsProvider,
            authorityToLeave,
+           paymentRail: settlement.labelUsed,
+           authCode: settlement.authCode,
            timestamp: new Date().toISOString(),
-           orderId: "SOV-" + Math.floor(Math.random() * 1000000)
+           orderId: settlement.reference || ("SOV-" + Math.floor(Math.random() * 1000000)),
         });
       }
 
+      const referenceId = settlement.reference || `SOV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-      // Send confirmation email
-      const assetNamesList = cart.map(c => c.name).join(", ");
-      const referenceId = `SOV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-      
       const emailBody = `Dear Valourian Stakeholder,
 
 We are pleased to confirm that your procurement order has been cleared for immediate airlift dispatch and physical transport.
@@ -750,8 +755,10 @@ We are pleased to confirm that your procurement order has been cleared for immed
 ORDER SUMMARY:
 ----------------------------------------
 Reference ID: ${referenceId}
+Auth Code: ${settlement.authCode}
+Payment Rail: ${settlement.labelUsed}
 Ordered Items: ${assetNamesList}
-Total Cost: $${total.toLocaleString()} AUD (Vault Ledger Settled)
+Total Cost: $${total.toLocaleString()} AUD (Zero-Decline Cleared)
 
 DELIVERY DETAILS:
 ----------------------------------------
@@ -764,11 +771,7 @@ CONFIRMATION SENT TO:
 ----------------------------------------
 ${confirmationEmail}
 
-Our diplomatic transport team and ${logisticsProvider} will secure custody of the hardware containers. Transition checkpoints are registered under your primary SSL DNS routing configuration on valourian.com. 
-
-Valid tracking links, manifests, and invoice attachments will follow shortly.
-
-If you have any questions, please contact Aleks or Justin of the Operations Board.
+Our diplomatic transport team and ${logisticsProvider} will secure custody of the hardware containers.
 
 Best regards,
 Sovereign Omni-Store Logistics`;
@@ -778,13 +781,13 @@ Sovereign Omni-Store Logistics`;
         email: "procurement@valourian.com",
         receiverEmail: confirmationEmail,
         subject: `[CONFIRMED] Sovereign Procurement Dispatch - Order #${referenceId}`,
-        preview: `Your shipment with ${cart.length} item(s) has been cleared via ${logisticsProvider}.`,
+        preview: `Your shipment with ${cart.length} item(s) has been cleared via ${settlement.labelUsed} (${logisticsProvider}).`,
         body: emailBody
       }, setPreviewEmail);
 
-      toast.success(`${paymentMethod === "vault" ? "Vault" : "Card"} debited ${total.toLocaleString()} AUD. Confirmation email queued at ${confirmationEmail}.`, {
+      toast.success(`${settlement.labelUsed} debited $${total.toLocaleString()} AUD (Auth ${settlement.authCode}). Confirmation queued at ${confirmationEmail}.`, {
         duration: 5000,
-        icon: "��️"
+        icon: "🏛️"
       });
       setCart([]);
       setOrderTracking({ active: true, progress: 0, items: assetNamesList });
@@ -816,9 +819,9 @@ Sovereign Omni-Store Logistics`;
     const promptText = aiInput.toLowerCase();
     
     const logs = [
-      "�� Swarming neural intelligence channels...",
-      "�� Querying global hardware arrays & Bloomberg commodities raw feed...",
-      "�� Correlating Namecheap DNS records & live market indices...",
+      "📡 Swarming neural intelligence channels...",
+      "📈 Querying global hardware arrays & Bloomberg commodities raw feed...",
+      "🔍 Correlating Namecheap DNS records & live market indices...",
       "⚙️ Translating local custom clearance parameters & VIP tax waivers...",
       "✅ Optimum sovereign sourcing pipeline locked in."
     ];
@@ -857,34 +860,39 @@ Sovereign Omni-Store Logistics`;
 
   const purchaseCustomQuote = async (quote: any) => {
     const audBalance = balances.AUD || 0;
-    if (audBalance < quote.cost) {
-      toast.error(`Reserves insufficient for custom sourcing. Required: $${quote.cost.toLocaleString()} AUD.`);
-      return;
-    }
-
     setCheckoutProcessing(true);
     try {
-      const updatedBalances = {
-        ...balances,
-        AUD: audBalance - quote.cost
-      };
+      const settlement = await executeUniversalSettlement({
+        rail: paymentMethod,
+        cardId: selectedCardId || digitalCards[0]?.id,
+        facilityId: selectedFacilityId,
+        amountAUD: quote.cost,
+        merchantName: `${quote.source} — ${quote.name}`,
+        merchantLocation: deliveryAddress || "Sydney NSW Australia",
+        storeApp: "SovereignStore Custom Sourcing",
+        vaultBalanceAUD: audBalance,
+        onVaultDeduct: async (newBalance) => {
+          const updatedBalances = { ...balances, AUD: newBalance };
+          await safeUpdateUserBalances(updatedBalances);
+          setBalances(updatedBalances);
+        },
+      });
 
-      if (user && user.uid) {
-        await updateDoc(doc(db, "users", user.uid), { balances: updatedBalances });
+      if (!settlement.success) {
+        toast.error(settlement.error || "Custom sourcing settlement failed.");
+        return;
       }
-      setBalances(updatedBalances);
 
-      await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
+      await recordUnifiedTransaction({
         amount: -quote.cost,
         currency: "AUD",
         recipient: quote.source,
-        type: "Purchase",
-        date: new Date().toISOString(),
+        type: paymentMethod === "facility" ? "crecharge_facility" : "Purchase",
         status: "completed",
-        description: `Custom AI Guide Sourced Asset: ${quote.name}`,
+        settlementRail: settlement.labelUsed,
+        description: `Custom AI Sourced Asset (${settlement.labelUsed} • ${settlement.authCode}): ${quote.name}`,
         deliveryAddress,
-        confirmationEmail
+        confirmationEmail,
       });
 
       // Send confirmation email
@@ -893,13 +901,13 @@ Sovereign Omni-Store Logistics`;
         email: "procurement@valourian.com",
         receiverEmail: confirmationEmail,
         subject: `[CONFIRMED] Custom Air-Drop Dispatch - ${quote.name}`,
-        preview: `Your custom-sourced asset is now in priority transit queue.`,
-        body: `Dear Valourian Stakeholder,\n\nYour custom-sourced order from our AI Procurement channel has been cleared.\n\nORDER SUMMARY:\n----------------------------------------\nSourced Asset: ${quote.name}\nTotal Cost: $${quote.cost.toLocaleString()} AUD (Vault Ledger Settled)\nSource Channel: ${quote.source}\nEstimated Lead Time: ${quote.duration || "Immediate Dispatch"}\n\nDELIVERY ADDRESS:\n----------------------------------------\n${deliveryAddress}\n\nCONFIRMATION SENT TO:\n----------------------------------------\n${confirmationEmail}\n\nDiplomatic transit pipelines are fully online.\n\nBest regards,\nSovereign Omni-Store Logistics`
+        preview: `Your custom-sourced asset cleared via ${settlement.labelUsed} (Auth ${settlement.authCode}).`,
+        body: `Dear Valourian Stakeholder,\n\nYour custom-sourced order from our AI Procurement channel has been cleared.\n\nORDER SUMMARY:\n----------------------------------------\nSourced Asset: ${quote.name}\nTotal Cost: $${quote.cost.toLocaleString()} AUD\nPayment Rail: ${settlement.labelUsed} (Auth ${settlement.authCode})\nSource Channel: ${quote.source}\nEstimated Lead Time: ${quote.duration || "Immediate Dispatch"}\n\nDELIVERY ADDRESS:\n----------------------------------------\n${deliveryAddress}\n\nCONFIRMATION SENT TO:\n----------------------------------------\n${confirmationEmail}\n\nDiplomatic transit pipelines are fully online.\n\nBest regards,\nSovereign Omni-Store Logistics`
       }, setPreviewEmail);
 
-      toast.success(`Custom Asset "${quote.name}" secured for $${quote.cost.toLocaleString()} AUD! Confirmation email sent to ${confirmationEmail}.`, {
+      toast.success(`Custom Asset "${quote.name}" secured via ${settlement.labelUsed}! Confirmation email sent to ${confirmationEmail}.`, {
         duration: 5000,
-        icon: "��"
+        icon: "✅"
       });
       // Clear sourcing and input
       setAiInput("");
@@ -1259,19 +1267,48 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                     >
                       <span>Total Procurement</span>
                       <span className="font-mono text-emerald-400">
-                        ${cart.reduce((s, c) => s + c.price, 0).toLocaleString()} AUD
+                        ${Math.max(0, cart.reduce((s, c) => s + c.price, 0) - (appliedVoucher?.amountAUD || 0)).toLocaleString()} AUD
                       </span>
                     </motion.div>
+                  </div>
+                  {availableVouchers.length > 0 && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase text-amber-400 truncate">
+                          {appliedVoucher ? `Applied ${appliedVoucher.code}` : availableVouchers[0].title}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAppliedVoucher(appliedVoucher ? null : availableVouchers[0])}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-black text-[10px] uppercase shrink-0 cursor-pointer"
+                      >
+                        {appliedVoucher ? "Remove" : `-$${availableVouchers[0].amountAUD}`}
+                      </button>
+                    </div>
+                  )}
+                  <div className="pt-2">
+                    <UniversalPaymentRailSelector
+                      theme="dark"
+                      rail={paymentMethod}
+                      onRailChange={setPaymentMethod}
+                      selectedCardId={selectedCardId}
+                      onSelectCardId={setSelectedCardId}
+                      selectedFacilityId={selectedFacilityId}
+                      onSelectFacilityId={setSelectedFacilityId}
+                      amountAUD={Math.max(0, cart.reduce((s, c) => s + c.price, 0) - (appliedVoucher?.amountAUD || 0))}
+                      vaultBalanceAUD={balances.AUD || 0}
+                    />
                   </div>
                   <button
                     onClick={executeCheckout}
                     disabled={checkoutProcessing}
-                    className="w-full mt-4 bg-emerald-500 font-extrabold text-slate-950 text-xs py-3.5 rounded-2xl hover:bg-emerald-400 transition-all disabled:opacity-50 tracking-widest uppercase flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20"
+                    className="w-full min-h-[46px] mt-4 bg-emerald-500 font-extrabold text-slate-950 text-xs py-3.5 rounded-2xl hover:bg-emerald-400 transition-all disabled:opacity-50 tracking-widest uppercase flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 cursor-pointer"
                   >
                     {checkoutProcessing ? (
                       <>
                         <Zap className="w-4 h-4 text-slate-950 animate-spin" />
-                        Routing Liquid AUD Ledger...
+                        Clearing Payment Rail...
                       </>
                     ) : (
                       <>
@@ -1282,7 +1319,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                   </button>
                   
                   <p className="text-[9px] text-slate-500 text-center leading-normal">
-                    Fulfillment routed via Valourian Digital DNS networks. Hardware delivery is tracked 100% via registered air-cargo networks.
+                    Fulfillment routed via Valourian Digital DNS networks. Zero-Decline Bank Cards &amp; CreChargeFacilities active globally.
                   </p>
                 </div>
               )}
@@ -1293,7 +1330,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
 
         {/* SEGMENT 2: AI CO-ORDINATOR GUIDE */}
         {activeSegment === "ai_procure" && (
-          <div className="max-w-4xl mx-auto w-full bg-slate-900/50 border border-slate-850 rounded-3xl p-6 md:p-8 flex flex-col gap-6">
+          <div className="max-w-4xl mx-auto w-full bg-slate-900/50 border border-slate-800 rounded-3xl p-6 md:p-8 flex flex-col gap-6">
             <div className="flex items-center gap-3">
               <div className="bg-purple-500/15 p-2 rounded-xl border border-purple-500/30">
                 <Bot className="w-6 h-6 text-purple-400" />
@@ -1380,7 +1417,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                       type="email"
                       value={confirmationEmail}
                       onChange={(e) => setConfirmationEmail(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-805 rounded-xl pl-8 pr-3 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500/50 font-sans"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500/50 font-sans"
                       placeholder="e.g. name@domain.com"
                     />
                     <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-3.5" />
@@ -1453,7 +1490,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                         </div>
                       </div>
 
-                      <div className="border-t border-slate-850 pt-4 mt-4 flex items-center justify-between">
+                      <div className="border-t border-slate-800 pt-4 mt-4 flex items-center justify-between">
                         <div className="font-mono text-emerald-400 font-black text-sm">
                           ${q.cost.toLocaleString()} AUD
                         </div>
@@ -1614,7 +1651,7 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                       </button>
                       <button
                         onClick={() => forwardConfirmationToBoard(docItem.name, docItem.type, docItem.cost)}
-                        className="bg-slate-800/80 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 font-bold text-[10px] uppercase py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all text-center min-w-0"
+                        className="min-h-[44px] bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 font-bold text-[10px] uppercase py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all text-center min-w-0 cursor-pointer"
                       >
                         <Send className="w-3.5 h-3.5 flex-shrink-0 text-amber-400 animate-pulse" />
                         <span className="truncate">Forward</span>
@@ -1677,7 +1714,10 @@ THE CORPORATE BOARD SEAL IS DULY AFFIXED.
                               key={`store-order-${order.id}-star-${star}`}
                               onClick={async () => {
                                 try {
-                                  await updateDoc(doc(db, "transactions", order.id), { rating: star });
+                                  const uid = getVerifiedCloudUid();
+                                  if (uid && db && !String(order.id).startsWith("TX-")) {
+                                    await updateDoc(doc(db, "transactions", order.id), { rating: star });
+                                  }
                                   setPastOrders(prev => prev.map(o => o.id === order.id ? { ...o, rating: star } : o));
                                   toast.success(`You rated this purchase ${star} stars!`);
                                 } catch (error) {

@@ -1,34 +1,36 @@
 import React, { useEffect, useState } from "react";
-import { Landmark, ShieldCheck, LogOut, Loader2, FileText, Globe, Send, Mail, Bot, Sparkles, X, Database, RefreshCw, Package, Menu, ShoppingCart, Cpu, Grid, Layers, ChevronUp, ChevronRight } from "lucide-react";
-import { Logo3D } from "./components/ui/Logo3D";
+import { Landmark, ShieldCheck, LogOut, LogIn, Loader2, FileText, Globe, Send, Mail, Bot, Sparkles, X, Database, RefreshCw, Package, ShoppingCart, Cpu, Grid, ShoppingBag, Car, Utensils, Plane, TrendingUp } from "lucide-react";
 const BankDashboard = React.lazy(() => import("./components/bank/BankDashboard").then(m => ({ default: m.BankDashboard })));
 const ValourianDashboard = React.lazy(() => import("./components/bank/ValourianDashboard").then(m => ({ default: m.ValourianDashboard })));
 const DocuCraft = React.lazy(() => import("./components/docucraft/DocuCraft").then(m => ({ default: m.DocuCraft })));
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { auth, signInWithGoogle, logOut, db, sendLoginEmail, completeEmailLogin } from "./firebase";
+import { auth, signInWithGoogle, logOut, completeEmailLogin } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDocFromServer } from "firebase/firestore";
 import { startPeriodicBackup } from "./services/BackupService";
+import { loadSyncedBalances, safeUpdateUserBalances, getVerifiedCloudUid } from "./services/cloudSessionGuard";
 const Deployments = React.lazy(() => import("./components/deployments/Deployments").then(m => ({ default: m.Deployments })));
 const RapidPay = React.lazy(() => import("./components/pay/RapidPay").then(m => ({ default: m.RapidPay })));
 import { SovereignNotificationsBar } from "./components/shared/SovereignNotificationsBar";
-import { UnifiedSovereignAcquisitionsHub } from "./components/bank/UnifiedSovereignAcquisitionsHub";
-import { AutonomousSmartTechConsole } from "./components/bank/AutonomousSmartTechConsole";
+const UnifiedSovereignAcquisitionsHub = React.lazy(() => import("./components/bank/UnifiedSovereignAcquisitionsHub").then(m => ({ default: m.UnifiedSovereignAcquisitionsHub })));
+const AutonomousSmartTechConsole = React.lazy(() => import("./components/bank/AutonomousSmartTechConsole").then(m => ({ default: m.AutonomousSmartTechConsole })));
+const SovereignStore = React.lazy(() => import("./components/bank/SovereignStore").then(m => ({ default: m.SovereignStore })));
+const UberApp = React.lazy(() => import("./components/bank/UberApp").then(m => ({ default: m.UberApp })));
+const UberEatsApp = React.lazy(() => import("./components/bank/UberEatsApp").then(m => ({ default: m.UberEatsApp })));
+const BookingApp = React.lazy(() => import("./components/bank/BookingApp").then(m => ({ default: m.BookingApp })));
+const EToroApp = React.lazy(() => import("./components/bank/EToroApp").then(m => ({ default: m.EToroApp })));
 import { QuickExecutiveDock } from "./components/shared/QuickExecutiveDock";
-import { ValourianAuth } from "./components/ValourianAuth";
 import { ValourianLogo } from "./components/bank/ValourianLogo";
-import { VoiceInputButton } from './components/shared/VoiceInputButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { AIGuide } from "./components/AIGuide";
-import { ThresholdAlerts } from "./components/bank/ThresholdAlerts";
-import { ValourianAI } from "./components/bank/ValourianAI";
+const AIGuide = React.lazy(() => import("./components/AIGuide").then(m => ({ default: m.AIGuide })));
+const ThresholdAlerts = React.lazy(() => import("./components/bank/ThresholdAlerts").then(m => ({ default: m.ThresholdAlerts })));
+const ValourianAI = React.lazy(() => import("./components/bank/ValourianAI").then(m => ({ default: m.ValourianAI })));
 import { AutoBugCatcherConsole } from "./components/shared/AutoBugCatcherConsole";
 import { FloatingSpeedDial } from "./components/FloatingSpeedDial";
-import { MessageCenter } from "./components/messagecenter/MessageCenter";
-import LogisticsDashboard from "./components/logistics/LogisticsDashboard";
+const MessageCenter = React.lazy(() => import("./components/messagecenter/MessageCenter").then(m => ({ default: m.MessageCenter })));
+const LogisticsDashboard = React.lazy(() => import("./components/logistics/LogisticsDashboard"));
 import { PWAInstallBanner } from "./components/pwa/PWAInstallBanner";
-import { MagicClaimPortal } from "./components/pay/MagicClaimPortal";
+const MagicClaimPortal = React.lazy(() => import("./components/pay/MagicClaimPortal").then(m => ({ default: m.MagicClaimPortal })));
 
 // Global Google Maps Auth Failure Handler
 if (typeof window !== 'undefined') {
@@ -38,9 +40,33 @@ if (typeof window !== 'undefined') {
   };
 }
 
+const VALID_TABS = [
+  "bank",
+  "commbank",
+  "store",
+  "uber",
+  "ubereats",
+  "booking",
+  "etoro",
+  "smarttech",
+  "acquisitions",
+  "payments",
+  "docucraft",
+  "websites",
+  "messagecenter",
+  "logistics",
+] as const;
+
+type AppTab = (typeof VALID_TABS)[number];
+
 const TABS = [
   { id: "bank", label: "Core", icon: Landmark },
   { id: "commbank", label: "OS", icon: ShieldCheck },
+  { id: "store", label: "Sovereign Store", icon: ShoppingBag },
+  { id: "uber", label: "Uber Executive", icon: Car },
+  { id: "ubereats", label: "UberEats VIP", icon: Utensils },
+  { id: "booking", label: "Booking & Suites", icon: Plane },
+  { id: "etoro", label: "eToro Trading", icon: TrendingUp },
   { id: "smarttech", label: "SmartTech", icon: Cpu },
   { id: "acquisitions", label: "Acquire", icon: ShoppingCart },
   { id: "payments", label: "Pay", icon: Send },
@@ -50,7 +76,7 @@ const TABS = [
   { id: "logistics", label: "Logistics", icon: Package }
 ];
 
-  const FOUNDER_EMAILS = [
+const FOUNDER_EMAILS = [
   'asim.nsw@gmail.com',
   'asimaryal2@gmail.com',
   'asim.aryal@protonmail.com',
@@ -76,15 +102,42 @@ const CEO_USER = {
 
 export default function App() {
   const [torrensSyncState, setTorrensSyncState] = useState<'synced' | 'syncing'>('synced');
-  
+  const [sharedBalances, setSharedBalancesState] = useState<Record<string, number>>(() => loadSyncedBalances());
+
+  const setSharedBalances: React.Dispatch<React.SetStateAction<Record<string, number>>> = React.useCallback((updater) => {
+    setSharedBalancesState((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      safeUpdateUserBalances(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      const latest = loadSyncedBalances();
+      setSharedBalancesState((prev) => (JSON.stringify(prev) === JSON.stringify(latest) ? prev : latest));
+    };
+    const onBalanceEvent = (e: any) => {
+      const next = e?.detail?.balances;
+      if (next && typeof next === "object") {
+        setSharedBalancesState((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : { ...prev, ...next }));
+      }
+    };
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener("valourian_balances_updated", onBalanceEvent);
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener("valourian_balances_updated", onBalanceEvent);
+    };
+  }, []);
+
   // Persistent activeTab restored from localStorage or URL hash
-  const [activeTab, setActiveTabState] = useState<"bank" | "docucraft" | "websites" | "payments" | "commbank" | "messagecenter" | "logistics" | "acquisitions" | "smarttech">(() => {
+  const [activeTab, setActiveTabState] = useState<AppTab>(() => {
     try {
-      const hash = window.location.hash.replace("#", "");
-      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
-      if (validTabs.includes(hash)) return hash as any;
-      const saved = localStorage.getItem("valourian_active_tab");
-      if (saved && validTabs.includes(saved)) return saved as any;
+      const hash = window.location.hash.replace("#", "") as AppTab;
+      if ((VALID_TABS as readonly string[]).includes(hash)) return hash;
+      const saved = localStorage.getItem("valourian_active_tab") as AppTab | null;
+      if (saved && (VALID_TABS as readonly string[]).includes(saved)) return saved;
     } catch {}
     return "commbank";
   });
@@ -93,15 +146,14 @@ export default function App() {
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => {
     try {
       const hash = window.location.hash.replace("#", "");
-      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
-      const initial = validTabs.includes(hash) ? hash : (localStorage.getItem("valourian_active_tab") || "commbank");
-      return new Set([initial]);
+      const initial = (VALID_TABS as readonly string[]).includes(hash) ? hash : (localStorage.getItem("valourian_active_tab") || "commbank");
+      return new Set((VALID_TABS as readonly string[]).includes(initial) ? [initial] : ["commbank"]);
     } catch {
       return new Set(["commbank"]);
     }
   });
 
-  const setActiveTab = React.useCallback((tab: typeof activeTab) => {
+  const setActiveTab = React.useCallback((tab: AppTab) => {
     setActiveTabState(tab);
     try {
       localStorage.setItem("valourian_active_tab", tab);
@@ -120,10 +172,9 @@ export default function App() {
   // Sync with browser forward/back or external tab navigation
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      const validTabs = ["bank", "docucraft", "websites", "payments", "commbank", "messagecenter", "logistics", "acquisitions", "smarttech"];
-      if (validTabs.includes(hash) && hash !== activeTab) {
-        setActiveTabState(hash as any);
+      const hash = window.location.hash.replace("#", "") as AppTab;
+      if ((VALID_TABS as readonly string[]).includes(hash) && hash !== activeTab) {
+        setActiveTabState(hash);
         setVisitedTabs(prev => {
           if (prev.has(hash)) return prev;
           const next = new Set(prev);
@@ -279,8 +330,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
-        <ValourianLogo className="w-16 h-16 animate-pulse mb-8" />
+      <div className="min-h-[100dvh] bg-slate-950 flex flex-col items-center justify-center">
+        <ValourianLogo className="w-16 h-16 mb-6" />
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
       </div>
     );
@@ -289,7 +340,9 @@ export default function App() {
   if (claimInviteId) {
     return (
       <ErrorBoundary>
-        <MagicClaimPortal inviteId={claimInviteId} onExitToApp={handleExitClaimPortal} />
+        <React.Suspense fallback={<div className="min-h-[100dvh] bg-slate-950 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>}>
+          <MagicClaimPortal inviteId={claimInviteId} onExitToApp={handleExitClaimPortal} />
+        </React.Suspense>
       </ErrorBoundary>
     );
   }
@@ -309,10 +362,12 @@ export default function App() {
           
           <div className="px-4 mb-4">
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center gap-3 shadow-inner">
-               <img src={effectiveUser.photoURL || `https://ui-avatars.com/api/?name=${effectiveUser.email}`} alt="Profile" className="w-10 h-10 rounded-full ring-2 ring-emerald-500/30" referrerPolicy="no-referrer" />
+               <img src={effectiveUser.photoURL || `https://ui-avatars.com/api/?name=${effectiveUser.email}`} alt="Profile" className="w-10 h-10 rounded-full ring-2 ring-emerald-500/30 object-cover shrink-0" referrerPolicy="no-referrer" />
                <div className="flex-1 min-w-0">
                  <p className="text-sm font-bold text-white truncate">{effectiveUser.displayName || "Sovereign VIP"}</p>
-                 <p className="text-[10px] text-emerald-400 font-mono truncate">Connected</p>
+                 <p className="text-[10px] text-emerald-400 font-mono truncate">
+                   {getVerifiedCloudUid() ? "Cloud Synced" : "Local Mode (Founder)"}
+                 </p>
                </div>
             </div>
           </div>
@@ -324,14 +379,14 @@ export default function App() {
               return (
                 <button
                   key={`app-tab-${tab.id}-${idx}`}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`w-full relative px-4 py-3 text-sm font-bold rounded-xl transition-all flex items-center gap-3 ${
+                  onClick={() => setActiveTab(tab.id as AppTab)}
+                  className={`w-full relative px-4 py-3 text-sm font-bold rounded-xl transition-all flex items-center gap-3 whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive 
                       ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 shadow-lg" 
                       : "text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent"
                   }`}
                 >
-                  <tab.icon className={`w-5 h-5 ${isActive ? "text-emerald-400" : "text-slate-500"}`} />
+                  <tab.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-emerald-400" : "text-slate-500"}`} />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -366,12 +421,21 @@ export default function App() {
                 </button>
              </div>
              
-             <button
-               onClick={logOut}
-               className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 py-3 rounded-xl font-bold text-sm"
-             >
-               <LogOut className="w-4 h-4" /> Sign Out
-             </button>
+             {user ? (
+               <button
+                 onClick={logOut}
+                 className="w-full flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 py-3 rounded-xl font-bold text-sm cursor-pointer"
+               >
+                 <LogOut className="w-4 h-4" /> Sign Out
+               </button>
+             ) : (
+               <button
+                 onClick={signInWithGoogle}
+                 className="w-full flex items-center justify-center gap-2 text-emerald-300 hover:text-white transition-colors bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 py-3 rounded-xl font-bold text-sm cursor-pointer"
+               >
+                 <LogIn className="w-4 h-4" /> Google Cloud Sign-In
+               </button>
+             )}
           </div>
         </aside>
 
@@ -384,12 +448,12 @@ export default function App() {
           />
           
           {/* Mobile Header */}
-          <header className="md:hidden bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800 min-h-16 pt-safe flex items-center justify-between px-4 flex-shrink-0">
-             <div className="flex items-center gap-3">
-               <ValourianLogo className="w-8 h-8" />
-               <h1 className="text-lg font-black text-white tracking-tight">Valourian OS</h1>
+          <header className="md:hidden bg-slate-900/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800 h-14 pt-safe flex items-center justify-between px-4 flex-shrink-0">
+             <div className="flex items-center gap-2.5">
+               <ValourianLogo className="w-7 h-7 shrink-0" />
+               <h1 className="text-base font-black text-white tracking-tight whitespace-nowrap">Valourian OS</h1>
              </div>
-             <div className="flex items-center gap-3">
+             <div className="flex items-center gap-2.5 shrink-0">
                 <img src={effectiveUser.photoURL || `https://ui-avatars.com/api/?name=${effectiveUser.email}`} alt="Profile" className="w-8 h-8 rounded-full ring-2 ring-emerald-500/30 object-cover" referrerPolicy="no-referrer" />
              </div>
           </header>
@@ -445,7 +509,32 @@ export default function App() {
               )}
               {visitedTabs.has("commbank") && (
                 <div className={`h-full w-full ${activeTab === "commbank" ? "block" : "hidden"}`}>
-                  <ValourianDashboard user={effectiveUser} />
+                  <ValourianDashboard user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
+                </div>
+              )}
+              {visitedTabs.has("store") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "store" ? "block" : "hidden"}`}>
+                  <SovereignStore user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
+                </div>
+              )}
+              {visitedTabs.has("uber") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "uber" ? "block" : "hidden"}`}>
+                  <UberApp user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
+                </div>
+              )}
+              {visitedTabs.has("ubereats") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "ubereats" ? "block" : "hidden"}`}>
+                  <UberEatsApp user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
+                </div>
+              )}
+              {visitedTabs.has("booking") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "booking" ? "block" : "hidden"}`}>
+                  <BookingApp user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
+                </div>
+              )}
+              {visitedTabs.has("etoro") && (
+                <div className={`h-full w-full p-4 sm:p-8 ${activeTab === "etoro" ? "block" : "hidden"}`}>
+                  <EToroApp user={effectiveUser} balances={sharedBalances} setBalances={setSharedBalances} />
                 </div>
               )}
               {visitedTabs.has("smarttech") && (
@@ -491,57 +580,57 @@ export default function App() {
 
           {/* Streamlined Mobile Bottom 5-Button Dock */}
           <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center justify-around px-2 py-1.5">
+            <div className="flex items-center justify-around px-2 py-1">
               <button
                 onClick={() => { setActiveTab("commbank"); setMobileAppsDrawerOpen(false); }}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
-                  activeTab === "commbank" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                className={`compact-touch flex flex-col items-center justify-center min-h-[44px] px-2 py-1 rounded-xl transition-all relative flex-1 cursor-pointer ${
+                  activeTab === "commbank" ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <ShieldCheck className={`w-5 h-5 mb-1 ${activeTab === "commbank" ? "scale-110" : ""}`} />
-                <span className="text-[10px] font-bold">OS</span>
+                <ShieldCheck className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold whitespace-nowrap">OS</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab("payments"); setMobileAppsDrawerOpen(false); }}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
-                  activeTab === "payments" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                className={`compact-touch flex flex-col items-center justify-center min-h-[44px] px-2 py-1 rounded-xl transition-all relative flex-1 cursor-pointer ${
+                  activeTab === "payments" ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <Send className={`w-5 h-5 mb-1 ${activeTab === "payments" ? "scale-110" : ""}`} />
-                <span className="text-[10px] font-bold">Pay</span>
+                <Send className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold whitespace-nowrap">Pay</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab("acquisitions"); setMobileAppsDrawerOpen(false); }}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
-                  activeTab === "acquisitions" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                className={`compact-touch flex flex-col items-center justify-center min-h-[44px] px-2 py-1 rounded-xl transition-all relative flex-1 cursor-pointer ${
+                  activeTab === "acquisitions" ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <ShoppingCart className={`w-5 h-5 mb-1 ${activeTab === "acquisitions" ? "scale-110" : ""}`} />
-                <span className="text-[10px] font-bold">Acquire</span>
+                <ShoppingCart className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold whitespace-nowrap">Acquire</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab("smarttech"); setMobileAppsDrawerOpen(false); }}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
-                  activeTab === "smarttech" ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                className={`compact-touch flex flex-col items-center justify-center min-h-[44px] px-2 py-1 rounded-xl transition-all relative flex-1 cursor-pointer ${
+                  activeTab === "smarttech" ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <Cpu className={`w-5 h-5 mb-1 ${activeTab === "smarttech" ? "scale-110" : ""}`} />
-                <span className="text-[10px] font-bold">Tech</span>
+                <Cpu className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold whitespace-nowrap">Tech</span>
               </button>
 
               <button
                 onClick={() => setMobileAppsDrawerOpen(!mobileAppsDrawerOpen)}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all relative flex-1 ${
-                  mobileAppsDrawerOpen || ["bank", "docucraft", "websites", "messagecenter", "logistics"].includes(activeTab)
+                className={`compact-touch flex flex-col items-center justify-center min-h-[44px] px-2 py-1 rounded-xl transition-all relative flex-1 cursor-pointer ${
+                  mobileAppsDrawerOpen || ["bank", "store", "uber", "ubereats", "booking", "etoro", "docucraft", "websites", "messagecenter", "logistics"].includes(activeTab)
                     ? "text-cyan-400" 
-                    : "text-slate-500 hover:text-slate-300"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                <Grid className={`w-5 h-5 mb-1 ${mobileAppsDrawerOpen ? "scale-110" : ""}`} />
-                <span className="text-[10px] font-bold">Apps</span>
+                <Grid className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold whitespace-nowrap">Apps</span>
               </button>
             </div>
           </nav>
@@ -561,7 +650,7 @@ export default function App() {
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 space-y-4 max-h-[75vh] overflow-y-auto"
+                  className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 space-y-4 max-h-[82dvh] overflow-y-auto"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -569,54 +658,119 @@ export default function App() {
                       <Grid className="w-5 h-5 text-cyan-400" />
                       <h3 className="text-base font-black text-white">Sovereign Applications</h3>
                     </div>
-                    <button onClick={() => setMobileAppsDrawerOpen(false)} className="p-1.5 text-slate-400 hover:text-white">
+                    <button onClick={() => setMobileAppsDrawerOpen(false)} className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white cursor-pointer">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <button
+                      onClick={() => { setActiveTab("store"); setMobileAppsDrawerOpen(false); }}
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        activeTab === "store" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <ShoppingBag className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Sovereign Store</div>
+                        <div className="text-[10px] text-slate-400">Procurement &amp; Gear</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("uber"); setMobileAppsDrawerOpen(false); }}
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        activeTab === "uber" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Car className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Uber Executive</div>
+                        <div className="text-[10px] text-slate-400">Chauffeur &amp; Rides</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("ubereats"); setMobileAppsDrawerOpen(false); }}
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        activeTab === "ubereats" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Utensils className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">UberEats VIP</div>
+                        <div className="text-[10px] text-slate-400">Priority Fine Dining</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("booking"); setMobileAppsDrawerOpen(false); }}
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        activeTab === "booking" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Plane className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Booking &amp; Suites</div>
+                        <div className="text-[10px] text-slate-400">Flights &amp; Residences</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => { setActiveTab("etoro"); setMobileAppsDrawerOpen(false); }}
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        activeTab === "etoro" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <TrendingUp className="w-5 h-5 text-lime-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-white">eToro Trading</div>
+                        <div className="text-[10px] text-slate-400">Equities &amp; Crypto Desk</div>
+                      </div>
+                    </button>
+
+                    <button
                       onClick={() => { setActiveTab("bank"); setMobileAppsDrawerOpen(false); }}
-                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
                         activeTab === "bank" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
                       }`}
                     >
                       <Landmark className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                       <div>
                         <div className="text-xs font-bold text-white">Core Bank</div>
-                        <div className="text-[10px] text-slate-400">Global Treasury & Yield</div>
+                        <div className="text-[10px] text-slate-400">Global Treasury &amp; Yield</div>
                       </div>
                     </button>
 
                     <button
                       onClick={() => { setActiveTab("messagecenter"); setMobileAppsDrawerOpen(false); }}
-                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
                         activeTab === "messagecenter" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
                       }`}
                     >
                       <Mail className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                       <div>
                         <div className="text-xs font-bold text-white">Messages</div>
-                        <div className="text-[10px] text-slate-400">Secure Comms & Mail</div>
+                        <div className="text-[10px] text-slate-400">Secure Comms &amp; Mail</div>
                       </div>
                     </button>
 
                     <button
                       onClick={() => { setActiveTab("logistics"); setMobileAppsDrawerOpen(false); }}
-                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
                         activeTab === "logistics" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
                       }`}
                     >
                       <Package className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                       <div>
                         <div className="text-xs font-bold text-white">Logistics</div>
-                        <div className="text-[10px] text-slate-400">Fleet & Dispatches</div>
+                        <div className="text-[10px] text-slate-400">Fleet &amp; Dispatches</div>
                       </div>
                     </button>
 
                     <button
                       onClick={() => { setActiveTab("docucraft"); setMobileAppsDrawerOpen(false); }}
-                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors ${
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
                         activeTab === "docucraft" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
                       }`}
                     >
@@ -629,34 +783,44 @@ export default function App() {
 
                     <button
                       onClick={() => { setActiveTab("websites"); setMobileAppsDrawerOpen(false); }}
-                      className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors col-span-2 ${
+                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-colors cursor-pointer ${
                         activeTab === "websites" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800"
                       }`}
                     >
                       <Globe className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-xs font-bold text-white">Websites & Deployments</div>
-                        <div className="text-[10px] text-slate-400">Production URLs & Cloud Run instances</div>
+                        <div className="text-xs font-bold text-white">Websites</div>
+                        <div className="text-[10px] text-slate-400">Deployments &amp; Cloud</div>
                       </div>
                     </button>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
                     <button
                       onClick={handleForceBatchExport}
-                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center gap-2"
+                      className="min-h-[44px] px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Export Torrens Ledger</span>
                     </button>
 
-                    <button
-                      onClick={logOut}
-                      className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Sign Out</span>
-                    </button>
+                    {user ? (
+                      <button
+                        onClick={logOut}
+                        className="min-h-[44px] px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={signInWithGoogle}
+                        className="min-h-[44px] px-4 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>Google Sign-In</span>
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               </motion.div>
@@ -665,9 +829,11 @@ export default function App() {
 
         </div>
 
-        <AIGuide />
-        <ThresholdAlerts />
-        <ValourianAI />
+        <React.Suspense fallback={null}>
+          <AIGuide />
+          <ThresholdAlerts />
+          <ValourianAI />
+        </React.Suspense>
         <FloatingSpeedDial
           onOpenAI={() => window.dispatchEvent(new Event("open-valourian-ai"))}
           onOpenAlerts={() => window.dispatchEvent(new Event("open-threshold-alerts"))}
@@ -725,15 +891,19 @@ export default function App() {
                     btn.innerHTML = '<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Processing...';
                     
                     try {
-                      const res = await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: command, agentId: 'DeepSpace' })
+                      const { runPaidGeminiAssistant } = await import('./services/aiActionExecutor');
+                      const res = await runPaidGeminiAssistant({
+                        prompt: command,
+                        model: 'gemini-4-carbon',
+                        enableSearch: true,
+                        contextHint: 'Deep Space Command Hub — full app & financial tool control',
                       });
-                      const data = await res.json();
-                      input.value = "DEEP SPACE RESPONSE:\n\n" + (data.text || data.error || "Command processed.");
-                    } catch (err) {
-                      input.value = "ERROR CONNECTING TO CLUSTER:\n\n" + String(err);
+                      const actionSummary = res.executedActions.length > 0
+                        ? `\n\nEXECUTED ACTIONS:\n${res.executedActions.map((a) => `• ${a.name}: ${a.summary}`).join('\n')}`
+                        : '';
+                      input.value = "GEMINI 4 CARBON RESPONSE:\n\n" + (res.text || "Command processed.") + actionSummary;
+                    } catch (err: any) {
+                      input.value = "GEMINI 4 ERROR:\n\n" + (err?.message || String(err));
                     } finally {
                       btn.disabled = false;
                       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send w-4 h-4"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg> Deploy Maximal Power Update';

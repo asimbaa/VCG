@@ -38,15 +38,19 @@ export function DataMigrationTerminal() {
             setMigrationState('complete');
             toast.success("Zero-Loss Migration Complete. Sovereign OS v9 active.", { icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />});
             
-            // Generate a global ledger log for the migration
-            addDoc(collection(db, "payment_events"), {
-              amount: "4.2TB Data",
-              merchant: "Sovereign OS v9 Data Migration",
-              status: "confirmed",
-              timestamp: serverTimestamp(),
-              type: "Data Migration",
-              userId: "system"
-            }).catch(console.error);
+            // Generate a ledger log for verified cloud sessions
+            import('../../services/cloudSessionGuard').then(({ getVerifiedCloudUid }) => {
+              const cloudUid = getVerifiedCloudUid();
+              if (!cloudUid) return;
+              addDoc(collection(db, "payment_events"), {
+                amount: "4.2TB Data",
+                merchant: "Sovereign OS v9 Data Migration",
+                status: "confirmed",
+                timestamp: serverTimestamp(),
+                type: "Data Migration",
+                userId: cloudUid
+              }).catch(() => {});
+            }).catch(() => {});
             
             return 100;
           }

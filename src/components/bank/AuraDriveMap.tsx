@@ -19,8 +19,8 @@ import {
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
-  ResponsiveContainer,
 } from "recharts";
+import { SafeResponsiveContainer } from "../shared/SafeResponsiveContainer";
 import {
   Icon,
   DivIcon,
@@ -469,12 +469,12 @@ export const AuraDriveMap = ({ localFleet = [] }: { localFleet?: any[] }) => {
             {newRoutePoints.length > 1 && (
               <div className="h-20 w-full min-w-0 mt-2 border-t border-slate-700/50 pt-2">
                  <div className="text-[9px] font-black uppercase text-slate-500 tracking-wider mb-1">Elevation Profile</div>
-                 <div className="w-full h-14 min-w-0">
-                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={40}>
+                 <div className="w-full h-16 min-w-0">
+                   <SafeResponsiveContainer minHeight={56}>
                       <AreaChart data={newRoutePoints.map((p, i) => ({ index: i, elevation: 10 + Math.sin(i) * 5 + Math.random() * 2 }))}>
                         <Area type="monotone" dataKey="elevation" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
                       </AreaChart>
-                   </ResponsiveContainer>
+                   </SafeResponsiveContainer>
                  </div>
               </div>
             )}

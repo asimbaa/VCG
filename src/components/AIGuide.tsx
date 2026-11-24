@@ -1,126 +1,171 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, X, Sparkles, Send, ExternalLink, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Bot, X, Sparkles, Send, ShieldCheck, AlertCircle, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { runPaidGeminiAssistant, AiActionExecutionResult } from "../services/aiActionExecutor";
+
+interface GuideMessage {
+  role: "ai" | "user";
+  content: string;
+  executedActions?: AiActionExecutionResult[];
+  isError?: boolean;
+}
 
 export function AIGuide() {
   const [isOpen, setIsOpen] = useState(false);
+  const [inputVal, setInputVal] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const [messages, setMessages] = useState<GuideMessage[]>([
+    {
+      role: "ai",
+      content:
+        "Greetings. I am the Valourian Gemini 4 Guide. Ask me to audit or repair cards, draw or repay CreChargeFacilities, complete a store/ride/booking payment, navigate to any view, or research live markets.",
+    },
+  ]);
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);
-    window.addEventListener('open-ai-guide', handleOpen);
-    return () => window.removeEventListener('open-ai-guide', handleOpen);
+    window.addEventListener("open-ai-guide", handleOpen);
+    return () => window.removeEventListener("open-ai-guide", handleOpen);
   }, []);
 
-  const [inputVal, setInputVal] = useState("");
-  const [messages, setMessages] = useState([
-    { role: 'ai', content: 'Greetings. I am the Valourian AI System, powered by Enterprise Google AI Ultra & Grok Superheavy licenses. I can transform code, update database schemas and backend services, craft responsive SVG AMEX, Mastercard, and Visa cards with modern digital bank features, and provide deep insights into your sovereign funds.' }
-  ]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isBusy]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputVal.trim()) return;
+    const prompt = inputVal.trim();
+    if (!prompt || isBusy) return;
 
-    setMessages(prev => [...prev, { role: 'user', content: inputVal }]);
-    const query = inputVal.toLowerCase();
+    const history = messages
+      .filter((m) => !m.isError)
+      .slice(-6)
+      .map((m) => ({ role: (m.role === "user" ? "user" : "model") as "user" | "model", text: m.content }));
+
+    setMessages((prev) => [...prev, { role: "user", content: prompt }]);
     setInputVal("");
+    setIsBusy(true);
 
-    setTimeout(() => {
-      let response = "I am processing that request through the secure enclave...";
-      
-      if (query.includes('payment') || query.includes('bsb') || query.includes('transfer') || query.includes('swift')) {
-        response = "To perform an AU BSB or SWIFT transfer, navigate to the Rapid Institutional Transfer tab. Select 'AU BSB & Account', input the 6-digit BSB, SWIFT code, and up to 9-digit Account Number. I will auto-verify the routing details securely before clearing funds instantly using your sovereign reserves.";
-      } else if (query.includes('card') || query.includes('svg') || query.includes('amex') || query.includes('visa') || query.includes('mastercard')) {
-        response = "I can dynamically generate and render flawless SVG representations of AMEX Centurion, Mastercard World Elite, and Visa Infinite cards. You can view your full spectrum of foundational systems and modern digital bank card features under the 'Cards & Devices' tab in your dashboard.";
-      } else if (query.includes('code') || query.includes('schema') || query.includes('backend') || query.includes('transform')) {
-        response = "Using my enterprise Google AI Ultra and Grok Superheavy engines, I can rewrite core application logic, instantly update Cloud SQL database schemas, and deploy new backend endpoints to our secure enclaves in real-time. Just specify your requirements.";
-      } else if (query.includes('funds') || query.includes('details') || query.includes('balance') || query.includes('show')) {
-        response = "Your sovereign funds are fully backed and settled. I have prepared a comprehensive, human-readable breakdown of your treasury assets, liquidity allocations, and historical transactions. You can view all details seamlessly in the Treasury console.";
-      } else if (query.includes('deploy') || query.includes('prod') || query.includes('live')) {
-        response = "To deploy Valourian to production globally, initiate the automated pipeline at valourian.com/login. Ensure all BSB logic is verified. You can use the 'Websites' tab in this console to manage active sovereign deployments.";
-      } else if (query.includes('valourian.com')) {
-         response = "Valourian.com operations are active. You can authenticate stakeholders via valourian.com/login using the built-in Firebase Identity. Need help configuring domain routing?";
-      } else if (query.includes('crypto') || query.includes('asset') || query.includes('bitcoin') || query.includes('treasury')) {
-         response = "To send digital assets from the Valourian treasury, navigate to the Rapid Institutional Transfer tab and select 'Digital Assets'. Select your preferred asset (e.g., BTC, USDT, VAL), enter the destination address and amount, and confirm the transfer securely.";
-      }
+    try {
+      const res = await runPaidGeminiAssistant({
+        message: prompt,
+        mode: "neon_executor",
+        history,
+      });
 
-      setMessages(prev => [...prev, { role: 'ai', content: response }]);
-    }, 800);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content: res.text,
+          executedActions: res.executionResults,
+        },
+      ]);
+    } catch (err: any) {
+      const errMsg = err?.message || "Gemini 4 request failed.";
+      toast.error(errMsg);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content: `Could not reach Gemini 4: ${errMsg}. Verify your paid API key in Settings > Secrets.`,
+          isError: true,
+        },
+      ]);
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(true)}
-        className={`hidden fixed bottom-28 right-6 md:right-10 z-50 p-4 bg-slate-900 border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] rounded-full text-yellow-500 hover:scale-110 active:scale-95 transition-all ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-      >
-        <Bot className="w-6 h-6" />
-      </button>
-
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-28 right-6 md:right-10 z-50 w-80 sm:w-96 flex flex-col bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            className="fixed bottom-4 right-3 sm:bottom-24 sm:right-8 z-50 w-[calc(100vw-1.5rem)] sm:w-[400px] max-h-[82dvh] flex flex-col bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
           >
-            <div className="bg-slate-900 p-4 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="bg-yellow-500/20 p-2 rounded-xl text-yellow-500">
+            <div className="bg-slate-900 p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-amber-500/20 p-2 rounded-xl text-amber-400">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-sm">Valourian AI System</h3>
-                  <p className="text-[10px] text-emerald-500 font-mono flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" /> SECURE LINK ACTIVE
+                  <h3 className="font-bold text-white text-sm">Valourian AI Guide</h3>
+                  <p className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> GEMINI 4 NEON ACTIVE
                   </p>
                 </div>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-2 text-slate-400 hover:bg-slate-800 rounded-full transition-colors"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-300 hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+                aria-label="Close AI Guide"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 p-4 overflow-y-auto max-h-[40vh] space-y-4">
+            <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {messages.map((msg, i) => (
-                <div key={`guide-msg-${i}-${msg.role}`} className={`flex ${msg.role === 'ai' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${
-                    msg.role === 'ai' 
-                      ? 'bg-slate-900 text-slate-300 border border-slate-800 rounded-tl-sm' 
-                      : 'bg-yellow-600 text-white rounded-tr-sm'
-                  }`}>
+                <div key={`guide-msg-${i}-${msg.role}`} className={`flex ${msg.role === "ai" ? "justify-start" : "justify-end"}`}>
+                  <div
+                    className={`p-3 rounded-2xl max-w-[88%] text-xs leading-relaxed whitespace-pre-wrap ${
+                      msg.role === "ai"
+                        ? msg.isError
+                          ? "bg-rose-950/70 text-rose-100 border border-rose-500/40 rounded-tl-sm"
+                          : "bg-slate-900 text-slate-200 border border-slate-800 rounded-tl-sm"
+                        : "bg-amber-500 text-slate-950 font-semibold rounded-tr-sm"
+                    }`}
+                  >
+                    {msg.isError && <AlertCircle className="w-3.5 h-3.5 inline mr-1.5 text-rose-300" />}
                     {msg.content}
+                    {msg.executedActions && msg.executedActions.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-slate-800 space-y-1">
+                        {msg.executedActions.map((act, idx) => (
+                          <div key={idx} className="flex items-center gap-1 text-[11px] font-mono text-emerald-400">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            <span>{act.summary}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
+              {isBusy && (
+                <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono p-2">
+                  <Bot className="w-4 h-4 animate-pulse" />
+                  <span>Executing via Gemini 4...</span>
+                </div>
+              )}
+              <div ref={endRef} />
             </div>
 
-            <div className="p-4 bg-slate-900 border-t border-slate-800">
+            <div className="p-3.5 bg-slate-900 border-t border-slate-800 shrink-0">
               <form onSubmit={handleSend} className="flex gap-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
-                  placeholder="Ask about deployments or transfers..."
-                  className="flex-1 bg-slate-950 border border-slate-700 text-white text-sm rounded-xl px-4 py-2 focus:ring-1 focus:ring-yellow-500 outline-none"
+                  placeholder="Ask or command any card, facility, or store..."
+                  className="flex-1 min-h-[44px] bg-slate-950 border border-slate-700 text-white text-xs rounded-xl px-3.5 py-2 focus:ring-1 focus:ring-amber-500 outline-none placeholder:text-slate-500"
                 />
-                <button 
+                <button
                   type="submit"
-                  disabled={!inputVal.trim()}
-                  className="p-2 bg-yellow-600 disabled:opacity-50 text-white rounded-xl hover:bg-yellow-500 transition-colors"
+                  disabled={!inputVal.trim() || isBusy}
+                  className="min-w-[44px] min-h-[44px] bg-amber-500 disabled:opacity-50 text-slate-950 rounded-xl hover:bg-amber-400 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Send message"
                 >
                   <Send className="w-4 h-4" />
                 </button>
               </form>
-              <div className="mt-3 flex justify-center">
-                 <a href="https://valourian.com/login" target="_blank" rel="noreferrer" className="text-[10px] text-yellow-500 flex items-center gap-1 hover:underline">
-                   View valourian.com/login live <ExternalLink className="w-3 h-3" />
-                 </a>
-              </div>
             </div>
           </motion.div>
         )}

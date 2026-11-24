@@ -4,8 +4,31 @@
  * Ensures consistent cards, live balances, cashback rewards, daily interest, and classic features everywhere.
  */
 
-import { auth, db } from "../firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
+import { collection, doc, getDocs, onSnapshot, query, setDoc, serverTimestamp, where } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { repairLuhnPan, verifyLuhnMod10, formatPanForNetwork } from "../utils/luhn";
+
+export interface CardAutoTopUpConfig {
+  enabled: boolean;
+  thresholdAUD: number;
+  topUpAmountAUD: number;
+  sourceCardId?: string;
+}
+
+export interface CardHealAuditSummary {
+  totalCards: number;
+  repairedCount: number;
+  healthyCount: number;
+  repairedCards: Array<{
+    id: string;
+    name: string;
+    oldLast4: string;
+    newLast4: string;
+    network: string;
+  }>;
+  auditedAt: string;
+}
 
 export interface UnifiedBankCard {
   id: string;
@@ -30,14 +53,16 @@ export interface UnifiedBankCard {
   burnerMode: boolean;
   appleGooglePayEnrolled: boolean;
   
-  // Value Gaining Features
-  cashbackRate: number; // e.g. 0.05 for 5.0%
-  accumulatedCashback: number; // e.g. 48950.00
-  apyInterestRate: number; // e.g. 0.051 for 5.10% p.a.
-  accruedInterest: number; // e.g. 38200.00
-  rewardsPoints: number; // e.g. 2450000
+  // Value Gaining & Partnership Features
+  cashbackRate: number; // minimum 0.05 (5.0% under generous partnership terms)
+  accumulatedCashback: number;
+  apyInterestRate: number; // minimum 0.051 (5.10% p.a.)
+  accruedInterest: number;
+  rewardsPoints: number;
   roundUpSavings?: number;
   roundUpEnabled?: boolean;
+  partnershipTier?: string;
+  fxFeePercent?: number;
   
   // Classic Security & Spending Controls
   dailySpendingLimit: number;
@@ -45,6 +70,13 @@ export interface UnifiedBankCard {
   onlinePaymentsEnabled: boolean;
   internationalPaymentsEnabled: boolean;
   contactlessEnabled: boolean;
+  spentTodayAUD?: number;
+  spentTodayDate?: string;
+  merchantLockMode?: "off" | "allowlist" | "blocklist";
+  merchantLocks?: string[];
+  autoTopUp?: CardAutoTopUpConfig;
+  luhnVerified?: boolean;
+  luhnLastVerifiedAt?: string;
   
   // Complimentary VIP Benefits
   loungeAccess: boolean;
@@ -717,9 +749,9 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
   {
     id: "diamond_infinity",
     name: "Valourian Sovereign Diamond Infinity Reserve",
-    number: "5500 8821 4492 1198",
-    fullNumber: "5500882144921198",
-    last4: "1198",
+    number: "5500 8821 4492 1199",
+    fullNumber: "5500882144921199",
+    last4: "1199",
     balance: 10000000000,
     currency: "AUD",
     type: "virtual",
@@ -760,9 +792,9 @@ export const MASTER_BANK_CARDS: UnifiedBankCard[] = [
   {
     id: "apple_card_titanium",
     name: "Apple Card Titanium Sovereign Edition",
-    number: "5521 7719 3019 4482",
-    fullNumber: "5521771930194482",
-    last4: "4482",
+    number: "5521 7719 3019 4480",
+    fullNumber: "5521771930194480",
+    last4: "4480",
     balance: 500000000,
     currency: "AUD",
     type: "virtual",
@@ -1004,9 +1036,16 @@ export class UnifiedBankCardSyncService {
   private cards: UnifiedBankCard[] = [];
   private listeners: Set<(cards: UnifiedBankCard[]) => void> = new Set();
   private broadcast: BroadcastChannel | null = null;
+  private firestoreUnsub: (() => void) | null = null;
+  private isApplyingRemote = false;
 
   private constructor() {
     this.cards = this.loadLocalCache();
+    // Deterministic Luhn Mod-10 auto-repair + generous partnership baseline on boot
+    const audit = this.verifyAndHealAllCards({ silentIfHealthy: true });
+    if (audit.repairedCount > 0) {
+      console.info(`[Luhn Auto-Repair] Repaired ${audit.repairedCount}/${audit.totalCards} card PANs on boot.`);
+    }
 
     // Listen across browser tabs
     try {
@@ -1014,7 +1053,7 @@ export class UnifiedBankCardSyncService {
         this.broadcast = new BroadcastChannel("valourian_cards_sync_channel");
         this.broadcast.onmessage = (event) => {
           if (event.data?.type === "CARDS_UPDATED" && Array.isArray(event.data.cards)) {
-            this.cards = event.data.cards;
+            this.cards = event.data.cards.map((c: any) => this.hydrateCardDefaults(c));
             this.notifyListeners();
           }
         };
@@ -1031,6 +1070,18 @@ export class UnifiedBankCardSyncService {
           this.notifyListeners();
         }
       });
+
+      // Bidirectional Cloud Firestore card vault sync when signed in
+      try {
+        onAuthStateChanged(auth, (user) => {
+          if (user) {
+            this.startFirestoreVaultSync(user.uid);
+          } else if (this.firestoreUnsub) {
+            this.firestoreUnsub();
+            this.firestoreUnsub = null;
+          }
+        });
+      } catch {}
     }
   }
 
@@ -1041,19 +1092,79 @@ export class UnifiedBankCardSyncService {
     return UnifiedBankCardSyncService.instance;
   }
 
+  private getPartnershipTier(network: "Mastercard" | "Visa" | "AMEX"): string {
+    if (network === "AMEX") return "Amex Centurion Sovereign Partnership (0% FX • Unlimited Lounges)";
+    if (network === "Visa") return "Visa Infinite Privilege Partnership (0% FX • Global Concierge)";
+    return "Mastercard World Elite Black Partnership (0% FX • Priority Lounge)";
+  }
+
   private hydrateCardDefaults(c: any): UnifiedBankCard {
     const inferredCategory: "debit" | "credit" =
       c.cardCategory === "debit" || String(c.id || "").startsWith("debit_") || String(c.name || "").toLowerCase().includes("debit")
         ? "debit"
         : "credit";
+    const repaired = repairLuhnPan(String(c.fullNumber || c.number || ""), c.network);
+    const network = repaired.network;
+    const isAmex = network === "AMEX";
+    const fallbackCvv = isAmex ? "7712" : "712";
+    const cvv = String(c.cvv || fallbackCvv).replace(/\D/g, "").slice(0, isAmex ? 4 : 3) || fallbackCvv;
+    const dynamicCvv = String(c.dynamicCvv || cvv).replace(/\D/g, "").slice(0, isAmex ? 4 : 3) || cvv;
+    const todayKey = new Date().toISOString().slice(0, 10);
+
     return {
       ...c,
+      network,
+      number: repaired.formattedPan,
+      fullNumber: repaired.rawPan,
+      last4: repaired.last4,
+      cvv,
+      dynamicCvv,
+      expiry: /^(0[1-9]|1[0-2])\/\d{2}$/.test(String(c.expiry || "")) ? c.expiry : "08/33",
+      bsb: /^\d{3}-?\d{3}$/.test(String(c.bsb || "")) ? c.bsb : (isAmex ? "021-000" : "062-140"),
+      payId: c.payId || TARGET_LINK_EMAIL,
+      pin: /^\d{4}$/.test(String(c.pin || "")) ? c.pin : "4912",
+      cashbackRate: Math.max(Number(c.cashbackRate || 0), 0.05),
+      apyInterestRate: Math.max(Number(c.apyInterestRate || 0), 0.051),
+      partnershipTier: c.partnershipTier || this.getPartnershipTier(network),
+      fxFeePercent: 0,
+      dailySpendingLimit: Number(c.dailySpendingLimit) > 0 ? Number(c.dailySpendingLimit) : 50000000,
+      atmDailyLimit: Number(c.atmDailyLimit) > 0 ? Number(c.atmDailyLimit) : 500000,
+      onlinePaymentsEnabled: c.onlinePaymentsEnabled !== false,
+      internationalPaymentsEnabled: c.internationalPaymentsEnabled !== false,
+      contactlessEnabled: c.contactlessEnabled !== false,
+      loungeAccess: true,
+      travelInsuranceCovered: true,
+      purchaseProtectionCovered: true,
+      zeroDeclineGuaranteed: true,
+      biometricsEnclaveEnabled: c.biometricsEnclaveEnabled !== false,
+      appleGooglePayEnrolled: c.appleGooglePayEnrolled !== false,
+      appleGooglePayPassProvisioned: c.appleGooglePayPassProvisioned !== false,
+      merchantLockMode: c.merchantLockMode || "off",
+      merchantLocks: Array.isArray(c.merchantLocks) ? c.merchantLocks : [],
+      autoTopUp: c.autoTopUp && typeof c.autoTopUp === "object"
+        ? {
+            enabled: Boolean(c.autoTopUp.enabled),
+            thresholdAUD: Math.max(0, Number(c.autoTopUp.thresholdAUD ?? 25000)),
+            topUpAmountAUD: Math.max(100, Number(c.autoTopUp.topUpAmountAUD ?? 100000)),
+            sourceCardId: c.autoTopUp.sourceCardId,
+          }
+        : { enabled: false, thresholdAUD: 25000, topUpAmountAUD: 100000 },
+      spentTodayDate: c.spentTodayDate === todayKey ? todayKey : todayKey,
+      spentTodayAUD: c.spentTodayDate === todayKey ? Number(c.spentTodayAUD || 0) : 0,
+      luhnVerified: verifyLuhnMod10(repaired.rawPan),
+      luhnLastVerifiedAt: c.luhnLastVerifiedAt || new Date().toISOString(),
       cardCategory: inferredCategory,
       formFactor: c.formFactor || "virtual_and_physical",
       physicalShippingStatus: c.physicalShippingStatus || (c.type === "physical" ? "delivered" : "available_for_dispatch"),
       vipPerks: Array.isArray(c.vipPerks) && c.vipPerks.length > 0
         ? c.vipPerks
-        : ["5.0% Uncapped Cashback", "0% FX Worldwide", "Airport Lounge + Concierge", "5.10% APY Vault", "Purchase Protection"],
+        : [
+            "5.0%+ Uncapped Instant Cashback",
+            "0% FX Worldwide Interbank Corridor",
+            "Priority Airport Lounge + Concierge",
+            "5.10% APY Sovereign Treasury Yield",
+            "Purchase & Travel Insurance Protection"
+          ],
       shareable: c.shareable !== false,
     };
   }
@@ -1065,7 +1176,6 @@ export class UnifiedBankCardSyncService {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge newly introduced cards
           const map = new Map<string, UnifiedBankCard>();
           parsed.forEach((c: any) => map.set(c.id, this.hydrateCardDefaults(c)));
           MASTER_BANK_CARDS.forEach((m) => {
@@ -1517,6 +1627,168 @@ export class UnifiedBankCardSyncService {
     }
   }
 
+  public verifyAndHealAllCards(options?: { silentIfHealthy?: boolean }): CardHealAuditSummary {
+    const rawCards = this.getCards();
+    const repairedCards: CardHealAuditSummary["repairedCards"] = [];
+    const nowIso = new Date().toISOString();
+
+    const healed = rawCards.map((c) => {
+      const oldLast4 = c.last4 || String(c.fullNumber || "").slice(-4);
+      const rawBefore = String(c.fullNumber || c.number || "").replace(/\D/g, "");
+      const repairRes = repairLuhnPan(rawBefore, c.network);
+      const needsTermUpgrade =
+        !verifyLuhnMod10(rawBefore) ||
+        repairRes.wasRepaired ||
+        (c.cashbackRate || 0) < 0.05 ||
+        (c.apyInterestRate || 0) < 0.051 ||
+        c.fxFeePercent !== 0 ||
+        !c.loungeAccess ||
+        !c.travelInsuranceCovered ||
+        !c.purchaseProtectionCovered;
+
+      if (repairRes.wasRepaired) {
+        repairedCards.push({
+          id: c.id,
+          name: c.name,
+          oldLast4,
+          newLast4: repairRes.last4,
+          network: repairRes.network,
+        });
+      }
+
+      if (!needsTermUpgrade && options?.silentIfHealthy) {
+        return { ...c, luhnVerified: true, luhnLastVerifiedAt: nowIso };
+      }
+
+      return this.hydrateCardDefaults({
+        ...c,
+        network: repairRes.network,
+        number: repairRes.formattedPan,
+        fullNumber: repairRes.rawPan,
+        last4: repairRes.last4,
+        cashbackRate: Math.max(c.cashbackRate || 0, 0.05),
+        apyInterestRate: Math.max(c.apyInterestRate || 0, 0.051),
+        fxFeePercent: 0,
+        loungeAccess: true,
+        travelInsuranceCovered: true,
+        purchaseProtectionCovered: true,
+        zeroDeclineGuaranteed: true,
+        luhnVerified: true,
+        luhnLastVerifiedAt: nowIso,
+        lastUpdated: nowIso,
+      });
+    });
+
+    if (repairedCards.length > 0 || !options?.silentIfHealthy) {
+      this.saveCards(healed);
+      this.syncVaultToFirestore().catch(() => {});
+    }
+
+    return {
+      totalCards: healed.length,
+      repairedCount: repairedCards.length,
+      healthyCount: healed.length,
+      repairedCards,
+      auditedAt: nowIso,
+    };
+  }
+
+  public async syncVaultToFirestore(): Promise<number> {
+    const currentUser = auth?.currentUser;
+    const uid = currentUser?.uid;
+    if (!currentUser || !uid || !db) return 0;
+    if (currentUser.email && currentUser.emailVerified === false) return 0;
+    const cards = this.getCards();
+    let synced = 0;
+    for (const c of cards.slice(0, 30)) {
+      try {
+        await setDoc(
+          doc(db, "virtual_cards", c.id),
+          {
+            userId: uid,
+            id: c.id,
+            name: c.name,
+            number: c.number,
+            fullNumber: c.fullNumber,
+            last4: c.last4,
+            cardCategory: c.cardCategory || "credit",
+            network: c.network,
+            balance: Number(c.balance || 0),
+            limit: c.limit === "unlimited" ? -1 : Number(c.limit || 0),
+            currency: c.currency || "AUD",
+            status: c.status,
+            burnerMode: Boolean(c.burnerMode),
+            merchantLockMode: c.merchantLockMode || "off",
+            merchantLocks: c.merchantLocks || [],
+            autoTopUp: c.autoTopUp || { enabled: false, thresholdAUD: 25000, topUpAmountAUD: 100000 },
+            luhnVerified: true,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        synced++;
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `virtual_cards/${c.id}`);
+      }
+    }
+    return synced;
+  }
+
+  private startFirestoreVaultSync(uid: string) {
+    if (!db || this.firestoreUnsub) return;
+    if (auth?.currentUser?.email && auth.currentUser.emailVerified === false) return;
+    try {
+      const q = query(collection(db, "virtual_cards"), where("userId", "==", uid));
+      this.firestoreUnsub = onSnapshot(
+        q,
+        (snap) => {
+          if (snap.empty) {
+            this.syncVaultToFirestore().catch(() => {});
+            return;
+          }
+          const remoteMap = new Map<string, any>();
+          snap.forEach((docSnap) => {
+            remoteMap.set(docSnap.id, docSnap.data());
+          });
+          if (remoteMap.size === 0) return;
+          this.isApplyingRemote = true;
+          try {
+            const current = this.getCards();
+            const mergedMap = new Map<string, UnifiedBankCard>();
+            current.forEach((localCard) => {
+              const remote = remoteMap.get(localCard.id);
+              if (remote) {
+                mergedMap.set(
+                  localCard.id,
+                  this.hydrateCardDefaults({
+                    ...localCard,
+                    balance: typeof remote.balance === "number" ? remote.balance : localCard.balance,
+                    status: remote.status === "frozen" ? "frozen" : "active",
+                    burnerMode: typeof remote.burnerMode === "boolean" ? remote.burnerMode : localCard.burnerMode,
+                    merchantLockMode: remote.merchantLockMode || localCard.merchantLockMode,
+                    merchantLocks: Array.isArray(remote.merchantLocks) ? remote.merchantLocks : localCard.merchantLocks,
+                    autoTopUp: remote.autoTopUp || localCard.autoTopUp,
+                  })
+                );
+              } else {
+                mergedMap.set(localCard.id, localCard);
+              }
+            });
+            this.cards = Array.from(mergedMap.values());
+            this.notifyListeners();
+          } finally {
+            this.isApplyingRemote = false;
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, "virtual_cards");
+        }
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, "virtual_cards");
+    }
+  }
+
   public spendFromCard(
     cardId: string,
     options: {
@@ -1526,16 +1798,21 @@ export class UnifiedBankCardSyncService {
       foreignAmount: number;
       foreignCurrency: string;
       category?: string;
+      channel?: "online" | "contactless" | "in_store";
     }
   ): {
     success: boolean;
+    declinedReason?: string;
+    burnerAutoLocked?: boolean;
+    autoTopUpTriggered?: boolean;
+    autoTopUpAmount?: number;
     card: UnifiedBankCard;
     transaction: MerchantTransaction;
     newBalance: number;
     cashbackEarned: number;
     newCashbackTotal: number;
   } {
-    const card = this.getCardById(cardId) || this.getActivePaymentCard();
+    const card = this.hydrateCardDefaults(this.getCardById(cardId) || this.getActivePaymentCard());
     const FX_RATES: Record<string, number> = {
       AUD: 1.00,
       USD: 1.52,
@@ -1548,8 +1825,84 @@ export class UnifiedBankCardSyncService {
 
     const rate = FX_RATES[options.foreignCurrency] || 1.0;
     const convertedAUD = Math.round(options.foreignAmount * rate * 100) / 100;
-    const cashbackRate = card.cashbackRate || 0.05; // 5% cashback
+    const txId = `TX-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const authCode = `AUTH-${Math.floor(100000 + Math.random() * 900000)}`;
+    const arqc = `ARQC-${Math.random().toString(36).substring(2, 10).toUpperCase()}-SOV`;
+
+    const buildDeclined = (reason: string) => ({
+      success: false,
+      declinedReason: reason,
+      card,
+      transaction: {
+        id: txId,
+        cardId: card.id,
+        cardName: card.name,
+        cardLast4: card.last4,
+        merchantName: options.merchantName,
+        merchantLocation: options.merchantLocation,
+        region: options.region,
+        foreignAmount: options.foreignAmount,
+        foreignCurrency: options.foreignCurrency,
+        convertedAUD,
+        exchangeRate: rate,
+        cashbackEarned: 0,
+        timestamp: new Date().toISOString(),
+        status: "approved_instant" as const,
+        authorizationCode: `DECL-${authCode}`,
+        arqcToken: arqc,
+        rail: "Pre-Auth Guardrail Blocked",
+        preArrivalApproved: false,
+      },
+      newBalance: card.balance,
+      cashbackEarned: 0,
+      newCashbackTotal: card.accumulatedCashback,
+    });
+
+    // Real Pre-Authorization Guardrails
+    if (card.status === "frozen") {
+      return buildDeclined(`${card.name} is currently frozen. Unfreeze the card to authorize payments.`);
+    }
+    if (options.channel === "online" && card.onlinePaymentsEnabled === false) {
+      return buildDeclined(`Online payments are turned off for ${card.name}.`);
+    }
+    if (options.region !== "AUS" && card.internationalPaymentsEnabled === false) {
+      return buildDeclined(`International transactions are locked on ${card.name}.`);
+    }
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const spentToday = card.spentTodayDate === todayKey ? Number(card.spentTodayAUD || 0) : 0;
+    if (card.dailySpendingLimit > 0 && spentToday + convertedAUD > card.dailySpendingLimit) {
+      return buildDeclined(
+        `Daily spending limit ($${card.dailySpendingLimit.toLocaleString("en-AU")} AUD) exceeded for ${card.name}.`
+      );
+    }
+
+    const lockMode = card.merchantLockMode || "off";
+    const lockList = (card.merchantLocks || []).map((m) => m.trim().toLowerCase()).filter(Boolean);
+    const merchTarget = `${options.merchantName} ${options.category || ""}`.toLowerCase();
+    if (lockMode === "blocklist" && lockList.some((rule) => merchTarget.includes(rule))) {
+      return buildDeclined(`Blocked by Merchant Lock rule on ${card.name} (${options.merchantName}).`);
+    }
+    if (lockMode === "allowlist" && lockList.length > 0 && !lockList.some((rule) => merchTarget.includes(rule))) {
+      return buildDeclined(`Merchant "${options.merchantName}" is not on the Allowlist for ${card.name}.`);
+    }
+
+    // Check balance or trigger auto top-up if configured
+    let availableBeforeSpend = card.balance;
+    let autoTopUpTriggered = false;
+    let autoTopUpAmount = 0;
+
+    if (card.autoTopUp?.enabled && availableBeforeSpend < convertedAUD) {
+      const topAmt = Math.max(card.autoTopUp.topUpAmountAUD || 100000, convertedAUD - availableBeforeSpend + 1000);
+      this.executeAutoTopUp(card.id, topAmt, card.autoTopUp.sourceCardId);
+      availableBeforeSpend += topAmt;
+      autoTopUpTriggered = true;
+      autoTopUpAmount = topAmt;
+    }
+
+    const cashbackRate = Math.max(card.cashbackRate || 0.05, 0.05);
     const cashbackEarned = Math.round(convertedAUD * cashbackRate * 100) / 100;
+    const isBurner = Boolean(card.burnerMode);
 
     let updatedCard: UnifiedBankCard = card;
     this.updateCard(card.id, (c) => {
@@ -1561,14 +1914,22 @@ export class UnifiedBankCardSyncService {
         balance: nextBal,
         accumulatedCashback: nextCashback,
         rewardsPoints: nextPoints,
+        spentTodayDate: todayKey,
+        spentTodayAUD: (c.spentTodayDate === todayKey ? Number(c.spentTodayAUD || 0) : 0) + convertedAUD,
+        status: isBurner ? "frozen" : c.status,
         zeroDeclineGuaranteed: true
       };
       return updatedCard;
     });
 
-    const txId = `TX-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const authCode = `AUTH-${Math.floor(100000 + Math.random() * 900000)}`;
-    const arqc = `ARQC-${Math.random().toString(36).substring(2, 10).toUpperCase()}-SOV`;
+    // Post-spend threshold Auto Top-Up if balance fell below configured threshold
+    if (!isBurner && updatedCard.autoTopUp?.enabled && updatedCard.balance < updatedCard.autoTopUp.thresholdAUD) {
+      const topAmt = Math.max(1000, updatedCard.autoTopUp.topUpAmountAUD || 100000);
+      const nextBalAfterTopUp = this.executeAutoTopUp(updatedCard.id, topAmt, updatedCard.autoTopUp.sourceCardId);
+      updatedCard = { ...updatedCard, balance: nextBalAfterTopUp };
+      autoTopUpTriggered = true;
+      autoTopUpAmount += topAmt;
+    }
 
     const tx: MerchantTransaction = {
       id: txId,
@@ -1595,12 +1956,207 @@ export class UnifiedBankCardSyncService {
 
     return {
       success: true,
+      burnerAutoLocked: isBurner,
+      autoTopUpTriggered,
+      autoTopUpAmount,
       card: updatedCard,
       transaction: tx,
       newBalance: updatedCard.balance,
       cashbackEarned,
       newCashbackTotal: updatedCard.accumulatedCashback
     };
+  }
+
+  private executeAutoTopUp(targetCardId: string, amountAUD: number, sourceCardId?: string): number {
+    if (sourceCardId && sourceCardId !== targetCardId) {
+      const res = this.transferBetweenCards(sourceCardId, targetCardId, amountAUD, "Auto Top-Up Shield");
+      if (res.success) return res.toBalance;
+    }
+    return this.injectImmenseFunds(targetCardId, amountAUD);
+  }
+
+  public transferBetweenCards(
+    fromCardId: string,
+    toCardId: string,
+    amountAUD: number,
+    note?: string
+  ): {
+    success: boolean;
+    error?: string;
+    fromBalance: number;
+    toBalance: number;
+    fromCard?: UnifiedBankCard;
+    toCard?: UnifiedBankCard;
+  } {
+    const cleanAmt = Math.round(Number(amountAUD) * 100) / 100;
+    if (!Number.isFinite(cleanAmt) || cleanAmt <= 0) {
+      return { success: false, error: "Transfer amount must be greater than $0.", fromBalance: 0, toBalance: 0 };
+    }
+    if (fromCardId === toCardId) {
+      return { success: false, error: "Source and destination cards must be different.", fromBalance: 0, toBalance: 0 };
+    }
+
+    const cards = this.getCards();
+    const source = cards.find((c) => c.id === fromCardId);
+    const dest = cards.find((c) => c.id === toCardId);
+    if (!source || !dest) {
+      return { success: false, error: "Selected card could not be found.", fromBalance: 0, toBalance: 0 };
+    }
+    if (source.balance < cleanAmt) {
+      return {
+        success: false,
+        error: `Insufficient balance on ${source.name} ($${source.balance.toLocaleString()} available).`,
+        fromBalance: source.balance,
+        toBalance: dest.balance,
+      };
+    }
+
+    let updatedSource: UnifiedBankCard = source;
+    let updatedDest: UnifiedBankCard = dest;
+    const nowIso = new Date().toISOString();
+
+    const nextCards = cards.map((c) => {
+      if (c.id === fromCardId) {
+        updatedSource = { ...c, balance: Math.round((c.balance - cleanAmt) * 100) / 100, lastUpdated: nowIso };
+        return updatedSource;
+      }
+      if (c.id === toCardId) {
+        updatedDest = { ...c, balance: Math.round((c.balance + cleanAmt) * 100) / 100, lastUpdated: nowIso };
+        return updatedDest;
+      }
+      return c;
+    });
+
+    this.saveCards(nextCards);
+    this.syncVaultToFirestore().catch(() => {});
+
+    this.recordMerchantTransaction({
+      id: `C2C-${Date.now().toString(36).toUpperCase()}`,
+      cardId: updatedDest.id,
+      cardName: `${updatedSource.last4} -> ${updatedDest.last4}`,
+      cardLast4: updatedDest.last4,
+      merchantName: note || `Card-to-Card Liquidity Transfer (${updatedSource.name})`,
+      merchantLocation: "Valourian Internal Clearing Rail",
+      region: "AUS",
+      foreignAmount: cleanAmt,
+      foreignCurrency: "AUD",
+      convertedAUD: cleanAmt,
+      exchangeRate: 1,
+      cashbackEarned: 0,
+      timestamp: nowIso,
+      status: "approved_instant",
+      authorizationCode: `C2C-${Math.floor(100000 + Math.random() * 900000)}`,
+      arqcToken: `XFER-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      rail: "Valourian Instant Internal Card Bridge",
+      preArrivalApproved: true,
+    });
+
+    return {
+      success: true,
+      fromBalance: updatedSource.balance,
+      toBalance: updatedDest.balance,
+      fromCard: updatedSource,
+      toCard: updatedDest,
+    };
+  }
+
+  public updateAutoTopUp(cardId: string, config: CardAutoTopUpConfig): UnifiedBankCard | null {
+    const updated = this.updateCard(cardId, (c) => ({
+      ...c,
+      autoTopUp: {
+        enabled: Boolean(config.enabled),
+        thresholdAUD: Math.max(0, Number(config.thresholdAUD) || 0),
+        topUpAmountAUD: Math.max(100, Number(config.topUpAmountAUD) || 10000),
+        sourceCardId: config.sourceCardId,
+      },
+    }));
+    this.syncVaultToFirestore().catch(() => {});
+    return updated;
+  }
+
+  public updateMerchantLocks(cardId: string, mode: "off" | "allowlist" | "blocklist", merchants: string[]): UnifiedBankCard | null {
+    const cleaned = merchants.map((m) => m.trim()).filter(Boolean).slice(0, 20);
+    const updated = this.updateCard(cardId, (c) => ({
+      ...c,
+      merchantLockMode: mode,
+      merchantLocks: cleaned,
+    }));
+    this.syncVaultToFirestore().catch(() => {});
+    return updated;
+  }
+
+  public toggleBurnerMode(cardId: string): boolean {
+    let nextBurner = false;
+    this.updateCard(cardId, (c) => {
+      nextBurner = !c.burnerMode;
+      return { ...c, burnerMode: nextBurner };
+    });
+    this.syncVaultToFirestore().catch(() => {});
+    return nextBurner;
+  }
+
+  public generateWalletPassPayload(cardId: string, platform: "apple" | "google"): {
+    platform: "apple" | "google";
+    passTypeIdentifier: string;
+    serialNumber: string;
+    organizationName: string;
+    cardholder: string;
+    cardName: string;
+    network: string;
+    luhnVerified: boolean;
+    maskedPan: string;
+    last4: string;
+    expiry: string;
+    bsb: string;
+    accountNumber: string;
+    payId: string;
+    partnershipTier: string;
+    benefits: string[];
+    qrTokenUri: string;
+    issuedAt: string;
+  } | null {
+    const card = this.getCardById(cardId);
+    if (!card) return null;
+    const healed = this.hydrateCardDefaults(card);
+    const serial = `VAL-${platform.toUpperCase()}-${healed.last4}-${Date.now().toString(36).toUpperCase()}`;
+    const qrTokenUri = `valourian://wallet-pass/${platform}/${encodeURIComponent(healed.id)}?last4=${healed.last4}&net=${encodeURIComponent(healed.network)}&exp=${encodeURIComponent(healed.expiry)}&luhn=1&holder=${encodeURIComponent(TARGET_LINK_HOLDER)}`;
+
+    return {
+      platform,
+      passTypeIdentifier: platform === "apple" ? "pass.com.valourian.card.sovereign" : "valourian.google.wallet.card.v1",
+      serialNumber: serial,
+      organizationName: "Valourian Capital Management",
+      cardholder: TARGET_LINK_HOLDER,
+      cardName: healed.name,
+      network: healed.network,
+      luhnVerified: verifyLuhnMod10(healed.fullNumber),
+      maskedPan: `•••• •••• •••• ${healed.last4}`,
+      last4: healed.last4,
+      expiry: healed.expiry,
+      bsb: healed.bsb,
+      accountNumber: healed.accountNumber,
+      payId: healed.payId,
+      partnershipTier: healed.partnershipTier || this.getPartnershipTier(healed.network),
+      benefits: healed.vipPerks || ["5.0% Cashback", "0% FX Worldwide", "Airport Lounge Access"],
+      qrTokenUri,
+      issuedAt: new Date().toISOString(),
+    };
+  }
+
+  public downloadWalletPassFile(cardId: string, platform: "apple" | "google"): boolean {
+    const payload = this.generateWalletPassPayload(cardId, platform);
+    if (!payload || typeof document === "undefined") return false;
+    this.provisionWalletPass(cardId);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `valourian-${platform}-wallet-${payload.last4}.walletpass.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return true;
   }
 
   public switchCardCurrency(cardId: string, newCurrency: string): boolean {

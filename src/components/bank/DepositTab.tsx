@@ -15,8 +15,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
-import { db } from "../../firebase";
+import { safeUpdateUserBalances, recordUnifiedTransaction } from "../../services/cloudSessionGuard";
 
 interface DepositTabProps {
   user: any;
@@ -52,20 +51,12 @@ export function DepositTab({ user, balances, setBalances, onNavigateTab }: Depos
     try {
       const currentAud = balances[currency] || 0;
       const updatedBalance = currentAud + cleanAmt;
-
-      if (user?.uid) {
-        const userRef = doc(db, "users", user.uid);
-        await updateDoc(userRef, {
-          [`balances.${currency}`]: updatedBalance,
-        });
-      }
+      const nextBalances = { ...balances, [currency]: updatedBalance };
 
       if (setBalances) {
-        setBalances(prev => ({
-          ...prev,
-          [currency]: updatedBalance
-        }));
+        setBalances(nextBalances);
       }
+      await safeUpdateUserBalances(nextBalances);
 
       const receiptId = `DEP-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const receiptData = {
@@ -81,14 +72,12 @@ export function DepositTab({ user, balances, setBalances, onNavigateTab }: Depos
         targetAccount: "Commonwealth Bank of Australia (062-140 • 11680690)"
       };
 
-      if (user?.uid) {
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          ...receiptData,
-          type: "deposit",
-          description: `Instant Capital Inbound via ${receiptData.rail}`
-        });
-      }
+      await recordUnifiedTransaction({
+        ...receiptData,
+        recipient: receiptData.targetAccount,
+        type: "deposit",
+        description: `Instant Capital Inbound via ${receiptData.rail}`
+      });
 
       setLastReceipt(receiptData);
       setAmount("");

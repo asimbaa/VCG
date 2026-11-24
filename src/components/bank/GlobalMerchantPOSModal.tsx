@@ -128,13 +128,24 @@ export const GlobalMerchantPOSModal: React.FC<GlobalMerchantPOSModalProps> = ({
           region: selectedMerchant.region,
           foreignAmount: numAmount,
           foreignCurrency: selectedMerchant.currency,
-          category: selectedMerchant.category
+          category: selectedMerchant.category,
+          channel: 'in_store',
         });
 
         setIsProcessing(false);
+        if (!result.success) {
+          toast.error(result.declinedReason || "Transaction declined by card guardrail.");
+          return;
+        }
         setLastReceipt(result.transaction);
         setRecentTransactions(unifiedBankCardSync.getRecentTransactions());
 
+        if (result.burnerAutoLocked) {
+          toast(`Single-use burner ${currentCard.name} automatically locked after charge.`, { icon: '🛡️' });
+        }
+        if (result.autoTopUpTriggered) {
+          toast.success(`Auto Top-Up funded +$${(result.autoTopUpAmount || 0).toLocaleString()} AUD.`);
+        }
         toast.success(
           `APPROVED! ${selectedMerchant.currency} ${numAmount.toLocaleString()} paid at ${selectedMerchant.name}.\nEarned +$${result.cashbackEarned.toLocaleString()} AUD Cashback!`,
           { duration: 5500, icon: "💳" }

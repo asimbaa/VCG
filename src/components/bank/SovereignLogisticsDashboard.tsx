@@ -12,8 +12,8 @@ import {
   Bookmark, ZoomIn, ZoomOut, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Sun, Moon, Shield
 } from 'lucide-react';
-import { db } from "../../firebase";
-import { collection, addDoc, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { auth, db } from "../../firebase";
+import { collection, addDoc, getDocs, query, orderBy, limit, where } from "firebase/firestore";
 
 // Setup custom icons for Leaflet to fix default icon issues
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -195,13 +195,16 @@ export function SovereignLogisticsDashboard() {
   useEffect(() => {
     const fetchRoutes = async () => {
       try {
-        const qRoutes = query(collection(db, "favorite_routes"), limit(10));
-        const snap = await getDocs(qRoutes);
-        const list: any[] = [];
-        snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-        if (list.length > 0) {
-          setFavoriteRoutes(list);
-          return;
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const qRoutes = query(collection(db, "favorite_routes"), where("userId", "==", uid), limit(10));
+          const snap = await getDocs(qRoutes);
+          const list: any[] = [];
+          snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+          if (list.length > 0) {
+            setFavoriteRoutes(list);
+            return;
+          }
         }
       } catch (err) {
         console.warn("Firestore favorite routes notice:", err);
@@ -251,7 +254,10 @@ export function SovereignLogisticsDashboard() {
       setFavoriteRoutes(prev => [newRoute, ...prev]);
 
       try {
-        await addDoc(collection(db, "favorite_routes"), newRoute);
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          await addDoc(collection(db, "favorite_routes"), { ...newRoute, userId: uid });
+        }
       } catch (err) {
         console.warn("Firestore snapshot record (cached):", err);
       }

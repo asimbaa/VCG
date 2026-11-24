@@ -1,5 +1,6 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend } from 'recharts';
+import { SafeResponsiveContainer } from '../shared/SafeResponsiveContainer';
 import { TrendingUp, BarChart2 } from 'lucide-react';
 
 const data = [
@@ -29,7 +30,7 @@ export function HistoricalYieldComparison() {
       </div>
       
       <div className="h-[300px] w-full min-w-0 relative">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+        <SafeResponsiveContainer minHeight={240}>
           <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} dy={10} />
@@ -43,7 +44,7 @@ export function HistoricalYieldComparison() {
             <Line type="monotone" dataKey="nasdaq" name="NASDAQ-100" stroke="#0ea5e9" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             <Line type="monotone" dataKey="sp500" name="S&P 500" stroke="#94a3b8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>
-        </ResponsiveContainer>
+        </SafeResponsiveContainer>
       </div>
     </div>
   );

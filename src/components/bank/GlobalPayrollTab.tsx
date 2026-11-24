@@ -14,8 +14,7 @@ import {
   Zap
 } from "lucide-react";
 import { toast } from "sonner";
-import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
-import { db } from "../../firebase";
+import { safeUpdateUserBalances, recordUnifiedTransaction } from "../../services/cloudSessionGuard";
 
 interface PayrollMember {
   id: string;
@@ -116,24 +115,18 @@ export function GlobalPayrollTab({ user, balances, setBalances }: GlobalPayrollT
       }
 
       const updatedBalance = currentAud - totalNet;
+      const nextBalances = { ...balances, AUD: updatedBalance };
 
-      if (user?.uid) {
-        const userRef = doc(db, "users", user.uid);
-        await updateDoc(userRef, {
-          "balances.AUD": updatedBalance,
-        });
-
-        await addDoc(collection(db, "transactions"), {
-          userId: user.uid,
-          date: new Date().toISOString(),
-          amount: totalNet,
-          currency: "AUD",
-          recipient: "Global Executive Payroll & Staff Tranche",
-          type: "payroll",
-          status: "completed",
-          description: `Disbursed $${totalNet.toLocaleString()} AUD across 5 executive and engineering tranches with full PAYG & Super reporting.`
-        });
-      }
+      await safeUpdateUserBalances(nextBalances);
+      await recordUnifiedTransaction({
+        date: new Date().toISOString(),
+        amount: -totalNet,
+        currency: "AUD",
+        recipient: "Global Executive Payroll & Staff Tranche",
+        type: "payroll",
+        status: "completed",
+        description: `Disbursed $${totalNet.toLocaleString()} AUD across 5 executive and engineering tranches with full PAYG & Super reporting.`
+      });
 
       if (setBalances) {
         setBalances(prev => ({

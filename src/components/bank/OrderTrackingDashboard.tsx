@@ -1,6 +1,6 @@
 import { User } from "firebase/auth";
 import { collection, query, orderBy, getDocs, limit } from "firebase/firestore";
-import { db } from "../../firebase";
+import { auth, db } from "../../firebase";
 import { Car, FileText, Home, ShieldCheck } from "lucide-react";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,13 +27,14 @@ export function OrderTrackingDashboard({ user }: { user?: User | null }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
       setLoading(false);
       return;
     }
     const fetchOrders = async () => {
       try {
-        const q = query(collection(db, "users", user.uid, "receipts"), orderBy("timestamp", "desc"), limit(10));
+        const q = query(collection(db, "users", uid, "receipts"), orderBy("timestamp", "desc"), limit(10));
         const snap = await getDocs(q);
         const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         

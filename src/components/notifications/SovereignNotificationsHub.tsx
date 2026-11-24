@@ -84,9 +84,10 @@ export const SovereignNotificationsHub: React.FC<SovereignNotificationsHubProps>
   const [emailStatus, setEmailStatus] = useState<string>('Operational');
   const [dbBriefs, setDbBriefs] = useState<any[]>([]);
 
-  // Listen to Firestore real-time notification decrees
+  // Listen to Firestore real-time notification decrees (verified sessions only)
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
+    const cu = auth.currentUser;
+    const uid = cu && (!cu.email || cu.emailVerified) && cu.uid !== "ceo-founder-override" && cu.uid !== "mock-user-123" ? cu.uid : null;
     if (!uid) return;
     try {
       const q = query(collection(db, "notifications"), where("userId", "==", uid), orderBy("createdAt", "desc"));

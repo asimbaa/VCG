@@ -62,8 +62,15 @@ import {
   EmailPreviewModal,
   EmailData,
 } from "./EmailService";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { creChargeFacilitiesService } from "../../services/creChargeFacilitiesService";
 import {
-  ResponsiveContainer,
+  UniversalPaymentRailSelector,
+  UniversalPaymentRail,
+  executeUniversalSettlement,
+} from "../shared/UniversalPaymentRailSelector";
+import { SafeResponsiveContainer } from "../shared/SafeResponsiveContainer";
+import {
   AreaChart,
   Area,
   XAxis,
@@ -71,6 +78,14 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import {
+  getVerifiedCloudUid,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalTransactions,
+  getAvailableBenefitVouchers,
+  redeemBenefitVoucher,
+} from "../../services/cloudSessionGuard";
 const DeliveryMap = React.lazy(() =>
   import("./DeliveryMap").then((m) => ({ default: m.DeliveryMap })),
 );
@@ -990,101 +1005,36 @@ export function UberEatsApp({
   const [addressAmasStatus, setAddressAmasStatus] =
     useState<string>("AMAS PASS");
 
-  // Linked Westpac/CBA Aussie debit or credit cards
-  const [linkedCards, setLinkedCards] = useState<any[]>(() => {
-    try {
-      const saved = window.localStorage.getItem("valourian_digital_cards_v8");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          return parsed.map((card: any) => ({
-            id: card.id,
-            cardholder: card.holder || "Mr Asim Aryal",
-            cardNumber: card.fullNumber || card.cardNumber || card.number,
-            expiry: card.expiry,
-            cvv: card.cvv,
-            pin: card.pin,
-            bank: card.network || card.bank || "Valourian Capital",
-            bsb: card.bsb || "062-951",
-            accountNumber: card.accountNumber || "1099 8801",
-            balance: card.balance ?? 100000000,
-            network: card.network?.includes("Visa")
-              ? "Visa"
-              : card.network?.includes("American Express")
-                ? "Amex"
-                : "Mastercard",
-          }));
-        }
-      }
-    } catch {}
-    return [
-      {
-        id: "visa_primary",
-        cardholder: "ASIM ARYAL",
-        cardNumber: "4242 4242 4242 4242",
-        expiry: "12/28",
-        cvv: "123",
-        pin: "0000",
-        bank: "Valourian Capital",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        balance: 15000,
-        network: "Visa",
-      },
-      {
-        id: "mastercard_sec",
-        cardholder: "ASIM ARYAL",
-        cardNumber: "5105 1051 0510 5100",
-        expiry: "05/29",
-        cvv: "456",
-        pin: "1234",
-        bank: "Valourian Capital",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        balance: 12500,
-        network: "Mastercard",
-      },
-    ];
+  const mapUnifiedToUberEatsCard = (card: any) => ({
+    id: card.id,
+    cardholder: card.holder || "MR. ASIM ARYAL",
+    cardNumber: card.fullNumber || card.cardNumber || card.number,
+    expiry: card.expiry,
+    cvv: card.dynamicCvv || card.cvv,
+    pin: card.pin || "4912",
+    bank: card.name || card.network || "Valourian Capital",
+    bsb: card.bsb || "062-951",
+    accountNumber: card.accountNumber || "1099 8801",
+    balance: card.balance ?? 1000000000,
+    network: card.network?.includes("Visa")
+      ? "Visa"
+      : card.network?.includes("AMEX") || card.network?.includes("American Express")
+        ? "Amex"
+        : "Mastercard",
   });
 
+  // Live Bank Cards synced from unifiedBankCardSync
+  const [linkedCards, setLinkedCards] = useState<any[]>(() =>
+    unifiedBankCardSync.getCards().map(mapUnifiedToUberEatsCard),
+  );
+
   useEffect(() => {
-    const syncCards = () => {
-      try {
-        const saved = window.localStorage.getItem("valourian_digital_cards_v8");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.length > 0) {
-            setLinkedCards(
-              parsed.map((card: any) => ({
-                id: card.id,
-                cardholder: card.holder || "Mr Asim Aryal",
-                cardNumber: card.fullNumber || card.cardNumber || card.number,
-                expiry: card.expiry,
-                cvv: card.cvv,
-                pin: card.pin,
-                bank: card.network || card.bank || "Valourian Capital",
-                bsb: card.bsb || "062-951",
-                accountNumber: card.accountNumber || "1099 8801",
-                balance: card.balance ?? 100000000,
-                network: card.network?.includes("Visa")
-                  ? "Visa"
-                  : card.network?.includes("American Express")
-                    ? "Amex"
-                    : "Mastercard",
-              })),
-            );
-          }
-        }
-      } catch (e) {
-        console.error("Failed to sync cards in UberEatsApp", e);
+    const unsub = unifiedBankCardSync.subscribe((nextCards) => {
+      if (nextCards.length > 0) {
+        setLinkedCards(nextCards.map(mapUnifiedToUberEatsCard));
       }
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key && e.key !== "valourian_vcard_db_247") return;
-      syncCards();
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    });
+    return () => unsub();
   }, []);
 
   const [selectedPaymentCard, setSelectedPaymentCard] =
@@ -1095,14 +1045,19 @@ export function UberEatsApp({
   >("idle");
   const [scannedCardData, setScannedCardData] = useState<any | null>(null);
 
-  // Checkout Payment states with instant camera populate options
+  // Checkout Payment states with Universal Zero-Decline Bank Card, CreChargeFacility & Vault
   const [showCardQR, setShowCardQR] = useState(false);
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<
-    "vault" | "card" | "qr"
-  >("vault");
+    "vault" | "card" | "facility" | "qr"
+  >("card");
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(() =>
+    creChargeFacilitiesService.getActiveFacilityId(),
+  );
   const [checkoutCardholder, setCheckoutCardholder] =
     useState<string>("Mr Asim Aryal");
-  const [checkoutCardNumber, setCheckoutCardNumber] = useState<string>("");
+  const [checkoutCardNumber, setCheckoutCardNumber] = useState<string>(() =>
+    unifiedBankCardSync.getActivePaymentCardId(),
+  );
   const [checkoutExpiry, setCheckoutExpiry] = useState<string>("");
   const [checkoutCvv, setCheckoutCvv] = useState<string>("");
   const [checkoutCardBank, setCheckoutCardBank] = useState<string>(
@@ -1113,7 +1068,9 @@ export function UberEatsApp({
   const [isScanningFromCheckout, setIsScanningFromCheckout] = useState(false);
 
   // Instant card transfer state
-  const [transferTargetId, setTransferTargetId] = useState<string>("card-1");
+  const [transferTargetId, setTransferTargetId] = useState<string>(
+    () => unifiedBankCardSync.getCards()[0]?.id || "amex_au_centurion_black",
+  );
   const [transferAmountInput, setTransferAmountInput] = useState<string>("");
   const [transferReference, setTransferReference] =
     useState<string>("Sovereign Payout");
@@ -1124,7 +1081,21 @@ export function UberEatsApp({
   const [voucherCode, setVoucherCode] = useState<string>("");
   const [isVoucherApplied, setIsVoucherApplied] = useState<boolean>(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
-  const [cart, setCart] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>(() => {
+    try {
+      const saved = window.localStorage.getItem("valourian_ubereats_cart");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("valourian_ubereats_cart", JSON.stringify(cart));
+    } catch {}
+  }, [cart]);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [voucherAmount, setVoucherAmount] = useState(100);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1233,8 +1204,8 @@ export function UberEatsApp({
 
   // Load and sync past orders
   const loadScheduledOrders = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!user?.uid || !uid) return;
+    const uid = getVerifiedCloudUid();
+    if (!uid || !db) return;
     setIsLoadingScheduled(true);
     try {
       const q = query(collection(db, "scheduled_orders"), where("userId", "==", uid));
@@ -1264,94 +1235,94 @@ export function UberEatsApp({
   }, []);
 
   const loadOrderHistory = async () => {
-    if (!user || !user.uid) return;
+    const uid = getVerifiedCloudUid();
+    const localOrders = getLocalTransactions().filter(
+      (d: any) => d.recipient && d.recipient.includes("Uber Eats")
+    );
     setIsLoadingHistory(true);
     try {
-      const q = query(collection(db, "transactions"));
-      const querySnapshot = await getDocs(q);
-      const orders: any[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const d = docSnap.data();
-        if (
-          d.userId === user.uid &&
-          d.recipient &&
-          d.recipient.includes("Uber Eats")
-        ) {
-          orders.push({ id: docSnap.id, ...d });
-        }
+      const cloudOrders: any[] = [];
+      if (uid && db) {
+        const q = query(collection(db, "transactions"), where("userId", "==", uid));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d.recipient && d.recipient.includes("Uber Eats")) {
+            cloudOrders.push({ id: docSnap.id, ...d });
+          }
+        });
+      }
+      const merged = [...localOrders, ...cloudOrders];
+      const uniq = new Map<string, any>();
+      merged.forEach((o) => {
+        if (o?.id && !uniq.has(o.id)) uniq.set(o.id, o);
       });
-      orders.sort(
+      const orders = Array.from(uniq.values()).sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
       setPastOrders(orders);
     } catch (error) {
-      console.error("Error loading order history", error);
+      console.warn("Order history sync notice:", error);
+      setPastOrders(localOrders);
     } finally {
       setIsLoadingHistory(false);
     }
   };
 
   const downloadReceiptsPDF = async () => {
-    if (!user || !user.uid) return;
+    const uid = getVerifiedCloudUid();
     setIsLoadingHistory(true);
     try {
       toast.info("Aggregating global receipts...");
       const tableData: any[] = [];
-      
-      // Fetch general transactions (Eats, booking, etc)
-      const q = query(collection(db, "transactions"));
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        const d = docSnap.data();
-        if (d.userId === user.uid) {
+
+      const localList = getLocalTransactions();
+      localList.forEach((d: any) => {
+        const orderDate = new Date(d.date).toLocaleDateString("en-AU", {
+          day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        tableData.push([
+          orderDate,
+          d.recipient || "Ecosystem Order",
+          d.description || "-",
+          `$${Math.abs(d.amount || 0).toFixed(2)}`
+        ]);
+      });
+
+      if (uid && db) {
+        const q = query(collection(db, "transactions"), where("userId", "==", uid));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach((docSnap) => {
+          const d = docSnap.data();
           const orderDate = new Date(d.date).toLocaleDateString("en-AU", {
             day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
           });
-          const itemsStr = d.items?.map((it: any) => `${it.quantity}x ${it.name}`).join(", ") || "";
+          const itemsStr = d.items?.map((it: any) => `${it.quantity || 1}x ${it.name}`).join(", ") || "";
           tableData.push([
             orderDate,
             d.recipient || "Ecosystem Order",
             d.description || itemsStr || "-",
             `$${Math.abs(d.amount || 0).toFixed(2)}`
           ]);
-        }
-      });
-      
-      // Fetch Uber trips
-      const qTrips = query(collection(db, "completed_trips"));
-      const tripSnap = await getDocs(qTrips);
-      tripSnap.forEach((docSnap) => {
-        const d = docSnap.data();
-        if (d.userId === user.uid) {
-          const startDate = new Date(d.startTime);
-          const formattedDate = startDate.toLocaleDateString("en-AU", {
-             day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-          });
-          tableData.push([
-            formattedDate,
-            `Uber Trip (${d.tier || "Unknown"})`,
-            `Driver: ${d.driver || "Unknown"} | ${d.carModel || ""}`,
-            `$${Math.abs(d.amount || 0).toFixed(2)}`
-          ]);
-        }
-      });
+        });
+      }
 
       if (tableData.length === 0) {
-        toast.error("No receipts found in global history.");
+        toast.info("Place an order first to export receipts.");
         return;
       }
       
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text("Sovereign Ecosystem - Global Receipts", 14, 22);
+      const pdf = new jsPDF();
+      pdf.setFontSize(18);
+      pdf.text("Sovereign Ecosystem - Global Receipts", 14, 22);
       
-      renderAutoTable(doc, {
+      renderAutoTable(pdf, {
         startY: 30,
         head: [["Date", "Entity", "Description", "Amount"]],
         body: tableData,
       });
       
-      doc.save("global-ecosystem-receipts.pdf");
+      pdf.save("global-ecosystem-receipts.pdf");
       toast.success("Global receipts downloaded successfully.");
     } catch (err) {
       console.error(err);
@@ -1363,19 +1334,20 @@ export function UberEatsApp({
 
   useEffect(() => {
     const loadFavorites = async () => {
-      if (user && user.uid) {
+      const uid = getVerifiedCloudUid();
+      if (uid && db) {
         try {
           const q = query(
-            collection(db, "users", user.uid, "uber_eats_favorites"),
+            collection(db, "users", uid, "uber_eats_favorites"),
           );
           const querySnapshot = await getDocs(q);
           const favs: number[] = [];
-          querySnapshot.forEach((doc) => {
-            favs.push(doc.data().restaurantId);
+          querySnapshot.forEach((docSnap) => {
+            favs.push(docSnap.data().restaurantId);
           });
           setFavorites(favs);
         } catch (error) {
-          console.error("Error loading favorites", error);
+          console.warn("Favorites load notice:", error);
         }
       }
     };
@@ -1384,17 +1356,12 @@ export function UberEatsApp({
     loadScheduledOrders();
   }, [user]);
 
-  // Background Tracker to check if order freezes
   useEffect(() => {
     if (!activeOrder || !activeOrder.id) return;
     if (activeOrder.status === "delivered") return;
 
-    // Check if progress hasn't advanced for > 5 mins
     const freezeInterval = setInterval(
       () => {
-        // In a real scenario we could check a `lastUpdated` timestamp in the activeOrder document
-        // Let's verify by just using an arbitrary timestamp tracker if needed
-        // To simulate an alert if needed
         if (activeOrder.lastUpdated) {
           const lastUpTime = new Date(activeOrder.lastUpdated).getTime();
           const now = Date.now();
@@ -1414,19 +1381,18 @@ export function UberEatsApp({
 
   // Fetch Global Vouchers
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!user?.uid || !uid) return;
+    const uid = getVerifiedCloudUid();
+    if (!uid || !db) return;
     setIsSyncingVouchers(true);
     const q = query(collection(db, "global_vouchers"), where("creatorId", "==", uid));
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const vouchers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const vouchers = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
         setMyVouchers(vouchers);
         setIsSyncingVouchers(false);
       },
-      (err) => {
-        console.warn("Global vouchers snapshot notice:", err);
+      () => {
         setIsSyncingVouchers(false);
       }
     );
@@ -1435,8 +1401,8 @@ export function UberEatsApp({
 
   // Synchronize Active Order from fast Firestore 'active_orders' collection
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!user?.uid || !uid) return;
+    const uid = getVerifiedCloudUid();
+    if (!uid || !db) return;
     const unsub = onSnapshot(
       query(collection(db, "active_orders"), where("userId", "==", uid)),
       (snapshot) => {
@@ -1458,13 +1424,10 @@ export function UberEatsApp({
               return { id: activeDocs[0].id, ...docData } as any;
             });
           } else {
-            // Check if we just delivered it (if the latest doc was delivered)
             const deliveredDocs = snapshot.docs.filter(
               (d) => d.data().status === "delivered",
             );
             if (deliveredDocs.length > 0) {
-              // We could show delivered state temporarily, but let's clear it
-              // or let the interval handle it
               const lastDelivered = deliveredDocs.sort((a, b) =>
                 b.data().timestamp.localeCompare(a.data().timestamp),
               )[0];
@@ -1478,9 +1441,7 @@ export function UberEatsApp({
           }
         }
       },
-      (err) => {
-        console.warn("Active orders snapshot notice:", err);
-      }
+      () => {}
     );
     return () => unsub();
   }, [user]);
@@ -1502,13 +1463,20 @@ export function UberEatsApp({
             SIMULATION_ROUTES[prev.restaurantName] ||
             SIMULATION_ROUTES["Quay Sydney"];
           const finalCoord = route_coords[route_coords.length - 1];
-          await updateDoc(doc(db, "active_orders", prev.id), {
-            status: "delivered",
-            progress: 100,
-            secondsRemaining: 0,
-            latitude: finalCoord[0],
-            longitude: finalCoord[1],
-          });
+          const cloudUid = getVerifiedCloudUid();
+          if (cloudUid && db && !String(prev.id).startsWith("local-order-")) {
+            await updateDoc(doc(db, "active_orders", prev.id), {
+              status: "delivered",
+              progress: 100,
+              secondsRemaining: 0,
+              latitude: finalCoord[0],
+              longitude: finalCoord[1],
+            });
+          } else {
+            setActiveOrder((cur: any) =>
+              cur ? { ...cur, status: "delivered", progress: 100, secondsRemaining: 0, latitude: finalCoord[0], longitude: finalCoord[1] } : null
+            );
+          }
           sendBrowserNotification(
             "UberEats Delivered",
             "Driver drops the food at my door in Unit 712, 15 BARTON RD Artarmon NSW 2064 Australia",
@@ -1550,28 +1518,37 @@ export function UberEatsApp({
             );
         }
 
-
-        if (nextStatus !== prev.status) {
-          if (nextStatus === 'preparing') sendBrowserNotification('UberEats Alert', 'Your order is being prepared.');
-          if (nextStatus === 'transit') sendBrowserNotification('UberEats Alert', 'Order picked up! Driver is on route for delivery.');
-        }
-
         const cappedProgress = Math.min(nextProgress, 98);
-
-
         const route_coords =
           SIMULATION_ROUTES[prev.restaurantName] ||
           SIMULATION_ROUTES["Quay Sydney"];
         const coords = getCoordAtProgress(route_coords, cappedProgress);
 
-        await updateDoc(doc(db, "active_orders", prev.id), {
-          status: nextStatus,
-          progress: cappedProgress,
-          secondsRemaining: nextSeconds,
-          latitude: coords.lat,
-          longitude: coords.lng,
-          lastUpdated: new Date().toISOString(),
-        });
+        const cloudUid = getVerifiedCloudUid();
+        if (cloudUid && db && !String(prev.id).startsWith("local-order-")) {
+          await updateDoc(doc(db, "active_orders", prev.id), {
+            status: nextStatus,
+            progress: cappedProgress,
+            secondsRemaining: nextSeconds,
+            latitude: coords.lat,
+            longitude: coords.lng,
+            lastUpdated: new Date().toISOString(),
+          });
+        } else {
+          setActiveOrder((cur: any) =>
+            cur
+              ? {
+                  ...cur,
+                  status: nextStatus,
+                  progress: cappedProgress,
+                  secondsRemaining: nextSeconds,
+                  latitude: coords.lat,
+                  longitude: coords.lng,
+                  lastUpdated: new Date().toISOString(),
+                }
+              : null
+          );
+        }
       } catch (err) {
         console.error("Error updating tracker", err);
       }
@@ -1645,28 +1622,29 @@ export function UberEatsApp({
       return toast.error("Must be logged in to save favorites");
 
     const isFav = favorites.includes(restaurantId);
+    const cloudUid = getVerifiedCloudUid();
 
     try {
       if (isFav) {
         setFavorites(favorites.filter((id) => id !== restaurantId));
-        const q = query(
-          collection(db, "users", user.uid, "uber_eats_favorites"),
-        );
-        const querySnapshot = await getDocs(q);
-        querySnapshot.forEach(async (d) => {
-          if (d.data().restaurantId === restaurantId) {
-            await deleteDoc(
-              doc(db, "users", user.uid, "uber_eats_favorites", d.id),
-            );
-          }
-        });
+        if (cloudUid && db) {
+          const q = query(collection(db, "users", cloudUid, "uber_eats_favorites"));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach(async (d) => {
+            if (d.data().restaurantId === restaurantId) {
+              await deleteDoc(doc(db, "users", cloudUid, "uber_eats_favorites", d.id));
+            }
+          });
+        }
         toast.success("Removed from favorites");
       } else {
         setFavorites([...favorites, restaurantId]);
-        await addDoc(collection(db, "users", user.uid, "uber_eats_favorites"), {
-          restaurantId,
-          timestamp: new Date().toISOString(),
-        });
+        if (cloudUid && db) {
+          await addDoc(collection(db, "users", cloudUid, "uber_eats_favorites"), {
+            restaurantId,
+            timestamp: new Date().toISOString(),
+          });
+        }
         toast.success("Added to favorites");
       }
     } catch (error) {
@@ -1687,117 +1665,56 @@ export function UberEatsApp({
       const discountAmount = appliedVoucher ? appliedVoucher.amount : 0;
       const totalToPay = Math.max(0, cartTotal + tipAmount - discountAmount);
 
-      if (checkoutPaymentMethod === "card") {
-        const checkoutCreditCardNumber =
-          linkedCards.find((c) => c.id === checkoutCardNumber)?.cardNumber ||
-          checkoutCardNumber;
-        const checkoutCreditCardNetwork =
-          linkedCards.find((c) => c.id === checkoutCardNumber)?.network ||
-          checkoutCardNetwork;
+      const railToUse: UniversalPaymentRail =
+        checkoutPaymentMethod === "facility"
+          ? "facility"
+          : checkoutPaymentMethod === "vault"
+            ? "vault"
+            : "card";
 
-        if (
-          !checkoutCreditCardNumber ||
-          checkoutCreditCardNumber.trim().length < 12
-        ) {
-          toast.error(
-            "Please enter a valid Credit or Debit Card first, or Scan to populate details.",
-          );
-          setIsProcessing(false);
-          return;
-        }
-        if (
-          !checkoutExpiry ||
-          !checkoutExpiry.includes("/") ||
-          checkoutExpiry.trim().length < 5
-        ) {
-          toast.error("Please enter a valid Expiry Date (MM/YY format).");
-          setIsProcessing(false);
-          return;
-        }
-        if (!checkoutCvv || checkoutCvv.trim().length < 3) {
-          toast.error("Please enter your 3-digit CVV security code.");
-          setIsProcessing(false);
-          return;
-        }
-        // Simulated premium card authorization successful!
-        toast.info(
-          `Authorising payment via Secure ${checkoutCreditCardNetwork}...`,
-        );
+      const matchedUnified = unifiedBankCardSync
+        .getCards()
+        .find((c) => c.id === checkoutCardNumber || c.fullNumber === checkoutCardNumber);
 
-        // Process actual digital card deduction if possible
-        try {
-          const savedCardsStr = window.localStorage.getItem('valourian_digital_cards_v8');
-          if (savedCardsStr) {
-            let savedCards = JSON.parse(savedCardsStr);
-            const cardIndex = savedCards.findIndex((c: any) => c.id === checkoutCardNumber || c.cardNumber === checkoutCreditCardNumber);
-            if (cardIndex !== -1) {
-              if (savedCards[cardIndex].balance < totalToPay) {
-                toast.error(`Card ${checkoutCreditCardNetwork} has insufficient balance. (${savedCards[cardIndex].balance} AUD)`);
-                setIsProcessing(false);
-                return;
-              }
-              savedCards[cardIndex].balance -= totalToPay;
-              window.localStorage.setItem('valourian_digital_cards_v8', JSON.stringify(savedCards));
-            }
-          }
-        } catch (e) {
-          console.error("Failed to deduct from digital card", e);
-        }
+      const settlement = await executeUniversalSettlement({
+        rail: railToUse,
+        cardId: matchedUnified?.id || checkoutCardNumber || unifiedBankCardSync.getActivePaymentCardId(),
+        facilityId: selectedFacilityId,
+        amountAUD: totalToPay,
+        merchantName: `Uber Eats - ${selectedRestaurant?.name || "Sovereign Partner"}`,
+        merchantLocation: deliveryAddress || "Artarmon NSW 2064 Australia",
+        storeApp: "UberEatsApp",
+        vaultBalanceAUD: balances.AUD || 0,
+        onVaultDeduct: async (newBal) => {
+          const updatedBalances = {
+            ...balances,
+            AUD: newBal,
+          };
+          await safeUpdateUserBalances(updatedBalances);
+          setBalances(updatedBalances);
+        },
+      });
 
-      } else {
-        if ((balances.AUD || 0) < totalToPay) {
-          toast.error(
-            `Insufficient AUD balance. Total required: $${Math.max(0, cart.reduce((acc, item) => acc + item.price, 0) + Math.round(((cart.reduce((acc, item) => acc + item.price, 0) * tipPercentage) / 100) * 100) / 100 - (appliedVoucher ? appliedVoucher.amount : 0)).toFixed(2)} AUD. Available: $${(balances.AUD || 0).toFixed(2)} AUD.`,
-          );
-          setIsProcessing(false);
-          return;
-        }
-
-        const updatedBalances = {
-          ...balances,
-          AUD: (balances.AUD || 0) - totalToPay,
-        };
-
-        if (user && user.uid) {
-          await updateDoc(doc(db, "users", user.uid), {
-            balances: updatedBalances,
-          });
-        }
-        setBalances(updatedBalances);
+      if (!settlement.success) {
+        toast.error(settlement.error || "Payment authorization could not complete.");
+        setIsProcessing(false);
+        return;
       }
 
-      // 1. Mark voucher as claimed on Firestore if a voucher was applied at checkout
+      toast.success(
+        `Authorized $${totalToPay.toFixed(2)} AUD via ${settlement.labelUsed} (Auth ${settlement.authCode})`,
+      );
+
       if (appliedVoucher) {
-        try {
-          const voucherRes = await getDocs(
-            query(
-              collection(db, "vouchers"),
-              where("code", "==", appliedVoucher.code),
-            ),
-          );
-          if (!voucherRes.empty) {
-            const vDoc = voucherRes.docs[0];
-            await setDoc(
-              doc(db, "vouchers", vDoc.id),
-              {
-                claimed: true,
-                claimedBy: user?.uid || "anonymous",
-                claimedAt: new Date().toISOString(),
-              },
-              { merge: true },
-            );
-          }
-        } catch (voucherErr) {
-          console.error("Error setting voucher as claimed:", voucherErr);
-        }
+        await redeemBenefitVoucher(appliedVoucher.code);
       }
 
+      const cloudUid = getVerifiedCloudUid();
       const itemsDetail = cart.map((i) => ({ name: i.name, price: i.price }));
 
       if (isScheduled) {
-        // Create scheduled order in Firestore
-        await addDoc(collection(db, "scheduled_orders"), {
-          userId: user?.uid || "anonymous",
+        const schedPayload = {
+          userId: cloudUid || "local-session",
           restaurantName: selectedRestaurant.name,
           total: totalToPay,
           subtotal: cartTotal,
@@ -1810,54 +1727,39 @@ export function UberEatsApp({
           confirmationEmail: confirmationEmail,
           status: "scheduled",
           createdAt: new Date().toISOString(),
-        });
+        };
+        if (cloudUid && db) {
+          await addDoc(collection(db, "scheduled_orders"), schedPayload);
+        } else {
+          setScheduledOrders((prev) => [{ id: `local-sched-${Date.now()}`, ...schedPayload }, ...prev]);
+        }
 
-        // Add to standard transactions list as a "Scheduled Dispatch"
-        await addDoc(collection(db, "transactions"), {
-          userId: user?.uid || "anonymous",
+        await recordUnifiedTransaction({
           amount: -totalToPay,
           currency: "AUD",
-          date: new Date().toISOString(),
           recipient: `Uber Eats Scheduled - ${selectedRestaurant.name}`,
-          type: "card",
+          type: railToUse === "facility" ? "crecharge_facility" : "card",
           status: "pending",
-          description: `Scheduled delivery for ${new Date(
-            scheduledDateTime,
-          ).toLocaleDateString("en-AU", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })} - ${selectedRestaurant.name}`,
+          settlementRail: settlement.labelUsed,
+          description: `Scheduled delivery for ${new Date(scheduledDateTime).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} - ${selectedRestaurant.name}`,
           items: itemsDetail,
           deliveryAddress: deliveryAddress,
           confirmationEmail: confirmationEmail,
           scheduledTime: scheduledDateTime,
         });
 
-        if (user && user.uid) {
-          await sendEmailViaService(
-            user,
-            {
-              sender: "Uber Eats Logistics",
-              email: "logistics@ubereats.com",
-              receiverEmail: confirmationEmail,
-              subject: `[SCHEDULED] Your Uber Eats Order - ${selectedRestaurant.name}`,
-              preview: `Order scheduled for future dispatch on ${scheduledDateTime}`,
-              body: `Dear Mr. Asim,\n\nWe successfully locked your future procurement dispatch coordinates.\n\nDISPATCH WINDOW:\n----------------------------------------\n${new Date(
-                scheduledDateTime,
-              ).toLocaleString("en-AU", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}\n\nITEMS SUMMARY:\n----------------------------------------\n${itemsDetail.map((i) => `${i.name} ($${i.price} AUD)`).join("\n")}\n\nDELIVERY DESTINATION:\n----------------------------------------\n${deliveryAddress}\n\nORDER SUMMARY:\n----------------------------------------\nFood Subtotal: $${cartTotal.toFixed(2)} AUD\nDelivery Driver Tip: $${tipAmount.toFixed(2)} AUD\nVoucher Discount: -$${discountAmount.toFixed(2)} AUD\nTotal Charged: $${Math.max(0, cart.reduce((acc, item) => acc + item.price, 0) + Math.round(((cart.reduce((acc, item) => acc + item.price, 0) * tipPercentage) / 100) * 100) / 100 - (appliedVoucher ? appliedVoucher.amount : 0)).toFixed(2)} AUD\n\nOur autonomous fleet will trigger cooking preparation and airway transport exactly 30 minutes prior to delivery.\n\nThank you for choosing Uber Eats Sovereign.`,
-            },
-            setPreviewEmail,
-          );
-        }
+        await sendEmailViaService(
+          user,
+          {
+            sender: "Uber Eats Logistics",
+            email: "logistics@ubereats.com",
+            receiverEmail: confirmationEmail,
+            subject: `[SCHEDULED] Your Uber Eats Order - ${selectedRestaurant.name}`,
+            preview: `Order scheduled for future dispatch on ${scheduledDateTime}`,
+            body: `Dear Mr. Asim,\n\nWe successfully locked your future procurement dispatch coordinates.\n\nDISPATCH WINDOW:\n----------------------------------------\n${new Date(scheduledDateTime).toLocaleString("en-AU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}\n\nITEMS SUMMARY:\n----------------------------------------\n${itemsDetail.map((i) => `${i.name} ($${i.price} AUD)`).join("\n")}\n\nDELIVERY DESTINATION:\n----------------------------------------\n${deliveryAddress}\n\nORDER SUMMARY:\n----------------------------------------\nFood Subtotal: $${cartTotal.toFixed(2)} AUD\nDelivery Driver Tip: $${tipAmount.toFixed(2)} AUD\nVoucher Discount: -$${discountAmount.toFixed(2)} AUD\nTotal Charged: $${totalToPay.toFixed(2)} AUD\n\nOur autonomous fleet will trigger cooking preparation and airway transport exactly 30 minutes prior to delivery.\n\nThank you for choosing Uber Eats Sovereign.`,
+          },
+          setPreviewEmail,
+        );
 
         toast.success(
           `Order successfully scheduled for ${new Date(scheduledDateTime).toLocaleString()}! Account debited.`,
@@ -1871,7 +1773,6 @@ export function UberEatsApp({
         loadScheduledOrders();
         loadOrderHistory();
       } else {
-        // Immediate Order logic
         const checkoutCreditCardNumber =
           linkedCards.find((c) => c.id === checkoutCardNumber)?.cardNumber ||
           checkoutCardNumber;
@@ -1879,14 +1780,13 @@ export function UberEatsApp({
           linkedCards.find((c) => c.id === checkoutCardNumber)?.network ||
           checkoutCardNetwork;
 
-        await addDoc(collection(db, "transactions"), {
-          userId: user?.uid || "anonymous",
+        await recordUnifiedTransaction({
           amount: -totalToPay,
           currency: "AUD",
-          date: new Date().toISOString(),
           recipient: `Uber Eats - ${selectedRestaurant.name}`,
-          type: "card",
+          type: railToUse === "facility" ? "crecharge_facility" : "card",
           status: "completed",
+          settlementRail: settlement.labelUsed,
           description:
             checkoutPaymentMethod === "card"
               ? `Paid via ${checkoutCreditCardNetwork} card ending in ${checkoutCreditCardNumber.slice(-4)}`
@@ -1897,26 +1797,31 @@ export function UberEatsApp({
           deliveryInstructions: deliveryInstructions,
         });
 
-        // Initialize Tracker via Firestore (this triggers onSnapshot listener above)
-        const docRef = await addDoc(collection(db, "active_orders"), {
-          userId: user?.uid || "anonymous",
+        let orderId = `local-order-${Date.now()}`;
+        const activePayload = {
+          userId: cloudUid || "local-session",
           restaurantName: selectedRestaurant.name,
           total: totalToPay,
           items: itemsDetail,
-          status: "ordered",
+          status: "ordered" as const,
           deliveryInstructions: deliveryInstructions,
           progress: 10,
           secondsRemaining: 40,
           timestamp: new Date().toISOString(),
-        });
+        };
+        if (cloudUid && db) {
+          const docRef = await addDoc(collection(db, "active_orders"), activePayload);
+          orderId = docRef.id;
+        } else {
+          setActiveOrder({ id: orderId, ...activePayload });
+        }
 
-        // Disptach to Real-Time Backend Fleet Network
         try {
           const fleetResponse = await fetch('/api/fleet/dispatch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              orderId: docRef.id,
+              orderId,
               restaurantLocation: selectedRestaurant.name,
               dropoffLocation: deliveryAddress
             })
@@ -1924,80 +1829,50 @@ export function UberEatsApp({
           const fleetData = await fleetResponse.json();
           if (fleetData.success) {
             toast.success(`Workforce Network: Courier ${fleetData.driver.name} dispatched!`);
-            
-            // Trigger Real SMS
             try {
               await fetch('/api/sos/send-sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  message: `[VALOURIAN LOGISTICS]
-Courier ${fleetData.driver.name} is picking up your order from ${selectedRestaurant.name}. Track live: https://valourian.com/t/${docRef.id}`
+                  message: `[VALOURIAN LOGISTICS]\nCourier ${fleetData.driver.name} is picking up your order from ${selectedRestaurant.name}. Track live: https://valourian.com/t/${orderId}`
                 })
               });
-            } catch (smsError) {
-              console.error("SMS Dispatch failed", smsError);
-            }
-          }
-          if (fleetData.success) {
-            toast.success(`Workforce Network: Courier ${fleetData.driver.name} dispatched!`);
-          } else {
-            toast.error(fleetData.error || "Courier network busy.");
+            } catch {}
           }
         } catch (e) {
           console.error('Fleet dispatch error', e);
         }
 
-
-        if (user && user.uid) {
-          await sendEmailViaService(
-            user,
-            {
-              sender: "Uber Eats Receipts",
-              email: "receipts@ubereats.com",
-              receiverEmail: confirmationEmail,
-              subject: `Your Uber Eats Order from ${selectedRestaurant.name}`,
-              preview: `Your order for ${formatConverted(totalToPay)} is being prepared.`,
-              body: `Hi Asim,
-
-Your order from ${selectedRestaurant.name} is confirmed and will be dispatched shortly.
-
-DELIVERY DETAILS:
-----------------------------------------
-Destination Address: ${deliveryAddress}
-Specific Instructions: ${deliveryInstructions || "None provided"}
-Logistics: Uber Sovereign Fleet Priority
-
-ORDER SUMMARY:
-----------------------------------------
-Food Subtotal: $${cartTotal.toFixed(2)} AUD
-Delivery Driver Tip: $${tipAmount.toFixed(2)} AUD
-Voucher Discount: -$${discountAmount.toFixed(2)} AUD
-Total Charged: $${Math.max(0, cart.reduce((acc, item) => acc + item.price, 0) + Math.round(((cart.reduce((acc, item) => acc + item.price, 0) * tipPercentage) / 100) * 100) / 100 - (appliedVoucher ? appliedVoucher.amount : 0)).toFixed(2)} AUD
-
-Thank you for choosing Uber Eats Sovereign.`,
-            },
-            setPreviewEmail,
-          );
-        }
+        await sendEmailViaService(
+          user,
+          {
+            sender: "Uber Eats Receipts",
+            email: "receipts@ubereats.com",
+            receiverEmail: confirmationEmail,
+            subject: `Your Uber Eats Order from ${selectedRestaurant.name}`,
+            preview: `Your order for ${formatConverted(totalToPay)} is being prepared.`,
+            body: `Hi Asim,\n\nYour order from ${selectedRestaurant.name} is confirmed and will be dispatched shortly.\n\nDELIVERY DETAILS:\n----------------------------------------\nDestination Address: ${deliveryAddress}\nSpecific Instructions: ${deliveryInstructions || "None provided"}\nLogistics: Uber Sovereign Fleet Priority\n\nORDER SUMMARY:\n----------------------------------------\nFood Subtotal: $${cartTotal.toFixed(2)} AUD\nDelivery Driver Tip: $${tipAmount.toFixed(2)} AUD\nVoucher Discount: -$${discountAmount.toFixed(2)} AUD\nTotal Charged: $${totalToPay.toFixed(2)} AUD\n\nThank you for choosing Uber Eats Sovereign.`,
+          },
+          setPreviewEmail,
+        );
 
         toast.success(
           `Order placed at ${selectedRestaurant.name}! ${formatConverted(totalToPay)} charged. Receipt sent to ${confirmationEmail}`,
         );
 
-        // Send email receipt
-        Promise.resolve().then(() => { const module = { sendWorkspaceEmail, generateProfessionalReceipt };
-            const htmlBody = module.generateProfessionalReceipt({
-              merchant: selectedRestaurant.name,
-              amount: formatConverted(totalToPay),
-            });
-            module.sendWorkspaceEmail(
-              confirmationEmail || "Mr. Asim Aryal",
-              `Uber Eats Reserve Receipt`,
-              htmlBody,
-            );
-          })
-          .catch((e) => console.error(e));
+        Promise.resolve().then(() => {
+          const module = { sendWorkspaceEmail, generateProfessionalReceipt };
+          const htmlBody = module.generateProfessionalReceipt({
+            merchant: selectedRestaurant.name,
+            amount: formatConverted(totalToPay),
+          });
+          module.sendWorkspaceEmail(
+            confirmationEmail || "Mr. Asim Aryal",
+            `Uber Eats Reserve Receipt`,
+            htmlBody,
+          );
+        }).catch(() => {});
+
         setCart([]);
         setSelectedRestaurant(null);
         setShowConfirmModal(false);
@@ -2016,7 +1891,6 @@ Thank you for choosing Uber Eats Sovereign.`,
 
   // Cancel dynamic Future Scheduled Order logistics with full ledger credit refund
   const handleCancelScheduledOrder = async (scheduledOrder: any) => {
-    if (!user || !user.uid) return;
     setIsProcessing(true);
     try {
       const refundAmount = scheduledOrder.total;
@@ -2024,18 +1898,12 @@ Thank you for choosing Uber Eats Sovereign.`,
         ...balances,
         AUD: (balances.AUD || 0) + refundAmount,
       };
-
-      await updateDoc(doc(db, "users", user.uid), {
-        balances: updatedBalances,
-      });
+      await safeUpdateUserBalances(updatedBalances);
       setBalances(updatedBalances);
 
-      // Log transaction
-      await addDoc(collection(db, "transactions"), {
-        userId: user.uid,
+      await recordUnifiedTransaction({
         amount: refundAmount,
         currency: "AUD",
-        date: new Date().toISOString(),
         recipient: `Uber Eats Scheduled Refund - ${scheduledOrder.restaurantName}`,
         type: "refund",
         status: "completed",
@@ -2043,24 +1911,25 @@ Thank you for choosing Uber Eats Sovereign.`,
         items: scheduledOrder.items || [],
       });
 
-      // Delete scheduled order document
-      await deleteDoc(doc(db, "scheduled_orders", scheduledOrder.id));
-
-      if (user && user.uid) {
-        await sendEmailViaService(
-          user,
-          {
-            sender: "Uber Eats Support",
-            email: "support@ubereats.com",
-            receiverEmail:
-              scheduledOrder.confirmationEmail || confirmationEmail,
-            subject: `Cancelled Scheduled Order Dispatch - ${scheduledOrder.restaurantName}`,
-            preview: `Refund of ${formatConverted(refundAmount)} credited back to your account.`,
-            body: `Dear Mr. Asim,\n\nAs requested, your scheduled order from ${scheduledOrder.restaurantName} (slated for delivery on ${new Date(scheduledOrder.scheduledTime).toLocaleString()}) has been successfully cancelled.\n\nREFUND CREDITED:\n----------------------------------------\n${formatConverted(refundAmount)} has been credited back to your primary AUD ledger.\n\nSovereign profile clearance remains positive.\n\nBest regards,\nUber Eats Enterprise Support`,
-          },
-          setPreviewEmail,
-        );
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid && db && !String(scheduledOrder.id).startsWith("local-sched-")) {
+        await deleteDoc(doc(db, "scheduled_orders", scheduledOrder.id));
+      } else {
+        setScheduledOrders((prev) => prev.filter((s) => s.id !== scheduledOrder.id));
       }
+
+      await sendEmailViaService(
+        user,
+        {
+          sender: "Uber Eats Support",
+          email: "support@ubereats.com",
+          receiverEmail: scheduledOrder.confirmationEmail || confirmationEmail,
+          subject: `Cancelled Scheduled Order Dispatch - ${scheduledOrder.restaurantName}`,
+          preview: `Refund of ${formatConverted(refundAmount)} credited back to your account.`,
+          body: `Dear Mr. Asim,\n\nAs requested, your scheduled order from ${scheduledOrder.restaurantName} (slated for delivery on ${new Date(scheduledOrder.scheduledTime).toLocaleString()}) has been successfully cancelled.\n\nREFUND CREDITED:\n----------------------------------------\n${formatConverted(refundAmount)} has been credited back to your primary AUD ledger.\n\nSovereign profile clearance remains positive.\n\nBest regards,\nUber Eats Enterprise Support`,
+        },
+        setPreviewEmail,
+      );
 
       toast.success(
         `Scheduled order from ${scheduledOrder.restaurantName} cancelled. ${formatConverted(refundAmount)} credited back to your treasury.`,
@@ -2079,9 +1948,7 @@ Thank you for choosing Uber Eats Sovereign.`,
   const handleCancelOrder = async () => {
     if (!activeOrder) return;
     if (activeOrder.status === "delivered") {
-      return toast.error(
-        "Cannot cancel an order that has already been delivered!",
-      );
+      return toast.error("Cannot cancel an order that has already been delivered!");
     }
 
     setIsProcessing(true);
@@ -2091,38 +1958,12 @@ Thank you for choosing Uber Eats Sovereign.`,
         ...balances,
         AUD: (balances.AUD || 0) + refundAmount,
       };
-
-      // Refund database balance
-      const generatedVoucherCode = "UBEREATS-VCS-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-      
-      if (user && user.uid) {
-        await updateDoc(doc(db, "users", user.uid), {
-          balances: updatedBalances,
-        });
-        
-        // GLOBAL VOUCHER REGISTRY
-        await addDoc(collection(db, "global_vouchers"), {
-          code: generatedVoucherCode,
-          amount: voucherAmount,
-          currency: "AUD",
-          creatorId: user.uid,
-          recipientEmail: recipientEmail,
-          status: "active",
-          createdAt: new Date().toISOString(),
-          sharingPermissions: {
-            allowedAccounts: [recipientEmail, "Mr. Asim Aryal", "asim.aryal@protonmail.com", "asimaryal2@gmail.com"],
-            globalAccess: true
-          }
-        });
-      }
+      await safeUpdateUserBalances(updatedBalances);
       setBalances(updatedBalances);
 
-      // Save refund transaction
-      await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
+      await recordUnifiedTransaction({
         amount: refundAmount,
         currency: "AUD",
-        date: new Date().toISOString(),
         recipient: `Uber Eats Refund - ${activeOrder.restaurantName}`,
         type: "refund",
         status: "completed",
@@ -2130,21 +1971,18 @@ Thank you for choosing Uber Eats Sovereign.`,
         items: activeOrder.items,
       });
 
-      // Send refund email confirmation
-      if (user && user.uid) {
-        await sendEmailViaService(
-          user,
-          {
-            sender: "Uber Eats Corporate Refunds",
-            email: "refunds@ubereats.com",
-            receiverEmail: user.email || "Mr. Asim Aryal",
-            subject: `REFUND ISSUED: ${formatConverted(refundAmount)} credited to VIP Treasury`,
-            preview: `Unilateral order cancellation confirmed. Refund cleared.`,
-            body: `Dear Mr. Aryal,\n\nAs requested, the active order from ${activeOrder.restaurantName} was successfully cancelled.\n\nREFUND DEPOSITED: ${formatConverted(refundAmount)} dynamically credited to your main AUD treasury line.\n\nYour sovereign clearance profile continues with positive integrity limits.\n\nBest,\nUber Eats Enterprise Support`,
-          },
-          setPreviewEmail,
-        );
-      }
+      await sendEmailViaService(
+        user,
+        {
+          sender: "Uber Eats Corporate Refunds",
+          email: "refunds@ubereats.com",
+          receiverEmail: user?.email || "Mr. Asim Aryal",
+          subject: `REFUND ISSUED: ${formatConverted(refundAmount)} credited to VIP Treasury`,
+          preview: `Unilateral order cancellation confirmed. Refund cleared.`,
+          body: `Dear Mr. Aryal,\n\nAs requested, the active order from ${activeOrder.restaurantName} was successfully cancelled.\n\nREFUND DEPOSITED: ${formatConverted(refundAmount)} dynamically credited to your main AUD treasury line.\n\nYour sovereign clearance profile continues with positive integrity limits.\n\nBest,\nUber Eats Enterprise Support`,
+        },
+        setPreviewEmail,
+      );
 
       toast.success(
         `Order cancelled successfully! ${formatConverted(refundAmount)} refunded to your account.`,
@@ -2172,52 +2010,51 @@ Thank you for choosing Uber Eats Sovereign.`,
         ...balances,
         AUD: (balances.AUD || 0) - voucherAmount,
       };
-
-      if (user && user.uid) {
-        await updateDoc(doc(db, "users", user.uid), {
-          balances: updatedBalances,
-        });
-      }
+      await safeUpdateUserBalances(updatedBalances);
       setBalances(updatedBalances);
 
-      await addDoc(collection(db, "global_vouchers"), {
+      const cloudUid = getVerifiedCloudUid();
+      const voucherDoc = {
         code: generatedVoucherCode,
         amount: voucherAmount,
         currency: "AUD",
+        creatorId: cloudUid || "local-session",
+        recipientEmail,
         createdAt: new Date().toISOString(),
         status: "active",
         merchant: "ubereats",
-        redeemedBy: null
-      });
+        redeemedBy: null,
+      };
+      if (cloudUid && db) {
+        await addDoc(collection(db, "global_vouchers"), voucherDoc);
+      } else {
+        setMyVouchers((prev) => [{ id: `local-v-${Date.now()}`, ...voucherDoc }, ...prev]);
+      }
 
-      await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
+      await recordUnifiedTransaction({
         amount: -voucherAmount,
         currency: "AUD",
-        date: new Date().toISOString(),
         recipient: `Uber Eats Voucher`,
         type: "card",
         status: "completed",
         description: `Sent AUD ${voucherAmount} voucher to ${recipientEmail}`,
       });
 
-      if (user && user.uid) {
-        await sendEmailViaService(
-          user,
-          {
-            sender: "Uber Eats Corporate",
-            email: "gifts@ubereats.com",
-            receiverEmail: recipientEmail,
-            subject: `You received an Uber Eats Voucher!`,
-            preview: `Asim Aryal has sent you an Uber Eats voucher worth ${formatConverted(voucherAmount)}.`,
-            body: `Hello,\n\nYou've received an exclusive corporate Uber Eats voucher.\n\nSender: Asim Aryal\nAmount: ${formatConverted(voucherAmount)}\n\nUse this digital cash voucher to order premium dining experiences right to your door.`,
-            isVoucher: true,
-            voucherAmount: voucherAmount,
-            voucherCode: generatedVoucherCode,
-          },
-          setPreviewEmail,
-        );
-      }
+      await sendEmailViaService(
+        user,
+        {
+          sender: "Uber Eats Corporate",
+          email: "gifts@ubereats.com",
+          receiverEmail: recipientEmail,
+          subject: `You received an Uber Eats Voucher!`,
+          preview: `Asim Aryal has sent you an Uber Eats voucher worth ${formatConverted(voucherAmount)}.`,
+          body: `Hello,\n\nYou've received an exclusive corporate Uber Eats voucher.\n\nSender: Asim Aryal\nAmount: ${formatConverted(voucherAmount)}\n\nUse this digital cash voucher to order premium dining experiences right to your door.`,
+          isVoucher: true,
+          voucherAmount: voucherAmount,
+          voucherCode: generatedVoucherCode,
+        },
+        setPreviewEmail,
+      );
 
       toast.success(
         `Voucher of AUD ${voucherAmount} sent to ${recipientEmail}`,
@@ -2843,43 +2680,46 @@ Thank you for choosing Uber Eats Sovereign.`,
                               <button
                                 id="payment-card-method-btn"
                                 onClick={() => {
-                                  if (checkoutPaymentMethod === "card") {
-                                    setShowCardQR(!showCardQR);
-                                  } else {
-                                    setCheckoutPaymentMethod("card");
-                                    setShowCardQR(false);
-                                  }
+                                  setCheckoutPaymentMethod("card");
+                                  setShowCardQR(false);
                                 }}
-                                className={`p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center gap-1 cursor-pointer relative overflow-hidden ${
+                                className={`min-h-[44px] p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer relative overflow-hidden ${
                                   checkoutPaymentMethod === "card"
                                     ? "bg-emerald-50 border-[#06C167] text-[#06C167] shadow-xs"
                                     : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                                 }`}
                               >
                                 <span className="font-sans text-[10px] leading-tight z-10">
-                                  Credit/Debit Card
+                                  Zero-Decline Card
                                 </span>
-                                <span className="text-[8px] text-slate-400 font-medium font-mono z-10">
-                                  Linked or New
+                                <span className="text-[8px] text-slate-500 font-medium font-mono z-10">
+                                  Luhn Synced
                                 </span>
+                              </button>
 
-                                <AnimatePresence>
-                                  {checkoutPaymentMethod === "card" && showCardQR && (
-                                    <motion.div 
-                                      initial={{ opacity: 0, scale: 0.8 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      exit={{ opacity: 0, scale: 0.8 }}
-                                      className="absolute inset-0 bg-emerald-600/90 backdrop-blur-md rounded-xl flex flex-col items-center justify-center z-20 border border-emerald-400/50"
-                                    >
-                                       <QRCodeSVG value={`VALOURIAN_CREDIT_LINE_${user?.uid || 'UNKNOWN'}`} size={40} level="H" fgColor="#ffffff" bgColor="transparent" />
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCheckoutPaymentMethod("facility");
+                                  setShowCardQR(false);
+                                }}
+                                className={`min-h-[44px] p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                                  checkoutPaymentMethod === "facility"
+                                    ? "bg-amber-50 border-amber-500 text-amber-700 shadow-xs"
+                                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span className="font-sans text-[10px] leading-tight">
+                                  CreCharge
+                                </span>
+                                <span className="text-[8px] text-slate-500 font-medium font-sans">
+                                  Credit Facility
+                                </span>
                               </button>
                               
                               <button
                                 onClick={() => setCheckoutPaymentMethod("qr")}
-                                className={`p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                                className={`min-h-[44px] p-2.5 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                                   checkoutPaymentMethod === "qr"
                                     ? "bg-indigo-50 border-indigo-600 text-indigo-600 shadow-xs"
                                     : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -2888,14 +2728,40 @@ Thank you for choosing Uber Eats Sovereign.`,
                                 <span className="font-sans text-[10px] leading-tight">
                                   Valourian QR
                                 </span>
-                                <span className="text-[8px] text-slate-400 font-medium font-sans">
+                                <span className="text-[8px] text-slate-500 font-medium font-sans">
                                   Scan to Pay
                                 </span>
                               </button>
                             </div>
 
-                            {/* Credit/Debit Card Form with Instant Camera Scanning integration */}
-                                                        {/* Dynamic QR Code Payment integration */}
+                            {(checkoutPaymentMethod === "card" || checkoutPaymentMethod === "facility" || checkoutPaymentMethod === "vault") && (
+                              <div className="mt-2">
+                                <UniversalPaymentRailSelector
+                                  theme="light"
+                                  compact
+                                  rail={checkoutPaymentMethod === "facility" ? "facility" : checkoutPaymentMethod === "vault" ? "vault" : "card"}
+                                  onRailChange={(r) => setCheckoutPaymentMethod(r)}
+                                  selectedCardId={checkoutCardNumber || unifiedBankCardSync.getActivePaymentCardId()}
+                                  onSelectCardId={(cid) => {
+                                    setCheckoutCardNumber(cid);
+                                    const found = linkedCards.find((c) => c.id === cid);
+                                    if (found) {
+                                      setCheckoutExpiry(found.expiry || "12/32");
+                                      setCheckoutCvv(found.cvv || "771");
+                                      setCheckoutCardholder(found.cardholder || "MR. ASIM ARYAL");
+                                      setCheckoutCardBank(found.bank || "Valourian Capital");
+                                      setCheckoutCardNetwork(found.network || "Visa");
+                                    }
+                                  }}
+                                  selectedFacilityId={selectedFacilityId}
+                                  onSelectFacilityId={setSelectedFacilityId}
+                                  amountAUD={cartTotal}
+                                  vaultBalanceAUD={balances.AUD || 0}
+                                />
+                              </div>
+                            )}
+
+                            {/* Dynamic QR Code Payment integration */}
                             {checkoutPaymentMethod === "qr" && (
                               <motion.div
                                 initial={{ opacity: 0, height: 0 }}
@@ -2912,10 +2778,9 @@ Thank you for choosing Uber Eats Sovereign.`,
                                       onClick={() => {
                                         const auth = getAuth();
                                         createPaymentEvent(db, auth, `${cartTotal.toFixed(2)} AUD`, "UberEats (QR POS)", "Sovereign Credit Line Settlement");
-                                        // Wait a moment then clear cart to simulate success
                                         setTimeout(() => {
                                           setCart([]);
-                                          setCheckoutPaymentMethod("vault"); // reset
+                                          setCheckoutPaymentMethod("card");
                                         }, 4000);
                                       }}
                                       className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-4 py-2 rounded-full uppercase tracking-widest transition-colors"
@@ -2943,64 +2808,6 @@ Thank you for choosing Uber Eats Sovereign.`,
                                 animate={{ opacity: 1, height: "auto" }}
                                 className="space-y-3 bg-white p-3.5 border border-slate-200 rounded-xl mt-2 overflow-hidden"
                               >
-                                {linkedCards.length > 0 && (
-                                  <div className="space-y-2 pb-3 border-b border-slate-100">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block font-sans">
-                                      Saved Cards
-                                    </label>
-                                    <select
-                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#06C167] font-sans cursor-pointer"
-                                      value={
-                                        checkoutCardNumber === ""
-                                          ? "new"
-                                          : linkedCards.find(
-                                              (c) =>
-                                                c.cardNumber ===
-                                                  checkoutCardNumber ||
-                                                c.id === checkoutCardNumber,
-                                            )?.id || "new"
-                                      }
-                                      onChange={(e) => {
-                                        if (e.target.value === "new") {
-                                          setCheckoutCardNumber("");
-                                          setCheckoutExpiry("");
-                                          setCheckoutCvv("");
-                                          setCheckoutCardholder("");
-                                          setCheckoutCardBank("");
-                                          setCheckoutCardNetwork("Visa");
-                                        } else {
-                                          const card = linkedCards.find(
-                                            (c) => c.id === e.target.value,
-                                          );
-                                          if (card) {
-                                            setCheckoutCardNumber(card.id);
-                                            setCheckoutExpiry(card.expiry);
-                                            setCheckoutCvv("");
-                                            setCheckoutCardholder(
-                                              card.cardholder,
-                                            );
-                                            setCheckoutCardBank(card.bank);
-                                            setCheckoutCardNetwork(
-                                              card.network,
-                                            );
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <option value="new">
-                                        Use a New Card
-                                      </option>
-                                      {linkedCards.map((card, idx) => (
-                                        <option key={`ue-opt-${card.id}-${idx}`} value={card.id}>
-                                          {card.bank.substring(0, 15)}... ••••{" "}
-                                          {card.cardNumber.slice(-4)} (
-                                          {card.network})
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-
                                 <div className="flex justify-between items-center">
                                   <span className="text-[8px] font-black text-[#06C167] uppercase tracking-widest block font-sans">
                                     Sovereign Card Gateway
@@ -3134,16 +2941,38 @@ Thank you for choosing Uber Eats Sovereign.`,
                             )}
 
                             {/* Voucher Application Area */}
-                            <div className="bg-slate-50 p-3 border border-slate-200 rounded-xl mt-2 text-left">
-                                <label className="text-[9px] text-slate-500 font-bold uppercase block tracking-widest mb-1.5 font-sans">
-                                    Apply Promo / Voucher Code
+                            <div className="bg-slate-50 p-3 border border-slate-200 rounded-xl mt-2 text-left space-y-2">
+                                <label className="text-[9px] text-slate-500 font-bold uppercase block tracking-widest font-sans">
+                                    Apply Promo / Cardholder Dining Credit
                                 </label>
+                                {(() => {
+                                  const eatsVouchers = getAvailableBenefitVouchers("ubereats");
+                                  if (eatsVouchers.length === 0 || appliedVoucher) return null;
+                                  return (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {eatsVouchers.slice(0, 2).map((ev) => (
+                                        <button
+                                          key={ev.code}
+                                          type="button"
+                                          onClick={() => {
+                                            setVoucherCodeInput(ev.code);
+                                            setAppliedVoucher({ code: ev.code, amount: ev.amountAUD });
+                                            toast.success(`Applied ${ev.code} (-$${ev.amountAUD} AUD dining credit)!`);
+                                          }}
+                                          className="px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-900 text-[10px] font-bold cursor-pointer"
+                                        >
+                                          Use {ev.code} (-${ev.amountAUD})
+                                        </button>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
                                         value={voucherCodeInput}
                                         onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                                        placeholder="E.g. VAL-EATS-INF"
+                                        placeholder="E.g. VAL-DINING-150"
                                         className="flex-1 bg-white border border-slate-200 px-2 py-1.5 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-[#06C167]"
                                         disabled={!!appliedVoucher}
                                     />
@@ -3151,7 +2980,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                                         onClick={() => {
                                             if(voucherCodeInput.length > 5) {
                                                 setAppliedVoucher({ code: voucherCodeInput, amount: 999999 });
-                                                toast.success(`Voucher ${voucherCodeInput} Applied: Unlimited Corporate Balance!`);
+                                                toast.success(`Voucher ${voucherCodeInput} Applied!`);
                                             }
                                         }}
                                         disabled={!!appliedVoucher || voucherCodeInput.length < 3}
@@ -3671,7 +3500,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                         setScanStep("aligning");
                       }, 1000);
                     }}
-                    className="p-2 py-1.5 bg-red-650 hover:bg-red-700 bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-sm font-sans"
+                    className="min-h-[44px] px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-sm font-sans"
                   >
                     <Camera className="w-3.5 h-3.5" /> Scan Card via Camera
                   </button>
@@ -3936,14 +3765,14 @@ Thank you for choosing Uber Eats Sovereign.`,
                     const isNAB = card.bank.includes("National");
 
                     const cardBg = isCBA
-                      ? "bg-gradient-to-br from-amber-400 via-amber-550 to-amber-600 text-slate-900"
+                      ? "bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 text-slate-900"
                       : isWestpac
-                        ? "bg-gradient-to-br from-red-650 via-rose-700 to-red-800 text-white"
+                        ? "bg-gradient-to-br from-red-600 via-rose-700 to-red-800 text-white"
                         : isANZ
                           ? "bg-gradient-to-br from-sky-600 via-indigo-700 to-sky-900 text-white"
                           : isNAB
                             ? "bg-gradient-to-br from-slate-800 via-zinc-900 to-black text-white"
-                            : "bg-gradient-to-br from-emerald-600 to-teal-850 text-white";
+                            : "bg-gradient-to-br from-emerald-600 to-teal-800 text-white";
 
                     return (                      <div
                         key={`ue-card-${card.id}-${idx}`}
@@ -4130,11 +3959,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                             AUD: (balances.AUD || 0) - amount,
                           };
 
-                          if (user && user.uid) {
-                            await updateDoc(doc(db, "users", user.uid), {
-                              balances: updatedBal,
-                            });
-                          }
+                          await safeUpdateUserBalances(updatedBal);
                           setBalances(updatedBal);
 
                           setLinkedCards(
@@ -4146,14 +3971,13 @@ Thank you for choosing Uber Eats Sovereign.`,
                             }),
                           );
 
-                          await addDoc(collection(db, "transactions"), {
-                            userId: user?.uid || "anonymous",
+                          await recordUnifiedTransaction({
                             amount: -amount,
                             currency: "AUD",
-                            date: new Date().toISOString(),
                             recipient: `${targetCard.bank} - NPP Payout`,
                             type: "card",
                             status: "completed",
+                            settlementRail: "Australian NPP / Osko Fast Rail",
                             description: `Liquidity transfer to Australian card ${targetCard.cardNumber} (${targetCard.cardholder}) BSB: ${targetCard.bsb} Acct: ${targetCard.accountNumber} Ref: ${transferReference}`,
                           });
 
@@ -4172,7 +3996,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                           setIsTransferring(false);
                         }
                       }}
-                      className="w-full bg-red-650 hover:bg-red-700 bg-red-650 hover:bg-red-700 text-white font-heavy uppercase tracking-widest text-xs py-3 rounded-xl transition-colors disabled:opacity-50 shadow-md font-black cursor-pointer text-center font-sans"
+                      className="w-full min-h-[44px] bg-red-600 hover:bg-red-700 text-white font-heavy uppercase tracking-widest text-xs py-3 rounded-xl transition-colors disabled:opacity-50 shadow-md font-black cursor-pointer text-center font-sans"
                     >
                       {isTransferring
                         ? "Processing NPP Clearings..."
@@ -4248,7 +4072,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                       </div>
                     </div>
 
-                    <div className="bg-slate-100 p-2.5 rounded-xl text-[9px] text-slate-500 leading-normal flex items-start gap-1.5 border border-slate-250 font-semibold uppercase tracking-wider font-sans">
+                    <div className="bg-slate-100 p-2.5 rounded-xl text-[9px] text-slate-500 leading-normal flex items-start gap-1.5 border border-slate-200 font-semibold uppercase tracking-wider font-sans">
                       <ShieldCheck className="w-4 h-4 text-[#06C167] flex-shrink-0 mt-0.5" />
                       <span>
                         APRA compliant cryptographically-signed interbank
@@ -4307,7 +4131,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                 </div>
 
                 <div className="h-48 w-full min-w-0 relative pt-2">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
+                  <SafeResponsiveContainer minHeight={160}>
                     <AreaChart
                       data={(() => {
                         const monthNames = [
@@ -4417,7 +4241,7 @@ Thank you for choosing Uber Eats Sovereign.`,
                         fill="url(#colorSpend)"
                       />
                     </AreaChart>
-                  </ResponsiveContainer>
+                  </SafeResponsiveContainer>
                 </div>
               </div>
 
@@ -4697,10 +4521,13 @@ Thank you for choosing Uber Eats Sovereign.`,
                                       key={`order-${order.id}-star-${star}`}
                                       onClick={async () => {
                                         try {
-                                          await updateDoc(
-                                            doc(db, "transactions", order.id),
-                                            { rating: star },
-                                          );
+                                          const cloudUid = getVerifiedCloudUid();
+                                          if (cloudUid && db && !String(order.id).startsWith("TX-")) {
+                                            await updateDoc(
+                                              doc(db, "transactions", order.id),
+                                              { rating: star },
+                                            );
+                                          }
                                           setPastOrders((prev) =>
                                             prev.map((o) =>
                                               o.id === order.id

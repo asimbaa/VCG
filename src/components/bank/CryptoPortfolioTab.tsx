@@ -23,7 +23,8 @@ import {
   ArrowDownToLine,
   Sliders
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { SafeResponsiveContainer } from '../shared/SafeResponsiveContainer';
 import { toast } from 'sonner';
 import { CryptoKeysModal } from './CryptoKeysModal';
 import { AustralianATMSimulator } from './AustralianATMSimulator';
@@ -196,7 +197,7 @@ export function CryptoPortfolioTab() {
                <div className="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">30D Accumulation Phase</div>
              </div>
              <div className="h-[300px] w-full min-w-0">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                <SafeResponsiveContainer minHeight={240}>
                   <AreaChart data={btcData}>
                     <defs>
                       <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
@@ -213,7 +214,7 @@ export function CryptoPortfolioTab() {
                     />
                     <Area type="monotone" dataKey="price" stroke="#f7931a" strokeWidth={3} fillOpacity={1} fill="url(#colorPrice)" />
                   </AreaChart>
-                </ResponsiveContainer>
+                </SafeResponsiveContainer>
              </div>
           </div>
 

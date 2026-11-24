@@ -36,7 +36,7 @@ import {
   AlertTriangle,
   Download,
 } from "lucide-react";
-import { db } from "../../firebase";
+import { auth, db } from "../../firebase";
 import {
   collection,
   addDoc,
@@ -55,10 +55,25 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
 import { sendEmailViaService, EmailPreviewModal } from "./EmailService";
+import { unifiedBankCardSync } from "../../services/unifiedBankCardSync";
+import { creChargeFacilitiesService } from "../../services/creChargeFacilitiesService";
+import {
+  UniversalPaymentRailSelector,
+  UniversalPaymentRail,
+  executeUniversalSettlement,
+} from "../shared/UniversalPaymentRailSelector";
+import {
+  getVerifiedCloudUid,
+  safeUpdateUserBalances,
+  recordUnifiedTransaction,
+  getLocalTransactions,
+  getAvailableBenefitVouchers,
+  redeemBenefitVoucher,
+  SharedBenefitVoucher,
+} from "../../services/cloudSessionGuard";
 
 // Firestore Error handler interface and helper mapping to Firebase Skill rules
 enum OperationType {
@@ -615,47 +630,47 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
   const [completedTrips, setCompletedTrips] = useState<any[]>([]);
 
   const downloadTripReceiptsPDF = async () => {
-    if (!user || !user.uid) return;
+    const cloudUid = auth.currentUser?.uid;
+    if (!cloudUid) {
+      toast.error("Please sign in with Google to aggregate cloud receipts.");
+      return;
+    }
     try {
       toast.info("Aggregating global receipts...");
       const tableData: any[] = [];
       
       // Fetch general transactions (Eats, booking, etc)
-      const q = query(collection(db, "transactions"));
+      const q = query(collection(db, "transactions"), where("userId", "==", cloudUid));
       const querySnapshot = await getDocs(q);
       querySnapshot.forEach((docSnap) => {
         const d = docSnap.data();
-        if (d.userId === user.uid) {
-          const orderDate = new Date(d.date).toLocaleDateString("en-AU", {
-            day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-          });
-          const itemsStr = d.items?.map((it: any) => `${it.quantity}x ${it.name}`).join(", ") || "";
-          tableData.push([
-            orderDate,
-            d.recipient || "Ecosystem Order",
-            d.description || itemsStr || "-",
-            `$${Math.abs(d.amount || 0).toFixed(2)}`
-          ]);
-        }
+        const orderDate = new Date(d.date).toLocaleDateString("en-AU", {
+          day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        const itemsStr = d.items?.map((it: any) => `${it.quantity}x ${it.name}`).join(", ") || "";
+        tableData.push([
+          orderDate,
+          d.recipient || "Ecosystem Order",
+          d.description || itemsStr || "-",
+          `$${Math.abs(d.amount || 0).toFixed(2)}`
+        ]);
       });
       
       // Fetch Uber trips
-      const qTrips = query(collection(db, "completed_trips"));
+      const qTrips = query(collection(db, "completed_trips"), where("userId", "==", cloudUid));
       const tripSnap = await getDocs(qTrips);
       tripSnap.forEach((docSnap) => {
         const d = docSnap.data();
-        if (d.userId === user.uid) {
-          const startDate = new Date(d.startTime);
-          const formattedDate = startDate.toLocaleDateString("en-AU", {
-             day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-          });
-          tableData.push([
-            formattedDate,
-            `Uber Trip (${d.tier || "Unknown"})`,
-            `Driver: ${d.driver || "Unknown"} | ${d.carModel || ""}`,
-            `$${Math.abs(d.amount || 0).toFixed(2)}`
-          ]);
-        }
+        const startDate = new Date(d.startTime);
+        const formattedDate = startDate.toLocaleDateString("en-AU", {
+           day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        tableData.push([
+          formattedDate,
+          `Uber Trip (${d.tier || "Unknown"})`,
+          `Driver: ${d.driver || "Unknown"} | ${d.carModel || ""}`,
+          `$${Math.abs(d.amount || 0).toFixed(2)}`
+        ]);
       });
 
       if (tableData.length === 0) {
@@ -681,108 +696,21 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
     }
   };
 
-  // Live cards list loaded from storage
-  const [uberCards, setUberCards] = useState<any[]>(() => {
-    try {
-      const saved = window.localStorage.getItem("valourian_digital_cards_v8");
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: "visa_primary",
-        last4: "4242",
-        fullNumber: "4242 4242 4242 4242",
-        cvv: "123",
-        pin: "0000",
-        holder: "ASIM ARYAL",
-        expiry: "12/28",
-        type: "primary",
-        limit: "$10,000.00 USD",
-        region: "Global",
-        network: "Visa",
-        bsb: "062-951",
-        accountNumber: "1099 4335",
-        netbankId: "43359948",
-        balance: 15000,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Standard Checking",
-          benefits: "Cashback on all purchases",
-          atm: "Global Free Withdrawal",
-        },
-      },
-      {
-        id: "mastercard_sec",
-        last4: "5100",
-        fullNumber: "5105 1051 0510 5100",
-        cvv: "456",
-        pin: "1234",
-        holder: "ASIM ARYAL",
-        expiry: "05/29",
-        type: "primary",
-        limit: "$20,000.00 USD",
-        region: "Global",
-        network: "Mastercard",
-        bsb: "062-951",
-        accountNumber: "1099 8801",
-        netbankId: "88019948",
-        balance: 12500,
-        isFlipped: false,
-        nfcReady: true,
-        details: {
-          access: "Premium Savings",
-          benefits: "Travel rewards and lounge access",
-          chips: "Contactless enabled",
-        },
-      },
-      {
-        id: "amex_corp",
-        last4: "0005",
-        fullNumber: "3782 822463 10005",
-        cvv: "7890",
-        pin: "4321",
-        holder: "ASIM ARYAL",
-        expiry: "04/30",
-        type: "primary",
-        limit: "No Preset Spending Limit",
-        region: "Global",
-        network: "American Express",
-        bsb: "834-472",
-        accountNumber: "242719180",
-        netbankId: "8207647128",
-        balance: 55000,
-        isFlipped: false,
-        details: {
-          access: "Corporate Account",
-          benefits: "Centurion Lounge Access",
-          atm: "Cash advance available",
-        },
-      },
-    ];
-  });
+  // Live Luhn-verified cards synchronized across vault & devices
+  const [uberCards, setUberCards] = useState<any[]>(() => unifiedBankCardSync.getCards());
   const [selectedUberCardIndex, setSelectedUberCardIndex] = useState<number>(0);
+  const [paymentRail, setPaymentRail] = useState<UniversalPaymentRail>("card");
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>(() =>
+    creChargeFacilitiesService.getActiveFacilityId(),
+  );
 
   useEffect(() => {
-    const syncCards = () => {
-      try {
-        const saved = window.localStorage.getItem("valourian_digital_cards_v8");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.length > 0) {
-            setUberCards(parsed);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to sync cards in UberApp", e);
+    const unsub = unifiedBankCardSync.subscribe((liveCards) => {
+      if (liveCards && liveCards.length > 0) {
+        setUberCards(liveCards);
       }
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key && e.key !== "valourian_vcard_db_247") return;
-      syncCards();
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    });
+    return () => unsub();
   }, []);
 
   // Advanced features state variables
@@ -994,13 +922,24 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
   // Load favorite routes, scheduled rides, and transactions data
   useEffect(() => {
-    if (!user || !user.uid) return;
+    const authUid = getVerifiedCloudUid();
+    if (!authUid) {
+      const localUber = getLocalTransactions().filter(
+        (t: any) =>
+          t.recipient?.toLowerCase().includes("uber") ||
+          t.description?.toLowerCase().includes("uber") ||
+          t.description?.toLowerCase().includes("ride")
+      );
+      if (localUber.length > 0) setTransactionsList(localUber);
+      return;
+    }
+
     const fetchAllData = async () => {
       try {
         // 1. Fetch Favorite routes
         const favoritesQuery = query(
           collection(db, "favorite_routes"),
-          where("userId", "==", user.uid),
+          where("userId", "==", authUid),
         );
         const favRes = await getDocs(favoritesQuery);
         const fetchedFav: any[] = [];
@@ -1012,7 +951,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         // 2. Fetch Scheduled Rides from singular 'scheduled_ride' collection (per requirements)
         const schedulesQuery = query(
           collection(db, "scheduled_ride"),
-          where("userId", "==", user.uid),
+          where("userId", "==", authUid),
         );
         const schedRes = await getDocs(schedulesQuery);
         const fetchedSched: any[] = [];
@@ -1027,12 +966,12 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         setScheduledRides(fetchedSched);
 
         // 3. Fetch Completed Rides
-        await fetchCompletedTrips(user.uid);
+        await fetchCompletedTrips(authUid);
 
         // 4. Fetch Transactions to calculate spending on rides
         const txnsQuery = query(
           collection(db, "transactions"),
-          where("userId", "==", user.uid),
+          where("userId", "==", authUid),
         );
         const txnRes = await getDocs(txnsQuery);
         const fetchedTxns: any[] = [];
@@ -1759,7 +1698,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
           const activeDriverIcon = L.divIcon({
             html: `
               <div class="chauffeur-vehicle-core flex flex-col items-center justify-center scale-110" style="transform: translate(-10%, -20%); z-index: 1000;">
-                <div class="w-9 h-9 rounded-full bg-slate-950 border-2 border-amber-405 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.6)] animate-pulse">
+                <div class="w-9 h-9 rounded-full bg-slate-950 border-2 border-amber-400 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.6)] animate-pulse">
                   <svg class="w-5 h-5 text-amber-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
                     <circle cx="7" cy="17" r="2" />
@@ -1838,7 +1777,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
             if (isLuxCompanion) {
               iconToUse = L.divIcon({
                 html: `
-                  <div class="flex items-center justify-center p-1 bg-amber-500/10 border border-amber-401 rounded-md shadow-[0_0_8px_rgba(245,158,11,0.4)]" style="transform: translate(-10%, -10%);">
+                  <div class="flex items-center justify-center p-1 bg-amber-500/10 border border-amber-400 rounded-md shadow-[0_0_8px_rgba(245,158,11,0.4)]" style="transform: translate(-10%, -10%);">
                     <svg class="w-3 h-3 text-amber-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                       <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
                       <circle cx="7" cy="17" r="2" />
@@ -2188,8 +2127,9 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
       `${pickup.split(",")[0]} to ${destination.split(",")[0]}`;
 
     try {
+      const cloudUid = getVerifiedCloudUid();
       const newRoute = {
-        userId: user?.uid || "anonymous",
+        userId: cloudUid || "local-session",
         name,
         pickup,
         pickupCoords,
@@ -2198,9 +2138,12 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         createdAt: new Date().toISOString(),
       };
 
-      const docRef = await addDoc(collection(db, "favorite_routes"), newRoute);
-
-      setFavoriteRoutes((prev) => [...prev, { id: docRef.id, ...newRoute }]);
+      if (cloudUid && db) {
+        const docRef = await addDoc(collection(db, "favorite_routes"), newRoute);
+        setFavoriteRoutes((prev) => [...prev, { id: docRef.id, ...newRoute }]);
+      } else {
+        setFavoriteRoutes((prev) => [...prev, { id: `route-${Date.now()}`, ...newRoute }]);
+      }
       setShowSaveFavoriteModal(false);
       setFavoriteRouteName("");
       toast.success(
@@ -2229,9 +2172,10 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
     }
 
     try {
+      const cloudUid = getVerifiedCloudUid();
       const fare = calculatedPrice(selectedVehicle.priceEstimate);
       const newRideIntent = {
-        userId: user?.uid || "anonymous",
+        userId: cloudUid || "local-session",
         pickup,
         pickupCoords,
         destination,
@@ -2244,37 +2188,33 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         estimatedPrice: fare,
       };
 
-      const docRef = await addDoc(
-        collection(db, "scheduled_ride"),
-        newRideIntent,
-      );
+      let savedRideId = `sched-${Date.now()}`;
+      if (cloudUid && db) {
+        const docRef = await addDoc(
+          collection(db, "scheduled_ride"),
+          newRideIntent,
+        );
+        savedRideId = docRef.id;
+      }
 
       if (getNotificationChecked) {
         const triggerTime = scheduledDateObj.getTime() - 10 * 60 * 1000;
         const triggerDate = new Date(triggerTime);
         const notificationItem = {
           id: Date.now().toString(),
-          scheduledRideId: docRef.id,
+          scheduledRideId: savedRideId,
           pickup: pickup,
           destination: destination,
           scheduledTime: scheduledDateObj.toISOString(),
           triggerTime: triggerDate.toISOString(),
           triggered: false,
-          userEmail: user?.email || "anonymous",
+          userEmail: auth.currentUser?.email || user?.email || "local-session",
         };
 
-        // Save to localStorage
-        const existingNotifsStr = localStorage.getItem(
-          "scheduled_ride_notifications",
-        );
-        const existingNotifs = existingNotifsStr
-          ? JSON.parse(existingNotifsStr)
-          : [];
+        const existingNotifsStr = localStorage.getItem("scheduled_ride_notifications");
+        const existingNotifs = existingNotifsStr ? JSON.parse(existingNotifsStr) : [];
         existingNotifs.push(notificationItem);
-        localStorage.setItem(
-          "scheduled_ride_notifications",
-          JSON.stringify(existingNotifs),
-        );
+        localStorage.setItem("scheduled_ride_notifications", JSON.stringify(existingNotifs));
 
         toast.info(
           `Pre-transit alert scheduled: 10 mins prior (${triggerDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`,
@@ -2287,48 +2227,42 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
       setShowScheduler(false);
       setScheduledTimeInput("");
 
-      // Force refresh scheduled rides list
-      const q = query(
-        collection(db, "scheduled_ride"),
-        where("userId", "==", user.uid),
-      );
-      const res = await getDocs(q);
-      const fetched: any[] = [];
-      res.forEach((docSnap) => {
-        fetched.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      fetched.sort(
-        (a, b) =>
-          new Date(a.scheduledTime).getTime() -
-          new Date(b.scheduledTime).getTime(),
-      );
-      setScheduledRides(fetched);
+      if (cloudUid && db) {
+        const q = query(
+          collection(db, "scheduled_ride"),
+          where("userId", "==", cloudUid),
+        );
+        const res = await getDocs(q);
+        const fetched: any[] = [];
+        res.forEach((docSnap) => {
+          fetched.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        fetched.sort(
+          (a, b) =>
+            new Date(a.scheduledTime).getTime() -
+            new Date(b.scheduledTime).getTime(),
+        );
+        setScheduledRides(fetched);
+      } else {
+        setScheduledRides((prev) => [...prev, { id: savedRideId, ...newRideIntent }]);
+      }
     } catch (err) {
       console.error("Failed to schedule ride:", err);
-      handleLocalFirestoreError(
-        err,
-        OperationType.CREATE,
-        "scheduled_ride",
-        user?.uid,
-      );
       toast.error("Error committing scheduled ride to Sovereign Cloud.");
     }
   };
 
   const handleCancelScheduledRide = async (rideId: string) => {
     try {
-      await deleteDoc(doc(db, "scheduled_ride", rideId));
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid && db && !String(rideId).startsWith("sched-")) {
+        await deleteDoc(doc(db, "scheduled_ride", rideId));
+      }
       toast.success("Scheduled reservation successfully voided.");
       setScheduledRides((prev) => prev.filter((r) => r.id !== rideId));
     } catch (err) {
       console.error("Failed to delete scheduled ride:", err);
-      handleLocalFirestoreError(
-        err,
-        OperationType.DELETE,
-        `scheduled_ride/${rideId}`,
-        user?.uid,
-      );
-      toast.error("Could not cancel scheduled ride in Firestore.");
+      toast.error("Could not cancel scheduled ride.");
     }
   };
 
@@ -2343,42 +2277,44 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         tipAmount = parseFloat(customTipAmount) || 0;
       }
 
-      await addDoc(collection(db, "driver_ratings"), {
-        userId: user?.uid || "anonymous",
-        driverName: selectedVehicle.driver,
-        rating: rating,
-        feedback: feedback,
-        pickup: pickup,
-        destination: destination,
-        createdAt: new Date().toISOString(),
-        tipPercentage: tipPercentage || 0,
-        tipAmount: tipAmount,
-      });
-
-      // Update the transaction with the final total if currentTransactionId is set!
-      if (currentTransactionId && tipAmount > 0) {
-        const finalTotal = fare + tipAmount;
-        const txDocRef = doc(db, "transactions", currentTransactionId);
-        await updateDoc(txDocRef, {
-          amount: -finalTotal,
-          description: `Premium Chauffeured transport: ${pickup} to ${destination} (${selectedVehicle.name}) [Incl. Tip: {formatConverted(tipAmount)}]`,
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid && db) {
+        await addDoc(collection(db, "driver_ratings"), {
+          userId: cloudUid,
+          driverName: selectedVehicle.driver,
+          rating: rating,
+          feedback: feedback || "",
+          pickup: pickup || "",
+          destination: destination || "",
+          createdAt: new Date().toISOString(),
         });
 
-        // Deduct tip from user balances
+        if (currentTransactionId && tipAmount > 0 && !String(currentTransactionId).startsWith("TX-")) {
+          const finalTotal = fare + tipAmount;
+          const txDocRef = doc(db, "transactions", currentTransactionId);
+          await updateDoc(txDocRef, {
+            amount: -finalTotal,
+            description: `Premium Chauffeured transport: ${pickup} to ${destination} (${selectedVehicle.name}) [Incl. Tip: ${tipAmount.toFixed(2)}]`,
+          });
+        }
+      }
+
+      if (tipAmount > 0) {
         const updatedBalances = {
           ...balances,
           AUD: (balances?.AUD || 0) - tipAmount,
         };
-        if (user && user.uid) {
-          await updateDoc(doc(db, "users", user.uid), {
-            balances: updatedBalances,
-          });
-          setBalances(updatedBalances);
-        }
-
-        toast.success(
-          `Tip of {formatConverted(tipAmount)} added to your ride billing!`,
-        );
+        await safeUpdateUserBalances(updatedBalances);
+        setBalances(updatedBalances);
+        await recordUnifiedTransaction({
+          amount: -tipAmount,
+          currency: "AUD",
+          recipient: `Uber Chauffeur Tip (${selectedVehicle.driver})`,
+          type: "tip",
+          status: "completed",
+          description: `Driver gratuity for ride from ${pickup} to ${destination}`,
+        });
+        toast.success(`Tip of $${tipAmount.toFixed(2)} added to your ride billing!`);
       }
 
       setRatingSubmitted(true);
@@ -2387,14 +2323,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
       );
     } catch (err) {
       console.error("Failed to submit rating:", err);
-      toast.error("Error writing rating report to database.");
+      toast.error("Error saving rating report.");
     } finally {
       setIsSubmittingRating(false);
     }
   };
 
-  // Dynamic average driver rating calculation from firestore driver_ratings collection
   const fetchAndCalculateAverageRating = async (driverName: string) => {
+    if (!getVerifiedCloudUid()) return;
     try {
       const q = query(
         collection(db, "driver_ratings"),
@@ -2472,7 +2408,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
         stars.push(
           <Star
             key={i}
-            className="w-3 h-3 text-slate-800 stroke-slate-750 shrink-0"
+            className="w-3 h-3 text-slate-800 stroke-slate-700 shrink-0"
           />,
         );
       }
@@ -2582,21 +2518,23 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
     setSosSmsMessageStatus("Dispatching emergency SMS broadcast route...");
 
     try {
-      // 1. Send live coordinates to 'emergency_contacts' collection in Firestore
-      await addDoc(collection(db, "emergency_contacts"), {
-        userId: user?.uid || "anonymous",
-        userEmail: user?.email || "anonymous",
-        latitude: coords.lat,
-        longitude: coords.lng,
-        driverName: selectedVehicle?.driver || "None",
-        carModel: selectedVehicle?.carModel || "None",
-        license: (selectedVehicle as any)?.license || "VIP-SOV-ACTIVE",
-        pickup: pickup,
-        destination: destination,
-        status: "critical_sos",
-        timestamp: timestampVal,
-        timestampMs: Date.now(),
-      });
+      const cloudUid = getVerifiedCloudUid();
+      if (cloudUid && db) {
+        await addDoc(collection(db, "emergency_contacts"), {
+          userId: cloudUid,
+          userEmail: auth.currentUser?.email || user?.email || "sovereign",
+          latitude: coords.lat,
+          longitude: coords.lng,
+          driverName: selectedVehicle?.driver || "None",
+          carModel: selectedVehicle?.carModel || "None",
+          license: (selectedVehicle as any)?.license || "VIP-SOV-ACTIVE",
+          pickup: pickup,
+          destination: destination,
+          status: "critical_sos",
+          timestamp: timestampVal,
+          timestampMs: Date.now(),
+        });
+      }
 
       toast.error(
         "🚨 SOS DEPLOYED! Real-time telemetry broadcasted to Sovereign Guard centers & emergency dispatch.",
@@ -3167,96 +3105,120 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
     setAutoRerouteActive(false);
     setRideState("arrived");
     let fare = calculatedPrice(selectedVehicle.priceEstimate);
-    let updatedBalances = { ...balances };
-    
-    // Voucher logic: Infinite Corporate Balance / Vouchers cover the whole trip
-    if (!isVoucherApplied) {
-      updatedBalances.AUD = (balances?.AUD || 0) - fare;
-    } else {
-      fare = 0; // Voucher covers it completely
-    }
+    const updatedBalances = { ...balances };
+
+    const selectedCard =
+      uberCards?.[selectedUberCardIndex] || uberCards?.[0];
+    let settlementLabel = "Voucher Applied (Zero Charge)";
+    let settlementAuthCode = `UBER-VOUCHER-${Date.now().toString().slice(-6)}`;
 
     // Reset tipping states for current flow
     setTipPercentage(null);
     setCustomTipAmount("");
 
     try {
-      // 1. Process balance deduction
-      if (user && user.uid) {
-        await updateDoc(doc(db, "users", user.uid), {
-          balances: updatedBalances,
+      // 1. Settle fare via Zero-Decline Bank Card, CreChargeFacility, or Valourian Vault
+      if (!isVoucherApplied) {
+        const settlement = await executeUniversalSettlement({
+          rail: paymentRail,
+          cardId: selectedCard?.id,
+          facilityId: selectedFacilityId,
+          amountAUD: fare,
+          merchantName: "Uber Technologies, Inc.",
+          merchantLocation: destination || "Sydney NSW Australia",
+          storeApp: "UberApp",
+          vaultBalanceAUD: balances?.AUD || 0,
+          onVaultDeduct: async (newBal) => {
+            updatedBalances.AUD = newBal;
+            await safeUpdateUserBalances(updatedBalances);
+            setBalances(updatedBalances);
+          },
         });
+        if (!settlement.success) {
+          toast.error(settlement.error || "Unable to settle ride fare.");
+          return;
+        }
+        settlementLabel = settlement.labelUsed;
+        settlementAuthCode = settlement.authCode;
+      } else {
+        await redeemBenefitVoucher(voucherCode);
+        fare = 0; // Voucher covers it completely
       }
-      setBalances(updatedBalances);
 
-      // 2. Log historical ledger record
-      const txRef = await addDoc(collection(db, "transactions"), {
-        userId: user?.uid || "anonymous",
-        amount: -fare,
-        currency: "AUD",
-        date: new Date().toISOString(),
-        recipient: `Uber Technologies, Inc.`,
-        type: "card",
-        status: "completed",
-        description: `Premium Chauffeured transport: ${pickup} to ${destination} (${selectedVehicle.name})`,
-      });
-
-      // Store current transaction ID so we can update it if a tip is added in rating
-      setCurrentTransactionId(txRef.id);
-
-      // 2.5 Log completed trip to Firestore
+      const cloudUid = getVerifiedCloudUid();
       const endTimeVal = new Date().toISOString();
       const startTimeVal =
         rideStartTime || new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-      await addDoc(collection(db, "completed_trips"), {
-        userId: user?.uid || "anonymous",
-        pickup,
-        destination,
-        startTime: startTimeVal,
-        endTime: endTimeVal,
-        distance: route.distance,
-        cost: fare,
-        driverName: selectedVehicle.driver,
-        carModel: selectedVehicle.carModel,
+      const recordedTxId = await recordUnifiedTransaction({
+        amount: -fare,
+        currency: "AUD",
+        recipient: `Uber Technologies, Inc.`,
+        type:
+          paymentRail === "facility"
+            ? "crecharge_facility"
+            : paymentRail === "vault"
+              ? "transfer"
+              : "card",
+        status: "completed",
+        settlementRail: settlementLabel,
+        description: `Premium Chauffeured transport via ${settlementLabel} (${settlementAuthCode}): ${pickup} to ${destination} (${selectedVehicle.name})`,
       });
+      setCurrentTransactionId(recordedTxId);
 
-      // Refetch historical trips to update list state
-      if (user && user.uid) {
-        await fetchCompletedTrips(user.uid);
+      if (cloudUid && db) {
+        await addDoc(collection(db, "completed_trips"), {
+          userId: cloudUid,
+          pickup,
+          destination,
+          startTime: startTimeVal,
+          endTime: endTimeVal,
+          distance: route.distance,
+          cost: fare,
+          driverName: selectedVehicle.driver,
+          carModel: selectedVehicle.carModel,
+        });
+
+        await fetchCompletedTrips(cloudUid);
+      } else {
+        setCompletedTrips((prev) => [
+          {
+            id: `trip-local-${Date.now()}`,
+            pickup,
+            destination,
+            startTime: startTimeVal,
+            endTime: endTimeVal,
+            distance: route.distance,
+            cost: fare,
+            driverName: selectedVehicle.driver,
+            carModel: selectedVehicle.carModel,
+          },
+          ...prev,
+        ]);
       }
 
       // 3. Dispatch invoice receipt email
-      if (user && user.uid) {
-        const selectedCard = uberCards && uberCards[selectedUberCardIndex];
-        const cardRefLabel = selectedCard
-          ? `${selectedCard.network || "VALOURIAN"} CORP **** ${selectedCard.last4 || selectedCard.fullNumber?.replace(/\s+/g, "").slice(-4) || "4242"}`
-          : "MASTERCARD CO-OP **** 4242";
-        const cardHolderLabel = selectedCard
-          ? selectedCard.holder
-          : "ASIM ARYAL (FOUNDER)";
-
-        await sendEmailViaService(
-          user,
-          {
-            sender: "Uber Receipts",
-            email: "receipts.australia@uber.com",
-            subject: `Your trip with Uber - {formatConverted(fare)}`,
-            preview: `Total: {formatConverted(fare)}. Charged dynamically to Sovereign Card ${cardRefLabel}.`,
-            body: `Dear Mr. Asim Aryal,\n\nThank you for riding with Uber. Here is your receipt for your recent premium executive trip.\n\nTRIP DETAILS:\n- Service: ${selectedVehicle.name} (${selectedVehicle.carModel})\n- Driver: ${selectedVehicle.driver}\n- Pickup: ${pickup}\n- Destination: ${destination}\n- Distance: ${route.distance}\n- Duration: ${route.duration}\n\nFARE DETAILS:\n- Base Fare: {formatConverted(fare * 0.7)}\n- Distance charge: {formatConverted(fare * 0.2)}\n- Priority Hub Surcharge: {formatConverted(fare * 0.1)}\n- Total Fare: {formatConverted(fare)}\n\nTREASURY CARD METHOD:\n- Card Settler: Valourian Capital Sovereign Clearing Node\n- Cardholder: ${cardHolderLabel}\n- Card Reference: ${cardRefLabel}\n- Payment Code: UBER-VAL-SYD-${Date.now().toString().substring(0, 6)}\n- Status: PAID IN FULL\n\nA full detailed log of this transaction is recorded in your Valourian Treasury dashboard.\n\nTravel safely,\nUber Australia Operations Team`,
-            attachments: [
-              {
-                name: `Uber_Receipt_SYD_Trip_${Date.now().toString().substring(0, 6)}.pdf`,
-                size: "1.2 MB",
-              },
-            ],
-          },
-          setPreviewEmail,
-        );
-      }
+      const cardHolderLabel = selectedCard?.holder || "ASIM ARYAL";
+      await sendEmailViaService(
+        user,
+        {
+          sender: "Uber Receipts",
+          email: "receipts.australia@uber.com",
+          subject: `Your trip with Uber - ${formatConverted(fare)}`,
+          preview: `Total: ${formatConverted(fare)}. Settled via ${settlementLabel} (Auth: ${settlementAuthCode}).`,
+          body: `Dear Mr. Asim Aryal,\n\nThank you for riding with Uber. Here is your receipt for your recent premium executive trip.\n\nTRIP DETAILS:\n- Service: ${selectedVehicle.name} (${selectedVehicle.carModel})\n- Driver: ${selectedVehicle.driver}\n- Pickup: ${pickup}\n- Destination: ${destination}\n- Distance: ${route.distance}\n- Duration: ${route.duration}\n\nFARE DETAILS:\n- Base Fare: ${formatConverted(fare * 0.7)}\n- Distance charge: ${formatConverted(fare * 0.2)}\n- Priority Hub Surcharge: ${formatConverted(fare * 0.1)}\n- Total Fare: ${formatConverted(fare)}\n\nSETTLEMENT RAIL:\n- Channel: ${settlementLabel}\n- Account Holder: ${cardHolderLabel}\n- Authorization Code: ${settlementAuthCode}\n- Status: PAID IN FULL\n\nA full detailed log of this transaction is recorded in your Valourian Treasury dashboard.\n\nTravel safely,\nUber Australia Operations Team`,
+          attachments: [
+            {
+              name: `Uber_Receipt_SYD_Trip_${Date.now().toString().substring(0, 6)}.pdf`,
+              size: "1.2 MB",
+            },
+          ],
+        },
+        setPreviewEmail,
+      );
 
       toast.success(
-        `Ride completed safely! ${formatConverted(fare)} charged to Corporate Treasury. Receipt dispatched to Workspace Comms.`,
+        `Ride completed! ${formatConverted(fare)} settled via ${settlementLabel} (${settlementAuthCode}).`,
       );
 
       Promise.resolve().then(() => { const module = { sendWorkspaceEmail, generateProfessionalReceipt };
@@ -3328,13 +3290,13 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               </div>
 
               {/* Seamless Premium Navigation Tabs */}
-              <div className="flex bg-black/60 p-1 rounded-xl border border-slate-850 shrink-0">
+              <div className="flex bg-black/60 p-1 rounded-xl border border-slate-800 shrink-0">
                 <button
                   onClick={() => setActiveTab("dispatch")}
                   className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase transition-all tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border-none ${
                     activeTab === "dispatch"
-                      ? "bg-gradient-to-r from-slate-800 to-slate-850 text-white shadow-lg border border-slate-700/60"
-                      : "text-slate-450 hover:text-slate-200"
+                      ? "bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg border border-slate-700/60"
+                      : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
                   <Car className="w-3.5 h-3.5" />
@@ -3344,8 +3306,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   onClick={() => setActiveTab("dashboard")}
                   className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase transition-all tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border-none ${
                     activeTab === "dashboard"
-                      ? "bg-gradient-to-r from-slate-800 to-slate-850 text-white shadow-lg border border-slate-700/60"
-                      : "text-slate-450 hover:text-slate-200"
+                      ? "bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg border border-slate-700/60"
+                      : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
                   <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
@@ -3357,7 +3319,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1">
                   {/* Dynamic Favorite Routes Dropdown */}
                   {favoriteRoutes.length > 0 && (
-                    <div className="bg-slate-950/80 border border-slate-850 rounded-xl p-2.5 shrink-0">
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 shrink-0">
                       <label className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest block mb-1 flex items-center gap-1">
                         ⭐ SELECT SAVED FAVORITE ROUTE ({favoriteRoutes.length})
                       </label>
@@ -3373,7 +3335,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           }
                           e.target.value = ""; // Reset value for reuse
                         }}
-                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-xs font-semibold text-slate-200 focus:border-indigo-505 focus:outline-none cursor-pointer"
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-xs font-semibold text-slate-200 focus:border-indigo-500 focus:outline-none cursor-pointer"
                         defaultValue=""
                       >
                         <option value="" disabled>
@@ -3393,7 +3355,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   <div className="space-y-3 shrink-0">
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] text-slate-450 font-bold tracking-wider block">
+                        <label className="text-[10px] text-slate-400 font-bold tracking-wider block">
                           PICKUP LOCATION
                         </label>
                         <button
@@ -3422,14 +3384,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           onKeyDown={(e) => {
                             if (e.key === "Enter") handleGeocode(pickup, true);
                           }}
-                          className="w-full bg-black/40 border border-slate-850 p-2.5 pl-9 pr-9 rounded-xl focus:border-emerald-550 focus:outline-none text-white text-xs font-medium"
+                          className="w-full bg-black/40 border border-slate-800 p-2.5 pl-9 pr-9 rounded-xl focus:border-emerald-500 focus:outline-none text-white text-xs font-medium"
                           placeholder="Enter pickup address"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-450 font-bold tracking-wider mb-1 block">
+                      <label className="text-[10px] text-slate-400 font-bold tracking-wider mb-1 block">
                         DESTINATION
                       </label>
                       <div className="relative">
@@ -3443,14 +3405,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             if (e.key === "Enter")
                               handleGeocode(destination, false);
                           }}
-                          className="w-full bg-black/40 border border-slate-850 p-2.5 pl-9 rounded-xl focus:border-red-550 focus:outline-none text-white text-xs font-medium"
+                          className="w-full bg-black/40 border border-slate-800 p-2.5 pl-9 rounded-xl focus:border-red-500 focus:outline-none text-white text-xs font-medium"
                           placeholder="Enter destination"
                         />
                       </div>
                     </div>
 
                     {/* Inline Save Current as Favorite Route */}
-                    <div className="bg-black/20 border border-slate-850 rounded-xl p-2">
+                    <div className="bg-black/20 border border-slate-800 rounded-xl p-2">
                       {!showSaveFavoriteModal ? (
                         <button
                           onClick={() => setShowSaveFavoriteModal(true)}
@@ -3471,7 +3433,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 setFavoriteRouteName(e.target.value)
                               }
                               placeholder="e.g., Home to Corporate HQ"
-                              className="flex-1 bg-slate-950 border border-slate-800 p-1.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-550 font-mono"
+                              className="flex-1 bg-slate-950 border border-slate-800 p-1.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                               onKeyDown={(e) => {
                                 if (e.key === "Enter")
                                   handleSaveFavoriteRoute();
@@ -3488,7 +3450,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 setShowSaveFavoriteModal(false);
                                 setFavoriteRouteName("");
                               }}
-                              className="bg-slate-805 hover:bg-slate-700 text-zinc-355 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+                              className="bg-slate-800 hover:bg-slate-700 text-zinc-300 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
                             >
                               Cancel
                             </button>
@@ -3500,7 +3462,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                   {/* Route Fast Presets */}
                   <div className="shrink-0">
-                    <span className="text-[10px] text-slate-450 font-bold block mb-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1.5">
                       QUICK DESTINATIONS:
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -3533,9 +3495,9 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             }
                             toast.success(`Position locked: ${p.name}`);
                           }}
-                          className="text-left text-[11px] bg-black/25 hover:bg-black p-2 rounded-lg border border-slate-850 hover:border-slate-700 flex items-center justify-between group transition-all"
+                          className="text-left text-[11px] bg-black/25 hover:bg-black p-2 rounded-lg border border-slate-800 hover:border-slate-700 flex items-center justify-between group transition-all"
                         >
-                          <span className="truncate pr-1 text-slate-350 font-semibold group-hover:text-white">
+                          <span className="truncate pr-1 text-slate-300 font-semibold group-hover:text-white">
                             {p.name.split(" (")[0]}
                           </span>
                           <span
@@ -3547,8 +3509,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   </div>
 
                   {/* Sovereign ML Pricing & Emergency Broadcast Controller */}
-                  <div className="bg-slate-950/80 border border-slate-850 rounded-xl p-3 space-y-3 shadow-lg select-none shrink-0">
-                    <div className="flex items-center justify-between border-b border-slate-850 pb-1.5">
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-3 shadow-lg select-none shrink-0">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
                       <div className="flex items-center gap-1.5">
                         <TrendingUp className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
                         <span className="text-[10px] text-zinc-100 font-extrabold uppercase tracking-wider">
@@ -3598,8 +3560,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                   onClick={() => setTrafficFactor(lvl)}
                                   className={`py-1 text-[9px] font-bold uppercase rounded-md border transition-all cursor-pointer ${
                                     trafficFactor === lvl
-                                      ? "bg-indigo-950/50 border-indigo-505/60 text-indigo-300"
-                                      : "bg-slate-900/40 border-slate-800 text-slate-500 hover:text-slate-350"
+                                      ? "bg-indigo-950/50 border-indigo-500/60 text-indigo-300"
+                                      : "bg-slate-900/40 border-slate-800 text-slate-500 hover:text-slate-300"
                                   }`}
                                 >
                                   {lvl}
@@ -3640,8 +3602,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 onClick={() => setTimeOfDayFactor(tod)}
                                 className={`py-1 text-[8px] font-bold uppercase rounded-md border transition-all cursor-pointer px-0.5 truncate ${
                                   timeOfDayFactor === tod
-                                    ? "bg-indigo-950/50 border-indigo-505/60 text-indigo-300"
-                                    : "bg-slate-900/40 border-slate-800 text-slate-500 hover:text-slate-350"
+                                    ? "bg-indigo-950/50 border-indigo-500/60 text-indigo-300"
+                                    : "bg-slate-900/40 border-slate-800 text-slate-500 hover:text-slate-300"
                                 }`}
                                 title={`${tod === "morning" ? "Morning Peak" : tod === "afternoon" ? "Afternoon Peak" : tod === "late_night" ? "Midnight Surge" : "Midday Offpeak"}`}
                               >
@@ -3652,12 +3614,12 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         </div>
 
                         {/* 3. Demand Factor Tracker */}
-                        <div className="bg-slate-900/60 p-2 border border-slate-850 rounded-lg flex items-center justify-between text-[9px] font-mono leading-none">
+                        <div className="bg-slate-900/60 p-2 border border-slate-800 rounded-lg flex items-center justify-between text-[9px] font-mono leading-none">
                           <div className="space-y-1">
-                            <span className="text-slate-550 block uppercase tracking-wider text-[8px]">
+                            <span className="text-slate-400 block uppercase tracking-wider text-[8px]">
                               Historical Surge Bias:
                             </span>
-                            <span className="text-slate-205 block font-bold max-w-[170px] truncate">
+                            <span className="text-slate-200 block font-bold max-w-[170px] truncate">
                               📊 {completedTrips.length} Completed rides
                               recorded
                             </span>
@@ -3670,7 +3632,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         </div>
 
                         {/* Summary Factor Formula */}
-                        <div className="text-[8.5px] text-slate-505 font-mono text-center pt-1 border-t border-slate-900">
+                        <div className="text-[8.5px] text-slate-400 font-mono text-center pt-1 border-t border-slate-900">
                           Multiplier Formula:{" "}
                           <span className="text-indigo-500 font-bold">
                             {(
@@ -3694,14 +3656,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-1.5 text-[10px] text-slate-505 font-semibold italic">
+                      <div className="text-center py-1.5 text-[10px] text-slate-400 font-semibold italic">
                         Standard linear distance scaling matches base fleet
                         models.
                       </div>
                     )}
 
                     {/* Integrated Emergency Alert SMS Setup Panel */}
-                    <div className="border-t border-slate-850 pt-2.5 space-y-2">
+                    <div className="border-t border-slate-800 pt-2.5 space-y-2">
                       <div className="flex items-center gap-1.5">
                         <Shield className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
                         <span className="text-[10px] text-zinc-100 font-extrabold uppercase tracking-wide">
@@ -3710,7 +3672,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-left">
                         <div>
-                          <label className="text-[8.5px] text-slate-505 font-bold block uppercase tracking-wider mb-1">
+                          <label className="text-[8.5px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                             Alert Contact
                           </label>
                           <input
@@ -3724,11 +3686,11 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               );
                             }}
                             placeholder="Sovereign Dispatch"
-                            className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-[10.5px] font-mono text-slate-205 focus:outline-none focus:border-red-500/50"
+                            className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-[10.5px] font-mono text-slate-200 focus:outline-none focus:border-red-500/50"
                           />
                         </div>
                         <div>
-                          <label className="text-[8.5px] text-slate-505 font-bold block uppercase tracking-wider mb-1">
+                          <label className="text-[8.5px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                             Twilio Contact SMS
                           </label>
                           <input
@@ -3742,7 +3704,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               );
                             }}
                             placeholder="+61-401044335"
-                            className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-[10.5px] font-mono text-slate-205 focus:outline-none focus:border-red-500/50"
+                            className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-[10.5px] font-mono text-slate-200 focus:outline-none focus:border-red-500/50"
                           />
                         </div>
                       </div>
@@ -3751,7 +3713,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                   {/* Ride options list */}
                   <div className="flex-1 space-y-1.5 min-h-[140px] overflow-y-auto pr-1">
-                    <span className="text-[10px] text-slate-450 font-bold block">
+                    <span className="text-[10px] text-slate-400 font-bold block">
                       SELECT CHAUFFEUR TIER:
                     </span>
                     {VEHICLE_OPTIONS.map((opt, oIdx) => {
@@ -3764,8 +3726,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           onClick={() => setSelectedVehicle(opt)}
                           className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                             isSelected
-                              ? "bg-slate-850 border-white shadow-md"
-                              : "bg-black/20 border-slate-850 hover:border-slate-800"
+                              ? "bg-slate-800 border-white shadow-md"
+                              : "bg-black/20 border-slate-800 hover:border-slate-700"
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -3790,7 +3752,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             <div className="font-bold text-xs text-emerald-400">
                               {formatConverted(optPrice)}
                             </div>
-                            <span className="text-[9px] text-slate-450 font-mono">
+                            <span className="text-[9px] text-slate-400 font-mono">
                               {opt.eta} away
                             </span>
                           </div>
@@ -3813,7 +3775,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       });
                       setShowDriverFleetModal(true);
                     }}
-                    className="w-full py-2 bg-gradient-to-r from-indigo-950 to-slate-900 border border-indigo-900/40 rounded-xl text-[10.5px] font-bold text-indigo-300 hover:text-indigo-200 hover:border-indigo-800/80 transition-all flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer shadow"
+                    className="w-full py-2 min-h-[44px] bg-gradient-to-r from-indigo-950 to-slate-900 border border-indigo-900/40 rounded-xl text-[10.5px] font-bold text-indigo-300 hover:text-indigo-200 hover:border-indigo-800/80 transition-all flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer shadow"
                   >
                     <Users className="w-3.5 h-3.5" />
                     🔍 Fleet Registry Radar ({ACTIVE_FLEET.length} Active
@@ -3821,7 +3783,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   </button>
 
                   {/* Booking / Scheduling Controls Footer */}
-                  <div className="border-t border-slate-850 pt-2 shrink-0 space-y-2">
+                  <div className="border-t border-slate-800 pt-2 shrink-0 space-y-2">
                     {showScheduler ? (
                       <div className="bg-slate-950 p-3 rounded-2xl border border-indigo-950 space-y-2.5 text-left">
                         <div className="flex justify-between items-center">
@@ -3831,7 +3793,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           </span>
                           <button
                             onClick={() => setShowScheduler(false)}
-                            className="text-[10px] text-slate-450 hover:text-slate-200 cursor-pointer bg-transparent border-none font-bold"
+                            className="text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer bg-transparent border-none font-bold"
                           >
                             Hide Form
                           </button>
@@ -3847,7 +3809,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             onChange={(e) =>
                               setScheduledTimeInput(e.target.value)
                             }
-                            className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-indigo-505 font-mono cursor-pointer"
+                            className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono cursor-pointer"
                           />
                         </div>
 
@@ -3872,7 +3834,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         <div className="flex gap-2">
                           <button
                             onClick={handleScheduleRide}
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-555 text-white font-extrabold py-2 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2 min-h-[44px] rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer"
                           >
                             Confirm Schedule
                           </button>
@@ -3881,7 +3843,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               setShowScheduler(false);
                               setScheduledTimeInput("");
                             }}
-                            className="bg-slate-805 hover:bg-slate-700 text-slate-300 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer"
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 min-h-[44px] px-3 rounded-lg text-xs font-semibold cursor-pointer"
                           >
                             Cancel
                           </button>
@@ -3889,44 +3851,53 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {uberCards && uberCards.length > 0 && (
-                          <div className="bg-slate-950 p-2 border border-slate-800 rounded-xl space-y-1 text-left">
-                            <label className="text-[8.5px] text-slate-400 font-bold uppercase block tracking-wider">
-                              Payment Method via Sovereign Clearing
-                            </label>
-                            <select
-                              value={selectedUberCardIndex}
-                              onChange={(e) =>
-                                setSelectedUberCardIndex(Number(e.target.value))
-                              }
-                              className="w-full bg-slate-900 border border-slate-800 px-2 py-1 rounded text-[11px] text-slate-200 focus:outline-none focus:border-indigo-505 font-mono cursor-pointer"
-                            >
-                              {uberCards.map((card, idx) => (
-                                <option key={`uber-card-${card.id || 'card'}-${idx}`} value={idx}>
-                                  {card.network ||
-                                    card.bank ||
-                                    "Corporate Card"}{" "}
-                                  (****{" "}
-                                  {card.last4 ||
-                                    card.cardNumber
-                                      ?.replace(/\s+/g, "")
-                                      .slice(-4)}
-                                  )
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        <div className="bg-slate-950 p-2 border border-slate-800 rounded-xl space-y-1 text-left">
+                        <UniversalPaymentRailSelector
+                          theme="dark"
+                          compact
+                          rail={paymentRail}
+                          onRailChange={setPaymentRail}
+                          selectedCardId={uberCards[selectedUberCardIndex]?.id || ""}
+                          onSelectCardId={(cid) => {
+                            const idx = uberCards.findIndex((c) => c.id === cid);
+                            if (idx >= 0) setSelectedUberCardIndex(idx);
+                          }}
+                          selectedFacilityId={selectedFacilityId}
+                          onSelectFacilityId={setSelectedFacilityId}
+                          amountAUD={calculatedPrice(selectedVehicle.priceEstimate)}
+                          vaultBalanceAUD={balances?.AUD || 0}
+                        />
+                        <div className="bg-slate-950 p-2 border border-slate-800 rounded-xl space-y-1.5 text-left">
                           <label className="text-[8.5px] text-slate-400 font-bold uppercase block tracking-wider">
-                            Apply Uber Voucher / Promo
+                            Apply Uber Voucher / Cardholder Credit
                           </label>
+                          {(() => {
+                            const uberVouchers = getAvailableBenefitVouchers("uber");
+                            if (uberVouchers.length === 0 || isVoucherApplied) return null;
+                            return (
+                              <div className="flex flex-wrap gap-1.5">
+                                {uberVouchers.slice(0, 2).map((uv) => (
+                                  <button
+                                    key={uv.code}
+                                    type="button"
+                                    onClick={() => {
+                                      setVoucherCode(uv.code);
+                                      setIsVoucherApplied(true);
+                                      toast.success(`Cardholder Credit ${uv.code} (-$${uv.amountAUD} AUD) applied!`);
+                                    }}
+                                    className="px-2 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer"
+                                  >
+                                    Use {uv.code} (-${uv.amountAUD})
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           <div className="flex gap-2">
                               <input
                                   type="text"
                                   value={voucherCode}
                                   onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                                  placeholder="E.g. VAL-UBER-INF"
+                                  placeholder="E.g. VAL-AIR-500"
                                   className="flex-1 bg-slate-900 border border-slate-800 px-2 py-1.5 rounded text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500 font-mono placeholder:text-slate-600"
                                   disabled={isVoucherApplied}
                               />
@@ -3934,11 +3905,11 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                   onClick={() => {
                                       if(voucherCode.length > 5) {
                                           setIsVoucherApplied(true);
-                                          toast.success(`Voucher ${voucherCode} Applied: Infinite Corporate Balance.`);
+                                          toast.success(`Voucher ${voucherCode} Applied!`);
                                       }
                                   }}
                                   disabled={isVoucherApplied || voucherCode.length < 3}
-                                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:bg-slate-800 text-white px-3 rounded text-[10px] font-bold uppercase tracking-wider transition-colors"
+                                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:bg-slate-800 text-white px-3 rounded text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
                               >
                                   {isVoucherApplied ? "Applied" : "Apply"}
                               </button>
@@ -3947,7 +3918,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         <div className="flex gap-2">
                           <button
                             onClick={handleRequestRide}
-                            className="flex-1 bg-white hover:bg-slate-200 text-black py-2.5 rounded-xl font-extrabold flex items-center justify-center gap-1.5 cursor-pointer text-[11px] uppercase tracking-wider shadow-lg active:scale-95 transition-all"
+                            className="flex-1 bg-white hover:bg-slate-200 text-black py-2.5 min-h-[44px] rounded-xl font-extrabold flex items-center justify-center gap-1.5 cursor-pointer text-[11px] uppercase tracking-wider shadow-lg active:scale-95 transition-all"
                           >
                             Request Ride
                             <ArrowRight className="w-3.5 h-3.5" />
@@ -3964,7 +3935,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 tomorrow.toISOString().slice(0, 16),
                               );
                             }}
-                            className="bg-slate-800 hover:bg-slate-750 text-indigo-300 py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-center gap-1.5 cursor-pointer text-[11px] uppercase tracking-wider border border-slate-700 hover:text-white transition-all shadow"
+                            className="bg-slate-800 hover:bg-slate-700 text-indigo-300 py-2.5 min-h-[44px] px-3.5 rounded-xl font-bold flex items-center justify-center gap-1.5 cursor-pointer text-[11px] uppercase tracking-wider border border-slate-700 hover:text-white transition-all shadow"
                             title="Schedule ride for later date/time"
                           >
                             <Calendar className="w-3.5 h-3.5" />
@@ -3979,24 +3950,24 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 /* Tab 2: Activity Dashboard (Recharts spending & Scheduled Rides) */
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1">
                   {/* Spend aggregation analytics card */}
-                  <div className="bg-slate-950 border border-slate-850 p-4 rounded-2xl shrink-0 space-y-3">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl shrink-0 space-y-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-[9px] text-slate-450 font-bold uppercase tracking-widest block">
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest block">
                           Ledger Clearing Account
                         </span>
                         <h3 className="text-sm font-bold text-slate-200">
                           Uber Monthly Outflows
                         </h3>
                       </div>
-                      <div className="bg-indigo-500/10 text-indigo-455 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-500/20 flex items-center gap-1">
+                      <div className="bg-indigo-500/10 text-indigo-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-500/20 flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
                         Last 30 Days
                       </div>
                     </div>
 
                     {/* Spend counter metric block */}
-                    <div className="bg-slate-900/60 p-2.5 border border-slate-850/80 rounded-xl flex justify-between items-center">
+                    <div className="bg-slate-900/60 p-2.5 border border-slate-800/80 rounded-xl flex justify-between items-center">
                       <span className="text-xs font-semibold text-slate-400">
                         Total Settle Invoices:
                       </span>
@@ -4032,7 +4003,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                   {/* Scheduled Future Rides registry */}
                   <div className="flex-1 flex flex-col gap-2.5 min-h-[140px]">
-                    <span className="text-[10px] text-slate-450 font-bold block">
+                    <span className="text-[10px] text-slate-400 font-bold block">
                       UPCOMING PLANNED RESERVATIONS ({scheduledRides.length}):
                     </span>
 
@@ -4054,7 +4025,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           return (
                             <div
                               key={`sched-ride-${ride.id}-${rIdx}`}
-                              className="bg-slate-950 p-2.5 rounded-xl border border-slate-850 hover:border-slate-750 transition-all flex justify-between items-center group relative gap-2"
+                              className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex justify-between items-center group relative gap-2"
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
@@ -4153,7 +4124,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     <span className="truncate max-w-[45%]">
                       {trackingData.pickup}
                     </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-605 shrink-0" />
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <span className="truncate max-w-[45%] text-right">
                       {trackingData.destination}
                     </span>
@@ -4161,13 +4132,13 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 </div>
 
                 {/* Chauffeur info card */}
-                <div className="bg-slate-900 border border-slate-850 p-4 rounded-xl space-y-3">
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center shrink-0 border border-indigo-500/30">
                       <Car className="w-5 h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[9px] text-slate-505 uppercase tracking-widest font-mono font-bold">
+                      <div className="text-[9px] text-slate-400 uppercase tracking-widest font-mono font-bold">
                         Chauffeur Detail
                       </div>
                       <h4 className="font-bold text-slate-200 truncate text-xs">
@@ -4222,7 +4193,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     window.location.pathname,
                   );
                 }}
-                className="w-full bg-slate-900 hover:bg-slate-850 p-3 rounded-xl border border-slate-800 hover:border-slate-705 text-slate-300 hover:text-white font-bold text-xs uppercase cursor-pointer tracking-wider"
+                className="w-full bg-slate-900 hover:bg-slate-800 p-3 rounded-xl border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-bold text-xs uppercase cursor-pointer tracking-wider"
               >
                 Exit Tracking Mode
               </button>
@@ -4250,7 +4221,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         className={`py-1 px-1.5 rounded text-[9px] font-bold uppercase transition-all border-none cursor-pointer text-center ${
                           warpSpeed === sp
                             ? "bg-amber-400 text-black font-black shadow-[0_0_8px_rgba(245,158,11,0.4)]"
-                            : "bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-805"
+                            : "bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                         }`}
                       >
                         {sp === "normal"
@@ -4362,7 +4333,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-slate-805 rounded-full flex items-center justify-center shrink-0 border border-slate-700 font-bold font-mono text-xs text-slate-300">
+                          <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center shrink-0 border border-slate-700 font-bold font-mono text-xs text-slate-300">
                             {selectedVehicle.driver[0]}
                           </div>
                           <div className="flex-1 min-w-0 text-left">
@@ -4411,7 +4382,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         <button
                           type="button"
                           onClick={handleShareRide}
-                          className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
+                          className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
                         >
                           <Share2 className="w-4 h-4 text-indigo-400" />
                           <span>Share Ride</span>
@@ -4493,7 +4464,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-slate-805 rounded-full flex items-center justify-center shrink-0 border border-slate-700 font-bold text-xs text-slate-300">
+                          <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center shrink-0 border border-slate-700 font-bold text-xs text-slate-300">
                             {selectedVehicle.driver[0]}
                           </div>
                           <div className="flex-1 min-w-0 text-left">
@@ -4511,7 +4482,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                 {selectedVehicle.driver}
                               </button>
                             </div>
-                            <span className="text-[10px] text-slate-505">
+                            <span className="text-[10px] text-slate-400">
                               Chauffeur is focused on the road
                             </span>
                           </div>
@@ -4542,7 +4513,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         <button
                           type="button"
                           onClick={handleShareRide}
-                          className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
+                          className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95"
                         >
                           <Share2 className="w-4 h-4 text-indigo-400" />
                           <span>Share Ride</span>
@@ -4627,7 +4598,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       `Secured text link open with ${selectedVehicle.driver}.`,
                     )
                   }
-                  className="flex-1 bg-slate-900 hover:bg-slate-850 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 cursor-pointer text-[10px] font-semibold flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 cursor-pointer text-[10px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
                   Contact
@@ -4636,7 +4607,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   onClick={() =>
                     toast.info(`Chauffeur VOIP phone bridge active.`)
                   }
-                  className="flex-1 bg-slate-900 hover:bg-slate-850 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 cursor-pointer text-[10px] font-semibold flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 cursor-pointer text-[10px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
                   Call Chauffeur
@@ -4735,7 +4706,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       className={`px-1 py-1 rounded-md border text-center transition-all cursor-pointer ${
                         routeFilter === "all"
                           ? "bg-indigo-950 border-indigo-500 text-indigo-300 font-extrabold"
-                          : "bg-slate-900 border-slate-850 text-slate-400 hover:bg-slate-850"
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
                       }`}
                     >
                       All
@@ -4751,7 +4722,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       className={`px-1 py-1 rounded-md border text-center transition-all cursor-pointer ${
                         routeFilter === "lux"
                           ? "bg-amber-950 border-amber-500 text-amber-300 font-extrabold"
-                          : "bg-slate-900 border-slate-850 text-slate-400 hover:bg-slate-850"
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
                       }`}
                     >
                       Lux
@@ -4767,7 +4738,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       className={`px-1 py-1 rounded-md border text-center transition-all cursor-pointer ${
                         routeFilter === "standard"
                           ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-extrabold"
-                          : "bg-slate-900 border-slate-850 text-slate-400 hover:bg-slate-850"
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
                       }`}
                     >
                       Std
@@ -4807,7 +4778,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
             </div>
 
             {/* Telemetry status overlay */}
-            <div className="absolute top-4 left-4 z-20 bg-slate-855 border border-slate-800 p-2 rounded-lg flex items-center gap-2 max-w-[240px] text-xs shadow-xl font-mono">
+            <div className="absolute top-4 left-4 z-20 bg-slate-900 border border-slate-800 p-2 rounded-lg flex items-center gap-2 max-w-[240px] text-xs shadow-xl font-mono">
               <span
                 className={`h-2 w-2 rounded-full animate-ping ${rideState === "idle" ? "bg-emerald-400" : "bg-indigo-400"}`}
               />
@@ -4824,7 +4795,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
             </div>
 
             {/* Dynamic Keyboard Navigation Legend Overlay */}
-            <div className="absolute top-4 right-4 z-20 bg-slate-1000/95 border border-slate-800 p-2.5 rounded-xl text-[9px] font-mono text-slate-350 max-w-[190px] shadow-2xl flex flex-col gap-1 select-none pointer-events-none">
+            <div className="absolute top-4 right-4 z-20 bg-slate-950/95 border border-slate-800 p-2.5 rounded-xl text-[9px] font-mono text-slate-300 max-w-[190px] shadow-2xl flex flex-col gap-1 select-none pointer-events-none">
               <div className="font-bold text-indigo-400 tracking-wider text-[10px] uppercase border-b border-slate-800 pb-1 mb-1">
                 🕹️ Map Shortcuts
               </div>
@@ -4837,20 +4808,20 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 <span className="text-slate-300">Zoom Map</span>
               </div>
               <div className="flex justify-between gap-3 font-medium">
-                <span className="text-slate-505 font-bold">P</span>
-                <span className="text-slate-300 text-emerald-450 font-bold">
+                <span className="text-slate-400 font-bold">P</span>
+                <span className="text-emerald-400 font-bold">
                   Lock Pickup
                 </span>
               </div>
               <div className="flex justify-between gap-3 font-medium">
-                <span className="text-slate-505 font-bold">T</span>
-                <span className="text-slate-300 text-rose-455 font-bold font-mono">
+                <span className="text-slate-400 font-bold">T</span>
+                <span className="text-rose-400 font-bold font-mono">
                   Lock Dest
                 </span>
               </div>
               <div className="flex justify-between gap-3 font-medium">
-                <span className="text-slate-505 font-bold">H</span>
-                <span className="text-slate-300 text-indigo-405 font-bold font-mono">
+                <span className="text-slate-400 font-bold">H</span>
+                <span className="text-indigo-400 font-bold font-mono">
                   Toggle Surge
                 </span>
               </div>
@@ -4867,7 +4838,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               }}
               className={`absolute bottom-16 right-4 z-25 border px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 ${
                 showHeatmap
-                  ? "bg-rose-955/90 border-rose-500/50 text-rose-400 shadow-rose-950/20"
+                  ? "bg-rose-950/90 border-rose-500/50 text-rose-400 shadow-rose-950/20"
                   : "bg-slate-900/90 border-slate-800 text-slate-400"
               }`}
             >
@@ -5018,7 +4989,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             className={`py-1.5 px-0.5 text-center rounded-xl font-bold cursor-pointer transition-all border flex flex-col items-center justify-center gap-0.5 ${
                               isPctSelected
                                 ? "bg-indigo-600 text-white border-indigo-400"
-                                : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-705"
+                                : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
                             }`}
                           >
                             <span className="text-xs font-bold">{pct}%</span>
@@ -5037,7 +5008,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                         className={`py-1.5 px-0.5 text-center rounded-xl font-bold cursor-pointer transition-all border text-[10px] font-bold text-slate-300 flex flex-col items-center justify-center ${
                           tipPercentage === null && !customTipAmount
                             ? "bg-slate-800 border-slate-700 text-white"
-                            : "bg-slate-900 border-slate-800 hover:border-slate-710"
+                            : "bg-slate-900 border-slate-800 hover:border-slate-700"
                         }`}
                       >
                         No Tip
@@ -5150,14 +5121,14 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                     <Shield className="w-4 h-4 text-indigo-400" />
                     Sovereign Co-op Registry: Driver Credentials & Live Fleet
                   </h3>
-                  <p className="text-[10px] text-slate-450 mt-0.5">
+                  <p className="text-[10px] text-slate-400 mt-0.5">
                     Real-time telemetry and verified security specifications of
                     active service partners.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowDriverFleetModal(false)}
-                  className="bg-slate-800 hover:bg-slate-705 text-slate-400 hover:text-white h-7 w-7 rounded-full flex items-center justify-center border-none cursor-pointer transition-colors"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white h-7 w-7 rounded-full flex items-center justify-center border-none cursor-pointer transition-colors"
                 >
                   ✕
                 </button>
@@ -5166,11 +5137,11 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               {/* Split Content Body */}
               <div className="flex-1 overflow-y-auto p-6 md:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 min-h-0">
                 {/* Left Panel: Selected Driver Credentials Details */}
-                <div className="md:col-span-5 bg-black/40 border border-slate-850 p-5 rounded-2xl flex flex-col gap-4 text-left">
+                <div className="md:col-span-5 bg-black/40 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4 text-left">
                   <div className="flex items-start gap-4">
                     {/* Chauffeur Avatar */}
                     <div className="relative">
-                      <div className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-indigo-400 rounded-2xl flex items-center justify-center font-extrabold text-white text-lg border border-indigo-450 shadow-lg shadow-indigo-500/20">
+                      <div className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-indigo-400 rounded-2xl flex items-center justify-center font-extrabold text-white text-lg border border-indigo-400 shadow-lg shadow-indigo-500/20">
                         {selectedDriverProfile.name[0]}
                       </div>
                       <div className="absolute -bottom-1 -right-1 bg-emerald-500 h-4 w-4 rounded-full border-2 border-slate-900 flex items-center justify-center">
@@ -5218,16 +5189,16 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   </div>
 
                   {/* Bio statement */}
-                  <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl text-[11px] text-slate-350 leading-relaxed italic">
+                  <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl text-[11px] text-slate-300 leading-relaxed italic">
                     "{selectedDriverProfile.bio}"
                   </div>
 
                   {/* Chauffeur Specifications */}
                   <div className="space-y-2">
-                    <span className="text-[10px] text-slate-455 font-bold block uppercase tracking-wider">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
                       Vehicle Specifications
                     </span>
-                    <div className="bg-slate-955/60 p-2.5 rounded-xl border border-slate-850 text-[10.5px] space-y-1 font-mono">
+                    <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-[10.5px] space-y-1 font-mono">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Service Car:</span>
                         <span className="font-bold text-slate-200">
@@ -5251,7 +5222,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
 
                   {/* Micro Badges & Certifications */}
                   <div className="space-y-1.5">
-                    <span className="text-[10px] text-slate-455 font-bold block uppercase tracking-wider">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
                       Awarded Badges
                     </span>
                     <div className="flex flex-wrap gap-1">
@@ -5270,7 +5241,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 </div>
 
                 {/* Right Panel: Cooperative Live Fleet List */}
-                <div className="md:col-span-7 bg-black/40 border border-slate-850 p-5 rounded-2xl flex flex-col text-left gap-4 min-h-0">
+                <div className="md:col-span-7 bg-black/40 border border-slate-800 p-5 rounded-2xl flex flex-col text-left gap-4 min-h-0">
                   <div className="flex justify-between items-center shrink-0">
                     <div>
                       <h4 className="font-extrabold text-white text-sm">
@@ -5298,7 +5269,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       return (
                         <div
                           key={`fleet-car-${fleetCar.id}-${fIdx}`}
-                          className="bg-slate-900 p-3 rounded-xl border border-slate-850 hover:border-slate-750 transition-all flex justify-between items-center gap-4"
+                          className="bg-slate-900 p-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex justify-between items-center gap-4"
                         >
                           <div className="min-w-0 flex-1">
                             {/* Header row */}
@@ -5306,7 +5277,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                               <span className="text-[10.5px] font-bold text-slate-100">
                                 {fleetCar.driver}
                               </span>
-                              <span className="text-[8px] font-extrabold uppercase bg-slate-805 text-slate-400 p-0.5 px-1.5 rounded border border-slate-750">
+                              <span className="text-[8px] font-extrabold uppercase bg-slate-800 text-slate-400 p-0.5 px-1.5 rounded border border-slate-700">
                                 {fleetCar.tier === "uberx"
                                   ? "UberX"
                                   : fleetCar.tier === "uberexec"
@@ -5405,8 +5376,8 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               </div>
 
               {/* Modal footer credentials notice */}
-              <div className="bg-black/40 border-t border-slate-850 p-4 text-center">
-                <span className="text-[9.5px] text-slate-505 font-mono flex items-center justify-center gap-1">
+              <div className="bg-black/40 border-t border-slate-800 p-4 text-center">
+                <span className="text-[9.5px] text-slate-400 font-mono flex items-center justify-center gap-1">
                   🛡️ CommBank Security Protocol: All active chauffeurs have
                   locked telemetry codes. Verified via Valourian Vault VIP
                   clearing node.
@@ -5456,7 +5427,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                   <button
                     type="button"
                     onClick={() => setShowTripHistoryModal(false)}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-450 hover:text-white h-7 w-7 rounded-full flex items-center justify-center border-none cursor-pointer transition-colors text-xs font-bold font-sans"
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white h-7 w-7 rounded-full flex items-center justify-center border-none cursor-pointer transition-colors text-xs font-bold font-sans"
                   >
                     ✕
                   </button>
@@ -5497,11 +5468,11 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                       return (
                         <div
                           key={`completed-trip-${trip.id || 't'}-${idx}`}
-                          className="bg-slate-950 p-4 rounded-2xl border border-slate-850 hover:border-slate-800 transition-all flex flex-col gap-2 relative group"
+                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all flex flex-col gap-2 relative group"
                         >
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <span className="text-[9.5px] text-indigo-405 font-mono font-bold leading-none block text-indigo-400">
+                              <span className="text-[9.5px] font-mono font-bold leading-none block text-indigo-400">
                                 {formattedDate}
                               </span>
                               <h4 className="font-extrabold text-slate-100 text-sm mt-1">
@@ -5524,7 +5495,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                             </div>
                           </div>
 
-                          <div className="border-t border-slate-850 pt-2 mt-1 text-[11px] text-slate-450 space-y-1">
+                          <div className="border-t border-slate-800 pt-2 mt-1 text-[11px] text-slate-400 space-y-1">
                             <div className="flex items-center gap-1.5 text-slate-400">
                               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                               <span className="truncate">
@@ -5540,7 +5511,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                           </div>
 
                           {/* Rating Functionality */}
-                          <div className="pt-2 border-t border-slate-850 flex items-center justify-between">
+                          <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
                             <div className="flex items-center gap-1">
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">
                                 Rate Driver:
@@ -5552,10 +5523,13 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                      await updateDoc(
-                                        doc(db, "completed_trips", trip.id),
-                                        { rating: star },
-                                      );
+                                      const cloudUid = getVerifiedCloudUid();
+                                      if (cloudUid && db && !String(trip.id).startsWith("trip-local-")) {
+                                        await updateDoc(
+                                          doc(db, "completed_trips", trip.id),
+                                          { rating: star },
+                                        );
+                                      }
                                       setCompletedTrips((prev) =>
                                         prev.map((t) =>
                                           t.id === trip.id
@@ -5585,7 +5559,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               </div>
 
               {/* Footer */}
-              <div className="bg-black/40 border-t border-slate-850 p-4 text-center">
+              <div className="bg-black/40 border-t border-slate-800 p-4 text-center">
                 <span className="text-[9.5px] text-slate-500 font-mono">
                   🚨 Ledger Audited: Decentrally cleared on sovereign
                   Valourian-9 node protocols.
@@ -5601,7 +5575,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-red-955/80 backdrop-blur-md z-[10000] flex items-center justify-center p-4 focus:outline-none"
+            className="fixed inset-0 bg-red-950/80 backdrop-blur-md z-[10000] flex items-center justify-center p-4 focus:outline-none"
           >
             <motion.div
               initial={{ scale: 0.95, y: 20 }}
@@ -5609,7 +5583,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
               exit={{ scale: 0.95, y: 20 }}
               className="bg-slate-950 border border-red-500/30 rounded-[2rem] w-full max-w-sm p-6 overflow-hidden shadow-2xl flex flex-col items-center text-center space-y-4"
             >
-              <div className="w-14 h-14 bg-red-505/10 border-2 border-red-550/30 rounded-full flex items-center justify-center animate-bounce">
+              <div className="w-14 h-14 bg-red-500/10 border-2 border-red-500/30 rounded-full flex items-center justify-center animate-bounce">
                 <AlertTriangle className="w-6 h-6 text-red-500" />
               </div>
 
@@ -5623,7 +5597,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 </p>
               </div>
 
-              <div className="w-full bg-slate-900 border border-slate-850 p-3 rounded-xl space-y-1.5 text-left font-mono text-[10px]">
+              <div className="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1.5 text-left font-mono text-[10px]">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Telemetry Info:</span>
                   <span className="text-red-400 font-bold animate-pulse">
@@ -5632,7 +5606,7 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Alert Contact:</span>
-                  <span className="text-rose-450 font-bold">
+                  <span className="text-rose-400 font-bold">
                     {emergencyContactName} ({emergencyContactPhone})
                   </span>
                 </div>
@@ -5649,12 +5623,12 @@ export function UberApp({ user, balances, setBalances }: UberAppProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Driver Partner:</span>
-                  <span className="text-slate-205">
+                  <span className="text-slate-200">
                     {selectedVehicle?.driver || "N/A"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-505">Signal Coords:</span>
+                  <span className="text-slate-400">Signal Coords:</span>
                   <span className="text-slate-200">
                     {pickupCoords
                       ? `${pickupCoords.lat.toFixed(4)}, ${pickupCoords.lng.toFixed(4)}`

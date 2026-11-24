@@ -16,19 +16,16 @@ import {
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import toast from "react-hot-toast";
 import { unifiedBankCardSync } from "./unifiedBankCardSync";
+import { getVerifiedCloudUid, isAsimCloudSession as checkVerifiedAsimSession } from "./cloudSessionGuard";
 
 const CBA_BALANCES_LOCAL_KEY = "valourian_cba_balances_cache";
 
 function getActiveCloudUid(): string | null {
-  return auth.currentUser?.uid || null;
+  return getVerifiedCloudUid();
 }
 
 function isAsimCloudSession(): boolean {
-  return Boolean(
-    auth.currentUser &&
-      auth.currentUser.emailVerified &&
-      auth.currentUser.email?.toLowerCase() === "asim.nsw@gmail.com"
-  );
+  return checkVerifiedAsimSession();
 }
 
 function loadLocalCbaBalances(defaults: Record<string, number>): Record<string, number> {
@@ -1953,7 +1950,7 @@ export const BPAY_BILLER_DIRECTORY: BpayBiller[] = [
     billerCode: "1818",
     name: "Commonwealth Bank Credit Card",
     category: "Financial Services",
-    defaultCrn: "5241920048192019",
+    defaultCrn: "5241920048192014",
     crnFormat: "16-digit Card Number",
     crnMinLength: 16,
     crnMaxLength: 16,
@@ -1965,7 +1962,7 @@ export const BPAY_BILLER_DIRECTORY: BpayBiller[] = [
     billerCode: "2337",
     name: "Westpac Banking Corporation",
     category: "Financial Services",
-    defaultCrn: "4509182049182049",
+    defaultCrn: "4509182049182045",
     crnFormat: "16-digit Card Number",
     crnMinLength: 16,
     crnMaxLength: 16,
@@ -1977,7 +1974,7 @@ export const BPAY_BILLER_DIRECTORY: BpayBiller[] = [
     billerCode: "19992",
     name: "ANZ Banking Group",
     category: "Financial Services",
-    defaultCrn: "4564819204918201",
+    defaultCrn: "4564819204918208",
     crnFormat: "16-digit Card Number",
     crnMinLength: 16,
     crnMaxLength: 16,
@@ -1989,7 +1986,7 @@ export const BPAY_BILLER_DIRECTORY: BpayBiller[] = [
     billerCode: "8888",
     name: "National Australia Bank (NAB)",
     category: "Financial Services",
-    defaultCrn: "5123918204918204",
+    defaultCrn: "5123918204918209",
     crnFormat: "16-digit Card Number",
     crnMinLength: 16,
     crnMaxLength: 16,
@@ -2121,7 +2118,7 @@ export const BPAY_BILLER_DIRECTORY: BpayBiller[] = [
     billerCode: "9345",
     name: "American Express Australia",
     category: "Financial Services",
-    defaultCrn: "375987654321001",
+    defaultCrn: "375987654321004",
     crnFormat: "15-digit Amex Card Number",
     crnMinLength: 15,
     crnMaxLength: 15,

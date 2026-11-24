@@ -17,7 +17,15 @@ export function PaymentStatusOverlay() {
         unsubscribeSnapshot();
         unsubscribeSnapshot = null;
       }
-      if (!user) return;
+      if (
+        !user ||
+        !user.uid ||
+        user.uid === "ceo-founder-override" ||
+        user.uid === "mock-user-123" ||
+        (user.email && user.emailVerified === false)
+      ) {
+        return;
+      }
 
       const q = query(
         collection(db, 'users', user.uid, 'payment_events'),

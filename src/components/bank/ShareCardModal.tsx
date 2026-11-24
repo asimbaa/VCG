@@ -17,6 +17,11 @@ import {
   Ban,
   Users,
   Eye,
+  PauseCircle,
+  PlayCircle,
+  Search,
+  Edit3,
+  RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -65,6 +70,16 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     cardShareService.listInvites()
   );
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'claimed' | 'pending' | 'paused' | 'revoked'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
+  const [editingLimitValue, setEditingLimitValue] = useState<string>('');
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [emailRelayStatus, setEmailRelayStatus] = useState<{
+    mode: string;
+    smtpConfigured: boolean;
+    fromAddress?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (card) {
@@ -77,6 +92,18 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     cardShareService.refreshInvitesFromBackend().then(setHistoryInvites);
+    fetch('/api/email/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.success) {
+          setEmailRelayStatus({
+            mode: data.mode || 'ethereal_sandbox',
+            smtpConfigured: Boolean(data.smtpConfigured),
+            fromAddress: data.fromAddress,
+          });
+        }
+      })
+      .catch(() => {});
     const onUpdated = () => setHistoryInvites(cardShareService.listInvites());
     window.addEventListener(SHARED_INVITES_UPDATED_EVENT, onUpdated);
     return () => window.removeEventListener(SHARED_INVITES_UPDATED_EVENT, onUpdated);
@@ -173,6 +200,76 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     toast.success('Shared card access revoked immediately.');
   };
 
+  const handleTogglePause = async (inv: SharedCardInvite) => {
+    const nextStatus = inv.status === 'paused' ? (inv.claimedByEmail ? 'claimed' : 'pending') : 'paused';
+    await cardShareService.updateSharedCardInviteControls(inv.inviteId, { status: nextStatus });
+    setHistoryInvites(cardShareService.listInvites());
+    toast.success(nextStatus === 'paused' ? 'Shared card temporarily paused.' : 'Shared card resumed immediately.');
+  };
+
+  const handleSaveInlineLimit = async (inv: SharedCardInvite) => {
+    const trimmed = editingLimitValue.trim().toLowerCase();
+    let nextLimit: number | 'unlimited';
+    if (trimmed === 'unlimited' || trimmed === 'vip') {
+      nextLimit = 'unlimited';
+    } else {
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        toast.error('Enter a valid positive AUD limit or "unlimited".');
+        return;
+      }
+      nextLimit = parsed;
+    }
+    await cardShareService.updateSharedCardInviteControls(inv.inviteId, { grantedLimitAUD: nextLimit });
+    setHistoryInvites(cardShareService.listInvites());
+    setEditingLimitId(null);
+    toast.success(
+      `Allowance updated to ${nextLimit === 'unlimited' ? 'Unlimited VIP' : `$${nextLimit.toLocaleString()} AUD`}.`
+    );
+  };
+
+  const handleAdvanceCourier = async (inv: SharedCardInvite) => {
+    const order: Array<SharedCardInvite['physicalDispatchStatus']> = [
+      'queued_production',
+      'courier_dispatched',
+      'delivered',
+    ];
+    const currentIdx = order.indexOf(inv.physicalDispatchStatus);
+    const nextStage = currentIdx >= 0 ? order[(currentIdx + 1) % order.length] : 'queued_production';
+    await cardShareService.updateSharedCardInviteControls(inv.inviteId, { physicalDispatchStatus: nextStage });
+    setHistoryInvites(cardShareService.listInvites());
+    toast.success(`Courier milestone updated: ${nextStage.replace(/_/g, ' ')}`);
+  };
+
+  const handleResendEmail = async (inv: SharedCardInvite) => {
+    setResendingId(inv.inviteId);
+    try {
+      const updated = await cardShareService.resendSharedCardInviteEmail(inv.inviteId);
+      setHistoryInvites(cardShareService.listInvites());
+      if (updated) {
+        toast.success(`Re-dispatched share invite email (${updated.emailChannel || 'relay'}).`);
+      }
+    } catch {
+      toast.error('Unable to resend invite email.');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const filteredHistory = historyInvites.filter((inv) => {
+    if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      inv.cardName.toLowerCase().includes(q) ||
+      (inv.recipientEmail || '').toLowerCase().includes(q) ||
+      (inv.recipientName || '').toLowerCase().includes(q) ||
+      (inv.claimedByEmail || '').toLowerCase().includes(q) ||
+      (inv.claimedByName || '').toLowerCase().includes(q) ||
+      inv.maskedLast4.includes(q)
+    );
+  });
+
   const latestInvite = createdInvites[0] || null;
 
   return (
@@ -214,31 +311,42 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
             </button>
           </div>
 
-          {/* Clean Tabs */}
-          <div className="px-5 pt-3 pb-2 border-b border-slate-800/80 flex items-center gap-2 shrink-0 bg-slate-900">
-            <button
-              type="button"
-              onClick={() => setActiveTab('create')}
-              className={`min-h-[40px] px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'create'
-                  ? 'bg-emerald-500 text-slate-950 font-bold'
-                  : 'bg-slate-800 text-slate-300 hover:text-white'
-              }`}
-            >
-              Create &amp; Send Invite
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('history')}
-              className={`min-h-[40px] px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'history'
-                  ? 'bg-emerald-500 text-slate-950 font-bold'
-                  : 'bg-slate-800 text-slate-300 hover:text-white'
-              }`}
-            >
-              <span>Issued Invites</span>
-              <span className="font-mono text-[11px]">({historyInvites.length})</span>
-            </button>
+          {/* Clean Tabs + Live Email Relay Indicator */}
+          <div className="px-5 pt-3 pb-2 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 shrink-0 bg-slate-900">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('create')}
+                className={`min-h-[44px] px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'create'
+                    ? 'bg-emerald-500 text-slate-950 font-bold'
+                    : 'bg-slate-800 text-slate-300 hover:text-white'
+                }`}
+              >
+                Create &amp; Send Invite
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('history')}
+                className={`min-h-[44px] px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'history'
+                    ? 'bg-emerald-500 text-slate-950 font-bold'
+                    : 'bg-slate-800 text-slate-300 hover:text-white'
+                }`}
+              >
+                <span>Issued Invites</span>
+                <span className="font-mono text-[11px] tabular-nums">({historyInvites.length})</span>
+              </button>
+            </div>
+
+            {emailRelayStatus && (
+              <div className="text-[11px] font-mono text-slate-400">
+                Email Relay:{' '}
+                <span className={emailRelayStatus.smtpConfigured ? 'text-emerald-400 font-semibold' : 'text-cyan-300 font-semibold'}>
+                  {emailRelayStatus.smtpConfigured ? 'Live SMTP' : 'Sandbox Preview Relay'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Scrollable Body */}
@@ -553,82 +661,230 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
                 )}
               </>
             ) : (
-              /* History Tab */
-              <div className="space-y-3">
-                {historyInvites.length === 0 ? (
+              /* History & Control Hub Tab */
+              <div className="space-y-4">
+                {/* Search & Status Filters */}
+                <div className="space-y-2.5">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Filter by recipient, email, card name, or last 4..."
+                      className="w-full min-h-[44px] bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(['all', 'claimed', 'pending', 'paused', 'revoked'] as const).map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setStatusFilter(status)}
+                        className={`min-h-[36px] px-3 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
+                          statusFilter === status
+                            ? 'bg-emerald-500 text-slate-950 font-bold'
+                            : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {filteredHistory.length === 0 ? (
                   <div className="text-center py-10 text-sm text-slate-400">
-                    No shared card invites issued yet. Create one in the previous tab.
+                    {historyInvites.length === 0
+                      ? 'No shared card invites issued yet. Create one in the previous tab.'
+                      : 'No shared invites match the active filter or search.'}
                   </div>
                 ) : (
-                  historyInvites.map((inv) => (
-                    <div
-                      key={inv.inviteId}
-                      className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="text-sm font-bold text-white truncate">{inv.cardName}</div>
-                        <div className="text-xs text-slate-400 font-mono truncate">
-                          {inv.cardCategory.toUpperCase()} · •••• {inv.maskedLast4} ·{' '}
-                          {inv.grantedLimitAUD === 'unlimited'
-                            ? 'Unlimited VIP'
-                            : `$${Number(inv.grantedLimitAUD).toLocaleString()} AUD`}
-                          {inv.recipientEmail ? ` · To: ${inv.recipientEmail}` : ' · Open QR Link'}
-                        </div>
-                        <div className="text-[11px] font-mono">
-                          Status:{' '}
-                          <span
-                            className={
-                              inv.status === 'claimed'
-                                ? 'text-emerald-400 font-bold'
-                                : inv.status === 'revoked'
-                                ? 'text-rose-400 font-bold'
-                                : 'text-amber-300 font-bold'
-                            }
-                          >
-                            {inv.status.toUpperCase()}
-                          </span>
-                          {inv.claimedByEmail ? ` (${inv.claimedByName || inv.claimedByEmail})` : ''}
-                          {inv.physicalDispatchStatus !== 'not_requested'
-                            ? ` · Physical: ${inv.physicalDispatchStatus}`
-                            : ''}
-                        </div>
-                      </div>
+                  filteredHistory.map((inv) => {
+                    const isEditingLimit = editingLimitId === inv.inviteId;
+                    return (
+                      <div
+                        key={inv.inviteId}
+                        className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <div className="text-sm font-bold text-white truncate">{inv.cardName}</div>
+                            <div className="text-xs text-slate-400 font-mono truncate tabular-nums">
+                              {inv.cardCategory.toUpperCase()} · •••• {inv.maskedLast4} ·{' '}
+                              {inv.grantedLimitAUD === 'unlimited'
+                                ? 'Unlimited VIP'
+                                : `$${Number(inv.grantedLimitAUD).toLocaleString()} AUD`}
+                              {inv.recipientEmail ? ` · To: ${inv.recipientEmail}` : ' · Open QR Link'}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-300">
+                              Status:{' '}
+                              <span
+                                className={
+                                  inv.status === 'claimed'
+                                    ? 'text-emerald-400 font-bold'
+                                    : inv.status === 'paused'
+                                    ? 'text-amber-300 font-bold'
+                                    : inv.status === 'revoked'
+                                    ? 'text-rose-400 font-bold'
+                                    : 'text-cyan-300 font-bold'
+                                }
+                              >
+                                {inv.status.toUpperCase()}
+                              </span>
+                              {inv.claimedByEmail ? ` · ${inv.claimedByName || inv.claimedByEmail}` : ''}
+                              {inv.physicalDispatchStatus !== 'not_requested'
+                                ? ` · Courier: ${inv.physicalDispatchStatus.replace(/_/g, ' ')}`
+                                : ''}
+                            </div>
+                            {inv.emailPreviewUrl && (
+                              <a
+                                href={inv.emailPreviewUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 underline"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>Open Email Preview</span>
+                              </a>
+                            )}
+                          </div>
 
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleCopyLink(inv.shareUrl, inv.inviteId)}
-                          className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 flex items-center gap-1 cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy</span>
-                        </button>
-                        {onPreviewClaimPortal && inv.status !== 'revoked' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-                              onPreviewClaimPortal(inv.inviteId);
-                            }}
-                            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-emerald-300 flex items-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Open</span>
-                          </button>
-                        )}
-                        {inv.status !== 'revoked' && (
-                          <button
-                            type="button"
-                            onClick={() => handleRevoke(inv.inviteId)}
-                            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-1 cursor-pointer"
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                            <span>Revoke</span>
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLink(inv.shareUrl, inv.inviteId)}
+                              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 flex items-center gap-1 cursor-pointer"
+                            >
+                              {copiedId === inv.inviteId ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                              <span>Copy</span>
+                            </button>
+                            {onPreviewClaimPortal && inv.status !== 'revoked' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onPreviewClaimPortal(inv.inviteId);
+                                }}
+                                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-emerald-300 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Open</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline Limit Editor + Live Control Actions */}
+                        {isEditingLimit ? (
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                            <input
+                              type="text"
+                              value={editingLimitValue}
+                              onChange={(e) => setEditingLimitValue(e.target.value)}
+                              placeholder="Amount in AUD or 'unlimited'"
+                              className="flex-1 min-w-[160px] min-h-[40px] bg-slate-900 border border-slate-700 rounded-xl px-3 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditingLimitValue('unlimited')}
+                              className="min-h-[40px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-emerald-300 font-semibold cursor-pointer"
+                            >
+                              Set Unlimited
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveInlineLimit(inv)}
+                              className="min-h-[40px] px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer"
+                            >
+                              Save Limit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingLimitId(null)}
+                              className="min-h-[40px] px-3 rounded-xl bg-slate-800 text-slate-300 text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                            {inv.status !== 'revoked' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingLimitId(inv.inviteId);
+                                    setEditingLimitValue(
+                                      inv.grantedLimitAUD === 'unlimited'
+                                        ? 'unlimited'
+                                        : String(inv.grantedLimitAUD)
+                                    );
+                                  }}
+                                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>Limit</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleTogglePause(inv)}
+                                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-amber-300 flex items-center gap-1 cursor-pointer"
+                                >
+                                  {inv.status === 'paused' ? (
+                                    <>
+                                      <PlayCircle className="w-3.5 h-3.5" />
+                                      <span>Resume</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <PauseCircle className="w-3.5 h-3.5" />
+                                      <span>Pause</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {(inv.allowPhysicalCard || inv.physicalDispatchStatus !== 'not_requested') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdvanceCourier(inv)}
+                                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-cyan-300 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Truck className="w-3.5 h-3.5" />
+                                    <span>Advance Courier</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  disabled={resendingId === inv.inviteId}
+                                  onClick={() => handleResendEmail(inv)}
+                                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-emerald-300 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${resendingId === inv.inviteId ? 'animate-spin' : ''}`} />
+                                  <span>Resend Email</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevoke(inv.inviteId)}
+                                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-1 cursor-pointer ml-auto"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  <span>Revoke</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}

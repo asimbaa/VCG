@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, where, onSnapshot, setDoc, doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { Truck, Navigation, Activity, ShieldCheck, Battery, Thermometer, MapPin, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -74,8 +74,7 @@ export const SovereignDispatchMonitor = () => {
             setFleet(vehicles);
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching fleet data:", error);
-            toast.error("Failed to connect to dispatch stream.");
+            handleFirestoreError(error, OperationType.LIST, 'active_orders');
             setLoading(false);
         });
 
